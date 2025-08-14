@@ -2,7 +2,7 @@
 	import { PromptFormats } from "$lib/shared/constants/PromptFormats"
 	import { TokenCounterOptions } from "$lib/shared/constants/TokenCounters"
 	import { onMount, onDestroy } from "svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { z } from "zod"
 
 	interface ExtraFieldData {
@@ -29,7 +29,7 @@
 
 	let { connection = $bindable() } = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	const defaultExtraJson = {
 		stream: false
 	}
@@ -37,7 +37,7 @@
 	let llamaCppFields: ExtraFieldData | undefined = $state()
 	let validationErrors: ValidationErrors = $state({})
 
-	socket.on("testConnection", (msg: Sockets.TestConnection.Response) => {
+	socket.on("connections:test", (msg) => {
 		testResult = msg
 	})
 
@@ -47,9 +47,9 @@
 	function handleTestConnection() {
 		if (!validateConnection()) return
 		testResult = null
-		socket.emit("testConnection", {
+		socket.emit("connections:test", {
 			connection
-		} as Sockets.TestConnection.Call)
+		})
 	}
 
 	function validateConnection(): boolean {

@@ -98,7 +98,7 @@
 		isLoading = true
 		socket.emit("ollamaModelsList", {})
 		socket.emit("ollamaListRunningModels", {})
-		socket.emit("connectionsList", {})
+		socket.emit("connections:list", {})
 	}
 
 	// Delete a model

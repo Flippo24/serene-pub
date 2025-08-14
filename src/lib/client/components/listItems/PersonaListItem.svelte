@@ -4,8 +4,8 @@
 	import SidebarListItem from "../SidebarListItem.svelte"
 
 	interface Props {
-		persona: Sockets.PersonaList.Response["personaList"][0]
-		onclick?: (persona: Sockets.PersonaList.Response["personaList"][0]) => void
+		persona: Sockets.Personas.List.Response["personaList"][0]
+		onclick?: (persona: Sockets.Personas.List.Response["personaList"][0]) => void
 		onEdit?: (id: number) => void
 		onDelete?: (id: number) => void
 		showControls?: boolean

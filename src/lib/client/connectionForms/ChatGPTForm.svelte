@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { onDestroy } from "svelte"
 	import { z } from "zod"
 
@@ -23,11 +23,11 @@
 
 	let testResult: { ok: boolean; error?: string } | null = $state(null)
 	let validationErrors: ValidationErrors = $state({})
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	function handleTestConnection() {
 		if (!validateConnection()) return
 		testResult = null
-		socket.emit("testConnection", { connection })
+		socket.emit("connections:test", { connection })
 	}
 
 	function validateConnection(): boolean {
@@ -57,9 +57,9 @@
 		function handleTest(msg) {
 			testResult = msg
 		}
-		socket.on("testConnection", handleTest)
+		socket.on("connections:test", handleTest)
 		return () => {
-			socket.off && socket.off("testConnection", handleTest)
+			socket.off && socket.off("connections:test", handleTest)
 		}
 	})
 

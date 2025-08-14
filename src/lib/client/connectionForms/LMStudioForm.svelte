@@ -2,7 +2,7 @@
 	import { PromptFormats } from "$lib/shared/constants/PromptFormats"
 	import { TokenCounterOptions } from "$lib/shared/constants/TokenCounters"
 	import { onMount, onDestroy } from "svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { z } from "zod"
 
 	// Zod validation schema
@@ -22,7 +22,7 @@
 
 	let { connection = $bindable() } = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	let availableLMStudioModels: { model: string; name: string }[] = $state([])
 	let testResult: {
 		ok: boolean
@@ -41,17 +41,17 @@
 	})
 
 	function handleRefreshModels() {
-		socket.emit("refreshModels", {
+		socket.emit("connections:refreshModels", {
 			connection
-		} as Sockets.RefreshModels.Call)
+		})
 	}
 
 	function handleTestConnection() {
 		if (!validateConnection()) return
 		testResult = null
-		socket.emit("testConnection", {
+		socket.emit("connections:test", {
 			connection
-		} as Sockets.TestConnection.Call)
+		})
 	}
 
 	function validateConnection(): boolean {
@@ -77,14 +77,14 @@
 		}
 	}
 
-	socket.on("refreshModels", (msg: Sockets.RefreshModels.Response) => {
+	socket.on("connections:refreshModels", (msg) => {
 		if (msg.models) availableLMStudioModels = msg.models
 		if (!connection.model && msg.models.length > 0) {
 			connection.model = msg.models[0].model
 		}
 	})
 
-	socket.on("testConnection", (msg: Sockets.TestConnection.Response) => {
+	socket.on("connections:test", (msg) => {
 		testResult = msg
 	})
 
@@ -95,8 +95,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("refreshModels")
-		socket.off("testConnection")
+		socket.off("connections:refreshModels")
+		socket.off("connections:test")
 	})
 </script>
 

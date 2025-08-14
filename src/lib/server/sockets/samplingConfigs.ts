@@ -2,19 +2,30 @@ import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq } from "drizzle-orm"
 import { user } from "./users"
+import type { Handler } from "$lib/shared/events"
 
 // --- WEIGHTS SOCKET HANDLERS ---
 
+export const samplingHandler: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
+	event: "sampling",
+	handler: async (socket, params, emitToUser) => {
+		const sampling = await db.query.samplingConfigs.findFirst({
+			where: (w, { eq }) => eq(w.id, params.id),
+			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
+		})
+		const res: Sockets.SamplingConfigs.Get.Response = { sampling: sampling! }
+		emitToUser("sampling", res)
+		return res
+	}
+}
+
+// Legacy functions for compatibility
 export async function sampling(
 	socket: any,
 	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const sampling = await db.query.samplingConfigs.findFirst({
-		where: (w, { eq }) => eq(w.id, message.id),
-		orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
-	})
-	emitToUser("sampling", { sampling })
+	await samplingHandler.handler(socket, { id: message.id }, emitToUser)
 }
 
 export async function samplingConfigsList(
@@ -22,82 +33,31 @@ export async function samplingConfigsList(
 	message: {},
 	emitToUser: (event: string, data: any) => void
 ) {
-	const samplingConfigsList = await db.query.samplingConfigs.findMany({
-		columns: {
-			id: true,
-			name: true,
-			isImmutable: true
-		}
-	})
-	emitToUser("samplingConfigsList", { samplingConfigsList })
+	await samplingConfigsListHandler.handler(socket, {}, emitToUser)
 }
 
 export async function setUserActiveSamplingConfig(
 	socket: any,
-	message: Sockets.SetUserActiveSamplingConfig.Call,
+	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const currentUser = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, 1)
-	})
-	if (!currentUser) {
-		emitToUser("error", { error: "User not found." })
-		return
-	}
-	const updatedUser = await db
-		.update(schema.users)
-		.set({
-			activeSamplingConfigId: message.id
-		})
-		.where(eq(schema.users.id, currentUser.id))
-	await user(socket, {}, emitToUser)
-	await sampling(socket, { id: message.id }, emitToUser)
-	const res: Sockets.SetUserActiveSamplingConfig.Response = {
-		user: updatedUser
-	}
-	emitToUser("setUserActiveSamplingConfig", res)
+	await samplingConfigsSetUserActive.handler(socket, { id: message.id }, emitToUser)
 }
 
 export async function createSamplingConfig(
 	socket: any,
-	message: any,
+	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const [sampling] = await db
-		.insert(schema.samplingConfigs)
-		.values(message.sampling)
-		.returning()
-	await setUserActiveSamplingConfig(socket, { id: sampling.id }, emitToUser)
-	await samplingConfigsList(socket, {}, emitToUser)
-	emitToUser("createSamplingConfig", {})
+	await samplingConfigsCreate.handler(socket, { samplingConfig: message.sampling }, emitToUser)
 }
 
 export async function deleteSamplingConfig(
 	socket: any,
-	message: Sockets.DeleteSamplingConfig.Call,
+	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
-		where: (w, { eq }) => eq(w.id, message.id)
-	})
-	if (currentSamplingConfig!.isImmutable) {
-		emitToUser("error", {
-			error: "Cannot delete immutable samplingConfigs."
-		})
-		return
-	}
-	const currentUser = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, 1)
-	})
-	if (currentUser!.activeSamplingConfigId === message.id) {
-		await setUserActiveSamplingConfig(socket, { id: 1 }, emitToUser)
-	}
-	await db
-		.delete(schema.samplingConfigs)
-		.where(eq(schema.samplingConfigs.id, message.id))
-	await samplingConfigsList(socket, {}, emitToUser)
-	const res: Sockets.DeleteSamplingConfig.Response = { id: message.id }
-	emitToUser("deleteSamplingConfig", res)
+	await samplingConfigsDelete.handler(socket, { id: message.id }, emitToUser)
 }
 
 export async function updateSamplingConfig(
@@ -105,25 +65,153 @@ export async function updateSamplingConfig(
 	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const id = message.sampling.id
-	delete message.sampling.id // Remove id from sampling object to avoid conflicts
-	const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
-		where: (w, { eq }) => eq(w.id, id)
-	})
-	if (currentSamplingConfig!.isImmutable) {
-		emitToUser("error", {
-			error: "Cannot update immutable samplingConfigs."
+	await samplingConfigsUpdate.handler(socket, { samplingConfig: message.sampling }, emitToUser)
+}
+
+export const samplingConfigsGet: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
+	event: "samplingConfigs:get",
+	handler: async (socket, params, emitToUser) => {
+		const sampling = await db.query.samplingConfigs.findFirst({
+			where: (w, { eq }) => eq(w.id, params.id),
+			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
 		})
-		return
+		const res: Sockets.SamplingConfigs.Get.Response = { sampling: sampling! }
+		emitToUser("samplingConfigs:get", res)
+		return res
 	}
-	const updatedSamplingConfig = await db
-		.update(schema.samplingConfigs)
-		.set(message.sampling)
-		.where(eq(schema.samplingConfigs.id, id))
-		.returning()
-	await samplingConfigsList(socket, {}, emitToUser)
-	await sampling(socket, { id }, emitToUser)
-	await user(socket, {}, emitToUser)
-	const res = { samplingConfig: updatedSamplingConfig }
-	emitToUser("updateSamplingConfig", res)
+}
+
+export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Params, Sockets.SamplingConfigs.List.Response> = {
+	event: "samplingConfigs:list",
+	handler: async (socket, params, emitToUser) => {
+		const samplingConfigsList = await db.query.samplingConfigs.findMany({
+			columns: {
+				id: true,
+				name: true,
+				isImmutable: true
+			}
+		})
+		const res: Sockets.SamplingConfigs.List.Response = { samplingConfigsList }
+		emitToUser("samplingConfigs:list", res)
+		return res
+	}
+}
+
+export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUserActive.Params, Sockets.SamplingConfigs.SetUserActive.Response> = {
+	event: "samplingConfigs:setUserActive",
+	handler: async (socket, params, emitToUser) => {
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, 1)
+		})
+		if (!currentUser) {
+			emitToUser("samplingConfigs:setUserActive:error", { error: "User not found." })
+			throw new Error("User not found")
+		}
+		const [updatedUser] = await db
+			.update(schema.users)
+			.set({
+				activeSamplingConfigId: params.id
+			})
+			.where(eq(schema.users.id, currentUser.id))
+			.returning()
+		
+		await user(socket, {}, emitToUser)
+		await samplingConfigsGet.handler(socket, { id: params.id }, emitToUser)
+		const res: Sockets.SamplingConfigs.SetUserActive.Response = { user: updatedUser }
+		emitToUser("samplingConfigs:setUserActive", res)
+		return res
+	}
+}
+
+export const samplingConfigsCreate: Handler<Sockets.SamplingConfigs.Create.Params, Sockets.SamplingConfigs.Create.Response> = {
+	event: "samplingConfigs:create",
+	handler: async (socket, params, emitToUser) => {
+		const [sampling] = await db
+			.insert(schema.samplingConfigs)
+			.values(params.samplingConfig)
+			.returning()
+		
+		await samplingConfigsSetUserActive.handler(socket, { id: sampling.id }, emitToUser)
+		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
+		
+		const res: Sockets.SamplingConfigs.Create.Response = { sampling }
+		emitToUser("samplingConfigs:create", res)
+		return res
+	}
+}
+
+export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Params, Sockets.SamplingConfigs.Delete.Response> = {
+	event: "samplingConfigs:delete",
+	handler: async (socket, params, emitToUser) => {
+		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
+			where: (w, { eq }) => eq(w.id, params.id)
+		})
+		if (currentSamplingConfig!.isImmutable) {
+			emitToUser("samplingConfigs:delete:error", {
+				error: "Cannot delete immutable samplingConfigs."
+			})
+			throw new Error("Cannot delete immutable samplingConfigs")
+		}
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, 1)
+		})
+		if (currentUser!.activeSamplingConfigId === params.id) {
+			await samplingConfigsSetUserActive.handler(socket, { id: 1 }, emitToUser)
+		}
+		await db
+			.delete(schema.samplingConfigs)
+			.where(eq(schema.samplingConfigs.id, params.id))
+		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
+		
+		const res: Sockets.SamplingConfigs.Delete.Response = { success: "Sampling config deleted successfully" }
+		emitToUser("samplingConfigs:delete", res)
+		return res
+	}
+}
+
+export const samplingConfigsUpdate: Handler<Sockets.SamplingConfigs.Update.Params, Sockets.SamplingConfigs.Update.Response> = {
+	event: "samplingConfigs:update",
+	handler: async (socket, params, emitToUser) => {
+		const id = params.samplingConfig.id!
+		const { id: _, ...updateData } = params.samplingConfig // Remove id from sampling object to avoid conflicts
+		
+		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
+			where: (w, { eq }) => eq(w.id, id)
+		})
+		if (currentSamplingConfig!.isImmutable) {
+			emitToUser("samplingConfigs:update:error", {
+				error: "Cannot update immutable samplingConfigs."
+			})
+			throw new Error("Cannot update immutable samplingConfigs")
+		}
+		
+		const [updatedSamplingConfig] = await db
+			.update(schema.samplingConfigs)
+			.set(updateData)
+			.where(eq(schema.samplingConfigs.id, id))
+			.returning()
+		
+		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
+		await samplingConfigsGet.handler(socket, { id }, emitToUser)
+		await user(socket, {}, emitToUser)
+		
+		const res: Sockets.SamplingConfigs.Update.Response = { sampling: updatedSamplingConfig }
+		emitToUser("samplingConfigs:update", res)
+		return res
+	}
+}
+
+// Registration function for all sampling config handlers
+export function registerSamplingConfigHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, samplingConfigsListHandler, emitToUser)
+	register(socket, samplingConfigsGet, emitToUser)
+	register(socket, samplingConfigsSetUserActive, emitToUser)
+	register(socket, samplingConfigsCreate, emitToUser)
+	register(socket, samplingConfigsUpdate, emitToUser)
+	register(socket, samplingConfigsDelete, emitToUser)
+	register(socket, samplingHandler, emitToUser)
 }

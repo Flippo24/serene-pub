@@ -3,7 +3,7 @@
 	import { TokenCounterOptions } from "$lib/shared/constants/TokenCounters"
 	import { Switch } from "@skeletonlabs/skeleton-svelte"
 	import { onMount, onDestroy } from "svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { z } from "zod"
 
 	interface ExtraFieldData {
@@ -36,30 +36,29 @@
 
 	let { connection = $bindable() } = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	const defaultExtraJson = {
 		stream: false,
 		apiKey: "",
 		prerenderPrompt: false
 	}
 
-	let availableOpenAIModels: Sockets.RefreshModels.Response["models"] =
-		$state([])
+	let availableOpenAIModels: any[] = $state([])
 	let openAIFields: ExtraFieldData | undefined = $state()
 	let validationErrors: ValidationErrors = $state({})
 
-	socket.on("refreshModels", (msg: Sockets.RefreshModels.Response) => {
+	socket.on("connections:refreshModels", (msg) => {
 		if (msg.models) availableOpenAIModels = msg.models
 	})
 
-	socket.on("testConnection", (msg: Sockets.TestConnection.Response) => {
+	socket.on("connections:test", (msg) => {
 		testResult = msg
 	})
 
 	function handleRefreshModels() {
-		socket.emit("refreshModels", {
+		socket.emit("connections:refreshModels", {
 			connection
-		} as Sockets.RefreshModels.Call)
+		})
 	}
 
 	let testResult: { ok: boolean; error?: string; models?: any[] } | null =
@@ -68,9 +67,9 @@
 	function handleTestConnection() {
 		if (!validateConnection()) return
 		testResult = null
-		socket.emit("testConnection", {
+		socket.emit("connections:test", {
 			connection
-		} as Sockets.TestConnection.Call)
+		})
 	}
 
 	function validateConnection(): boolean {

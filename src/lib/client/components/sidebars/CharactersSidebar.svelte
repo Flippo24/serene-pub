@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { getContext, onDestroy, onMount } from "svelte"
-	import { Avatar, FileUpload, Modal } from "@skeletonlabs/skeleton-svelte"
+	import { FileUpload, Modal } from "@skeletonlabs/skeleton-svelte"
 	import * as Icons from "@lucide/svelte"
 	import CharacterForm from "../characterForms/CharacterForm.svelte"
 	import CharacterCreator from "../modals/CharacterCreatorModal.svelte"
@@ -16,15 +16,13 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	const panelsCtx: PanelsCtx = $state(getContext("panelsCtx"))
 	const systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
 
-	let characterList: Sockets.CharacterList.Response["characterList"] = $state(
-		[]
-	)
+	let characterList: any[] = $state([])
 	let search = $state("")
 	let characterId: number | undefined = $state()
 	let isCreating = $state(false)
@@ -60,7 +58,7 @@
 	})
 
 	// Filtered list
-	let filteredCharacters: Sockets.CharacterList.Response["characterList"] =
+	let filteredCharacters: any[] =
 		$derived.by(() => {
 			let list = [...characterList]
 			// Sort favorites first
@@ -73,7 +71,7 @@
 			
 			const searchLower = search.toLowerCase()
 			return list.filter(
-				(c: Sockets.CharacterList.Response["characterList"][0]) => {
+				(c: any) => {
 					// Search by name
 					if (c.name!.toLowerCase().includes(searchLower)) return true
 					
@@ -125,7 +123,7 @@
 
 	function confirmDelete() {
 		if (characterToDelete !== undefined) {
-			socket.emit("deleteCharacter", { characterId: characterToDelete })
+			socket.emit("characters:delete", { characterId: characterToDelete })
 		}
 		showDeleteModal = false
 		characterToDelete = undefined
@@ -178,7 +176,7 @@
 		reader.onload = function (e) {
 			const base64 = (e.target?.result as string)?.split(",")[1]
 			if (base64) {
-				socket.emit("characterCardImport", { file: base64 })
+				socket.emit("characters:importCard", { file: base64 })
 				showImportModal = false
 			}
 		}
@@ -189,19 +187,17 @@
 		// }
 	}
 
-	function handleCharacterClick(
-		character: Sockets.CharacterList.Response["characterList"][0]
-	) {
+	function handleCharacterClick(character: any) {
 		panelsCtx.digest.chatCharacterId = character.id
 		panelsCtx.openPanel({ key: "chats", toggle: false })
 	}
 
 	function confirmLorebookImport() {
-		const req: Sockets.LorebookImport.Call = {
+		const req = {
 			lorebookData: importingLorebook!,
 			characterId: importingLorebookCharacter?.id
 		}
-		socket.emit("lorebookImport", req)
+		socket.emit("lorebooks:import", req)
 		showLorebookImportConfirmationModal = false
 		importingLorebook = null
 		importingLorebookCharacter = null
@@ -214,12 +210,12 @@
 	}
 
 	onMount(() => {
-		socket.on("characterList", (msg: Sockets.CharacterList.Response) => {
+		socket.on("characters:list", (msg) => {
 			characterList = msg.characterList
 		})
 		socket.on(
-			"characterCardImport",
-			(msg: Sockets.CharacterCardImport.Response) => {
+			"characters:importCard",
+			(msg) => {
 				importingLorebook = msg.book || null
 				toaster.success({
 					title: `Character Imported`,
@@ -232,19 +228,20 @@
 				}
 			}
 		)
-		socket.on("lorebookImport", (msg: Sockets.LorebookImport.Response) => {
+		socket.on("lorebooks:import", (msg) => {
 			toaster.success({
 				title: `Lorebook Imported`,
 				description: `Lorebook imported successfully.`
 			})
 		})
-		socket.emit("characterList", {})
+		socket.emit("characters:list", {})
 		onclose = handleOnClose
 	})
 
 	onDestroy(() => {
-		socket.off("characterList")
-		socket.off("characterCardImport")
+		socket.off("characters:list")
+		socket.off("characters:importCard")
+		socket.off("lorebooks:import")
 		onclose = undefined
 	})
 </script>

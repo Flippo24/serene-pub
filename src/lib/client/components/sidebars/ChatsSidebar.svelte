@@ -15,7 +15,7 @@
 	}
 	let { onclose = $bindable() }: Props = $props()
 
-	let chats: Sockets.ChatsList.Response["chatsList"] = $state([])
+	let chats: Sockets.Chats.List.Response["chatList"] = $state([])
 	let search = $state("")
 	let showEditChatForm = $state(false)
 	let panelsCtx: PanelsCtx = $state(getContext("panelsCtx"))
@@ -30,10 +30,10 @@
 	const socket = skio.get()
 
 	// Filtered chats derived from search
-	let filteredChats: Sockets.ChatsList.Response["chatsList"] = $state([])
+	let filteredChats: Sockets.Chats.List.Response["chatList"] = $state([])
 
-	socket.on("chatsList", (msg: Sockets.ChatsList.Response) => {
-		chats = msg.chatsList || []
+	socket.on("chats:list", (msg: Sockets.Chats.List.Response) => {
+		chats = msg.chatList || []
 	})
 
 	async function handleOnClose() {
@@ -97,13 +97,13 @@
 				// If the current chat is being deleted, navigate away
 				goto("/")
 			}
-			socket.emit("deleteChat", { id: chatToDelete })
+			socket.emit("chats:delete", { id: chatToDelete })
 			console.log("Deleting chat with ID:", chatToDelete)
 			showDeleteModal = false
 			chatToDelete = null
 		}
 	}
-	socket.on("deleteChat", (msg) => {
+	socket.on("chats:delete", (msg) => {
 		chats = chats.filter((c) => c.id !== msg.id)
 		toaster.success({ title: "Chat deleted" })
 	})
@@ -198,25 +198,25 @@
 
 	$effect(() => {
 		if (searchByCharacterId) {
-			socket.once("character", (msg: Sockets.Character.Response) => {
+			socket.once("characters:get", (msg: Sockets.Characters.Get.Response) => {
 				searchCharacter = msg.character
 			})
-			const charIdReq: Sockets.Character.Call = {
+			const charIdReq: Sockets.Characters.Get.Params = {
 				id: searchByCharacterId
 			}
-			socket.emit("character", charIdReq)
+			socket.emit("characters:get", charIdReq)
 		}
 	})
 
 	$effect(() => {
 		if (searchByPersonaId) {
-			socket.once("persona", (msg: Sockets.Persona.Response) => {
+			socket.once("personas:get", (msg: Sockets.Personas.Get.Response) => {
 				searchPersona = msg.persona
 			})
-			const personaIdReq: Sockets.Persona.Call = {
+			const personaIdReq: Sockets.Personas.Get.Params = {
 				id: searchByPersonaId
 			}
-			socket.emit("persona", personaIdReq)
+			socket.emit("personas:get", personaIdReq)
 		}
 	})
 
@@ -227,7 +227,7 @@
 	})
 
 	onMount(() => {
-		socket.emit("chatsList", {})
+		socket.emit("chats:list", {})
 		onclose = handleOnClose
 	})
 </script>

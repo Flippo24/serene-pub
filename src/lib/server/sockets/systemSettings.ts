@@ -1,145 +1,160 @@
 import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq } from "drizzle-orm"
+import type { Handler } from "$lib/shared/events"
 
-export async function systemSettings(
-	socket: any,
-	message: Sockets.SystemSettings.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		const settings = await db.query.systemSettings.findFirst({
-			where: eq(schema.systemSettings.id, 1),
-			columns: {
-				id: false // We don't need the ID in the response
+export const systemSettingsGet: Handler<Sockets.SystemSettings.Get.Params, Sockets.SystemSettings.Get.Response> = {
+	event: "systemSettings:get",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const settings = await db.query.systemSettings.findFirst({
+				where: eq(schema.systemSettings.id, 1),
+				columns: {
+					id: false // We don't need the ID in the response
+				}
+			})
+
+			if (!settings) {
+				throw new Error("System settings not found")
 			}
-		})
 
-		if (!settings) {
-			throw new Error("System settings not found")
+			const res: Sockets.SystemSettings.Get.Response = {
+				systemSettings: settings
+			}
+
+			emitToUser("systemSettings:get", res)
+			return res
+		} catch (error: any) {
+			console.error("Error fetching system settings:", error)
+			emitToUser("systemSettings:get:error", {
+				error: "Failed to fetch system settings"
+			})
+			throw error
 		}
-
-		const res: Sockets.SystemSettings.Response = {
-			systemSettings: settings
-		}
-
-		emitToUser("systemSettings", res)
-	} catch (error: any) {
-		console.error("Error fetching system settings:", error)
-		emitToUser("error", {
-			error: "Failed to fetch system settings"
-		})
 	}
 }
 
-export async function updateOllamaManagerEnabled(
-	socket: any,
-	message: Sockets.UpdateOllamaManagerEnabled.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.update(schema.systemSettings)
-			.set({
-				ollamaManagerEnabled: message.enabled
-			})
-			.where(eq(schema.systemSettings.id, 1))
+export const systemSettingsUpdateOllamaManagerEnabled: Handler<Sockets.SystemSettings.UpdateOllamaManagerEnabled.Params, Sockets.SystemSettings.UpdateOllamaManagerEnabled.Response> = {
+	event: "systemSettings:updateOllamaManagerEnabled",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.update(schema.systemSettings)
+				.set({
+					ollamaManagerEnabled: params.enabled
+				})
+				.where(eq(schema.systemSettings.id, 1))
 
-		const res: Sockets.UpdateOllamaManagerEnabled.Response = {
-			success: true,
-			enabled: message.enabled
+			const res: Sockets.SystemSettings.UpdateOllamaManagerEnabled.Response = {
+				success: true,
+				enabled: params.enabled
+			}
+			emitToUser("systemSettings:updateOllamaManagerEnabled", res)
+			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
+			return res
+		} catch (error: any) {
+			console.error("Update Ollama Manager enabled error:", error)
+			emitToUser("systemSettings:updateOllamaManagerEnabled:error", {
+				error: "Failed to update Ollama Manager setting"
+			})
+			throw error
 		}
-		emitToUser("updateOllamaManagerEnabled", res)
-		await systemSettings(socket, {}, emitToUser) // Refresh system settings after update
-	} catch (error: any) {
-		console.error("Update Ollama Manager enabled error:", error)
-		const res = {
-			error: "Failed to update Ollama Manager setting"
-		}
-		emitToUser("error", res)
 	}
 }
 
-export async function updateShowAllCharacterFields(
-	socket: any,
-	message: Sockets.UpdateShowAllCharacterFields.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.update(schema.systemSettings)
-			.set({
-				showAllCharacterFields: message.enabled
-			})
-			.where(eq(schema.systemSettings.id, 1))
+export const systemSettingsUpdateShowAllCharacterFields: Handler<Sockets.SystemSettings.UpdateShowAllCharacterFields.Params, Sockets.SystemSettings.UpdateShowAllCharacterFields.Response> = {
+	event: "systemSettings:updateShowAllCharacterFields",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.update(schema.systemSettings)
+				.set({
+					showAllCharacterFields: params.enabled
+				})
+				.where(eq(schema.systemSettings.id, 1))
 
-		const res: Sockets.UpdateShowAllCharacterFields.Response = {
-			success: true,
-			enabled: message.enabled
+			const res: Sockets.SystemSettings.UpdateShowAllCharacterFields.Response = {
+				success: true,
+				enabled: params.enabled
+			}
+			emitToUser("systemSettings:updateShowAllCharacterFields", res)
+			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
+			return res
+		} catch (error: any) {
+			console.error("Update show all character fields error:", error)
+			emitToUser("systemSettings:updateShowAllCharacterFields:error", {
+				error: "Failed to update show all character fields setting"
+			})
+			throw error
 		}
-		emitToUser("updateShowAllCharacterFields", res)
-		await systemSettings(socket, {}, emitToUser) // Refresh system settings after update
-	} catch (error: any) {
-		console.error("Update show all character fields error:", error)
-		const res = {
-			error: "Failed to update show all character fields setting"
-		}
-		emitToUser("error", res)
 	}
 }
 
-export async function updateEasyCharacterCreation(
-	socket: any,
-	message: Sockets.UpdateEasyCharacterCreation.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.update(schema.systemSettings)
-			.set({
-				enableEasyCharacterCreation: message.enabled
-			})
-			.where(eq(schema.systemSettings.id, 1))
+export const systemSettingsUpdateEasyCharacterCreation: Handler<Sockets.SystemSettings.UpdateEasyCharacterCreation.Params, Sockets.SystemSettings.UpdateEasyCharacterCreation.Response> = {
+	event: "systemSettings:updateEasyCharacterCreation",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.update(schema.systemSettings)
+				.set({
+					enableEasyCharacterCreation: params.enabled
+				})
+				.where(eq(schema.systemSettings.id, 1))
 
-		const res: Sockets.UpdateEasyCharacterCreation.Response = {
-			success: true,
-			enabled: message.enabled
+			const res: Sockets.SystemSettings.UpdateEasyCharacterCreation.Response = {
+				success: true,
+				enabled: params.enabled
+			}
+			emitToUser("systemSettings:updateEasyCharacterCreation", res)
+			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
+			return res
+		} catch (error: any) {
+			console.error("Update easy character creation error:", error)
+			emitToUser("systemSettings:updateEasyCharacterCreation:error", {
+				error: "Failed to update easy character creation setting"
+			})
+			throw error
 		}
-		emitToUser("updateEasyCharacterCreation", res)
-		await systemSettings(socket, {}, emitToUser) // Refresh system settings after update
-	} catch (error: any) {
-		console.error("Update easy character creation error:", error)
-		const res = {
-			error: "Failed to update easy character creation setting"
-		}
-		emitToUser("error", res)
 	}
 }
 
-export async function updateEasyPersonaCreation(
-	socket: any,
-	message: Sockets.UpdateEasyPersonaCreation.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.update(schema.systemSettings)
-			.set({
-				enableEasyPersonaCreation: message.enabled
-			})
-			.where(eq(schema.systemSettings.id, 1))
+export const systemSettingsUpdateEasyPersonaCreation: Handler<Sockets.SystemSettings.UpdateEasyPersonaCreation.Params, Sockets.SystemSettings.UpdateEasyPersonaCreation.Response> = {
+	event: "systemSettings:updateEasyPersonaCreation",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.update(schema.systemSettings)
+				.set({
+					enableEasyPersonaCreation: params.enabled
+				})
+				.where(eq(schema.systemSettings.id, 1))
 
-		const res: Sockets.UpdateEasyPersonaCreation.Response = {
-			success: true,
-			enabled: message.enabled
+			const res: Sockets.SystemSettings.UpdateEasyPersonaCreation.Response = {
+				success: true,
+				enabled: params.enabled
+			}
+			emitToUser("systemSettings:updateEasyPersonaCreation", res)
+			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
+			return res
+		} catch (error: any) {
+			console.error("Update easy persona creation error:", error)
+			emitToUser("systemSettings:updateEasyPersonaCreation:error", {
+				error: "Failed to update easy persona creation setting"
+			})
+			throw error
 		}
-		emitToUser("updateEasyPersonaCreation", res)
-		await systemSettings(socket, {}, emitToUser) // Refresh system settings after update
-	} catch (error: any) {
-		console.error("Update easy persona creation error:", error)
-		const res = {
-			error: "Failed to update easy persona creation setting"
-		}
-		emitToUser("error", res)
 	}
+}
+
+// Registration function for all system settings handlers
+export function registerSystemSettingsHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, systemSettingsGet, emitToUser)
+	register(socket, systemSettingsUpdateOllamaManagerEnabled, emitToUser)
+	register(socket, systemSettingsUpdateShowAllCharacterFields, emitToUser)
+	register(socket, systemSettingsUpdateEasyCharacterCreation, emitToUser)
+	register(socket, systemSettingsUpdateEasyPersonaCreation, emitToUser)
 }

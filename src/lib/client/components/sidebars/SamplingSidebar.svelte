@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { getContext, onDestroy, onMount, tick } from "svelte"
 	import * as Icons from "@lucide/svelte"
 	import { Modal } from "@skeletonlabs/skeleton-svelte"
@@ -16,7 +16,7 @@
 
 	let userCtx: { user: SelectUser } = getContext("userCtx")
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 
 	let sampling: SelectSamplingConfig | undefined = $state()
 	let originalSamplingConfig: SelectSamplingConfig | undefined = $state()
@@ -135,11 +135,11 @@
 	}
 
 	// Mock list of saved sampling for dropdown
-	let samplingConfigsList: Sockets.SamplingConfigList.Response["samplingConfigsList"] =
+	let samplingConfigsList: Sockets.SamplingConfigs.List.Response["samplingConfigsList"] =
 		$state([])
 
 	function handleSelectChange(e: Event) {
-		socket.emit("setUserActiveSamplingConfig", {
+		socket.emit("samplingConfigs:setUserActive", {
 			id: (e.target as HTMLSelectElement).value
 		})
 	}
@@ -152,7 +152,7 @@
 		delete newSamplingConfig.id
 		delete newSamplingConfig.isImmutable
 		newSamplingConfig.name = name.trim()
-		socket.emit("createSamplingConfig", { sampling: newSamplingConfig })
+		socket.emit("samplingConfigs:create", { sampling: newSamplingConfig })
 		showNewNameModal = false
 	}
 	function handleNewNameCancel() {
@@ -190,7 +190,7 @@
 			return
 		}
 		if (!validateForm()) return
-		socket.emit("updateSamplingConfig", { sampling })
+		socket.emit("samplingConfigs:update", { sampling })
 	}
 
 	function handleReset() {
@@ -209,7 +209,7 @@
 	}
 
 	function confirmDelete() {
-		socket.emit("deleteSamplingConfig", {
+		socket.emit("samplingConfigs:delete", {
 			id: userCtx.user.activeSamplingConfigId
 		})
 		showDeleteModal = false
@@ -254,54 +254,54 @@
 
 	onMount(() => {
 		onclose = handleOnClose
-		socket.on("sampling", (message: Sockets.SamplingConfig.Response) => {
+		socket.on("samplingConfigs:get", (message: Sockets.SamplingConfigs.Get.Response) => {
 			sampling = { ...message.sampling }
 			originalSamplingConfig = { ...message.sampling }
 		})
 
 		socket.on(
-			"samplingConfigsList",
-			(message: Sockets.SamplingConfigList.Response) => {
+			"samplingConfigs:list",
+			(message: Sockets.SamplingConfigs.List.Response) => {
 				samplingConfigsList = message.samplingConfigsList
 				if (
 					!userCtx.user.activeSamplingConfigId &&
 					samplingConfigsList.length > 0
 				) {
-					socket.emit("setUserActiveSamplingConfig", {
+					socket.emit("samplingConfigs:setUserActive", {
 						id: samplingConfigsList[0].id
 					})
 				}
 			}
 		)
 		socket.on(
-			"deleteSamplingConfig",
-			(message: Sockets.DeleteSamplingConfig.Response) => {
+			"samplingConfigs:delete",
+			(message: Sockets.SamplingConfigs.Delete.Response) => {
 				toaster.success({ title: "Sampling Config Deleted" })
 			}
 		)
 		socket.on(
-			"updateSamplingConfig",
-			(message: Sockets.UpdateSamplingConfig.Response) => {
+			"samplingConfigs:update",
+			(message: Sockets.SamplingConfigs.Update.Response) => {
 				toaster.success({ title: "Sampling Config Updated" })
 			}
 		)
 		socket.on(
-			"createSamplingConfig",
-			(message: Sockets.CreateSamplingConfig.Response) => {
+			"samplingConfigs:create",
+			(message: Sockets.SamplingConfigs.Create.Response) => {
 				toaster.success({ title: "Sampling Config Created" })
 			}
 		)
 
-		socket.emit("sampling", { id: userCtx.user.activeSamplingConfigId })
-		socket.emit("samplingConfigsList", {})
+		socket.emit("samplingConfigs:get", { id: userCtx.user.activeSamplingConfigId })
+		socket.emit("samplingConfigs:list", {})
 	})
 
 	onDestroy(() => {
-		socket.off("sampling")
-		socket.off("samplingConfigsList")
-		socket.off("deleteSamplingConfig")
-		socket.off("updateSamplingConfig")
-		socket.off("createSamplingConfig")
+		socket.off("samplingConfigs:get")
+		socket.off("samplingConfigs:list")
+		socket.off("samplingConfigs:delete")
+		socket.off("samplingConfigs:update")
+		socket.off("samplingConfigs:create")
 	})
 </script>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { getContext, onDestroy, onMount } from "svelte"
 	import * as Icons from "@lucide/svelte"
 	import { Modal } from "@skeletonlabs/skeleton-svelte"
@@ -24,7 +24,7 @@
 	let systemSettingsCtx: SystemSettingsCtx = getContext("systemSettingsCtx")
 	let panelsCtx: PanelsCtx = getContext("panelsCtx")
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 
 	const OAIChatPresets: {
 		name: string
@@ -226,8 +226,7 @@
 
 	// --- State ---
 	let connectionsList: SelectConnection[] = $state([])
-	let connection: Sockets.Connection.Response["connection"] | undefined =
-		$state()
+	let connection: any = $state()
 	let originalConnection = $state()
 	let unsavedChanges = $derived.by(() => {
 		if (!connection || !originalConnection) return false
@@ -290,7 +289,7 @@
 		const selectedConnection = connectionsList.find(
 			(c) => c.id === selectedId
 		)
-		socket.emit("setUserActiveConnection", {
+		socket.emit("connections:setUserActive", {
 			id: selectedId
 		})
 		if (selectedConnection) {
@@ -332,14 +331,14 @@
 					)?.connectionDefaults
 				: {})
 		}
-		socket.emit("createConnection", { connection: newConn })
+		socket.emit("connections:create", { connection: newConn })
 		showNewConnectionModal = false
 	}
 	function handleNewConnectionCancel() {
 		showNewConnectionModal = false
 	}
 	function handleUpdate() {
-		socket.emit("updateConnection", { connection })
+		socket.emit("connections:update", { connection })
 	}
 	function handleReset() {
 		connection = { ...originalConnection }
@@ -349,7 +348,7 @@
 	}
 	function handleDeleteModalConfirm() {
 		if (connection) {
-			socket.emit("deleteConnection", { id: connection.id })
+			socket.emit("connections:delete", { id: connection.id })
 		}
 		showDeleteModal = false
 	}
@@ -373,31 +372,31 @@
 	}
 	function handleRefreshModels() {
 		refreshModelsResult = null
-		socket.emit("refreshModels", { baseUrl: connection?.baseUrl })
+		socket.emit("connections:refreshModels", { baseUrl: connection?.baseUrl })
 	}
 
 	onMount(() => {
 		socket.on(
-			"connectionsList",
-			(msg: Sockets.ConnectionsList.Response) => {
+			"connections:list",
+			(msg) => {
 				connectionsList = msg.connectionsList
 					.slice()
 					.sort((a, b) => a.name!.localeCompare(b.name!))
 			}
 		)
-		socket.on("connection", (msg: Sockets.Connection.Response) => {
+		socket.on("connections:get", (msg) => {
 			connection = { ...msg.connection }
 			originalConnection = { ...msg.connection }
 		})
-		socket.on("testConnection", (msg: Sockets.TestConnection.Response) => {
+		socket.on("connections:test", (msg) => {
 			testResult = msg
 		})
-		socket.on("refreshModels", (msg: Sockets.RefreshModels.Response) => {
+		socket.on("connections:refreshModels", (msg) => {
 			refreshModelsResult = msg.models || []
 		})
 		socket.on(
-			"updateConnection",
-			(msg: Sockets.UpdateConnection.Response) => {
+			"connections:update",
+			(msg) => {
 				toaster.success({ title: "Connection Updated" })
 				announce(
 					`Connection ${connection?.name} has been updated successfully`
@@ -405,8 +404,8 @@
 			}
 		)
 		socket.on(
-			"deleteConnection",
-			(msg: Sockets.DeleteConnection.Response) => {
+			"connections:delete",
+			(msg) => {
 				const deletedName = connection?.name
 				toaster.success({ title: "Connection Deleted" })
 				announce(
@@ -417,17 +416,17 @@
 			}
 		)
 		socket.on(
-			"createConnection",
-			(msg: Sockets.CreateConnection.Response) => {
+			"connections:create",
+			(msg) => {
 				toaster.success({ title: "Connection Created" })
 				announce(
 					`New connection ${msg.connection?.name} has been created successfully`
 				)
 			}
 		)
-		socket.emit("connectionsList", {})
+		socket.emit("connections:list", {})
 		if (userCtx.user?.activeConnectionId) {
-			socket.emit("connection", { id: userCtx.user.activeConnectionId })
+			socket.emit("connections:get", { id: userCtx.user.activeConnectionId })
 		}
 		onclose = handleOnClose
 
@@ -437,8 +436,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("connectionsList")
-		socket.off("connection")
+		socket.off("connections:list")
+		socket.off("connections:get")
 		socket.off("testConnection")
 		socket.off("refreshModels")
 		socket.off("updateConnection")

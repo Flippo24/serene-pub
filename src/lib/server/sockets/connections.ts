@@ -3,230 +3,231 @@ import { and, eq } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import { user as loadUser, user } from "./users"
 import { getConnectionAdapter } from "../utils/getConnectionAdapter"
+import type { Handler } from "$lib/shared/events"
 
 // --- CONNECTIONS SOCKET HANDLERS ---
 
-export async function connectionsList(
-	socket: any,
-	message: Sockets.ConnectionsList.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const connectionsList = await db.query.connections.findMany({
-		columns: {
-			id: true,
-			name: true,
-			type: true
-		},
-		orderBy: (c, { asc }) => [asc(c.type), asc(c.name)]
-	})
-	const res: Sockets.ConnectionsList.Response = { connectionsList }
-	emitToUser("connectionsList", res)
-}
-
-export async function connection(
-	socket: any,
-	message: Sockets.Connection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const connection = await db.query.connections.findFirst({
-		where: (c, { eq }) => eq(c.id, message.id)
-	})
-	if (!connection) {
-		const res = { error: "Connection not found." }
-		emitToUser("error", res)
-		return
-	}
-	const res: Sockets.Connection.Response = { connection }
-	emitToUser("connection", res)
-}
-
-export async function createConnection(
-	socket: any,
-	message: Sockets.CreateConnection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	let data = { ...message.connection }
-	const Adapter = getConnectionAdapter(data.type)
-	data = { ...Adapter.connectionDefaults, ...data }
-	if ("id" in data) delete data.id
-	// try {
-	// 	const modelsRes = await Adapter.listModels(data as any)
-	// 	if (modelsRes.error) {
-	// 		const res = { error: modelsRes.error }
-	// 		emitToUser("error", res)
-	// 		return
-	// 	}
-	// 	if (!modelsRes.models || modelsRes.models.length === 0) {
-	// 		const res = { error: "No models found for this connection." }
-	// 		emitToUser("error", res)
-	// 	} else {
-	// 		data.model = modelsRes.models[0].id
-	// 	}
-	// } catch (error: any) {
-	// 	console.error("Error fetching models:", error)
-	// 	const res = { error: "Failed to fetch models for this connection." }
-	// 	emitToUser("error", res)
-	// 	return
-	// }
-	// Always remove id before insert to let DB auto-increment
-	if ("id" in data) delete data.id
-	const [conn] = await db.insert(schema.connections).values(data).returning()
-	await setUserActiveConnection(socket, { id: conn.id }, emitToUser)
-	await connectionsList(socket, {}, emitToUser)
-	const res: Sockets.CreateConnection.Response = { connection: conn }
-	emitToUser("createConnection", res)
-}
-
-export async function updateConnection(
-	socket: any,
-	message: Sockets.UpdateConnection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const id = message.connection.id
-	if ("id" in message.connection) delete (message.connection as any).id
-	const [updated] = await db
-		.update(schema.connections)
-		.set(message.connection)
-		.where(eq(schema.connections.id, id))
-		.returning()
-	await connection(socket, { id }, emitToUser)
-	const res: Sockets.UpdateConnection.Response = { connection: updated }
-	emitToUser("updateConnection", res)
-	await user(socket, {}, emitToUser)
-	await connectionsList(socket, {}, emitToUser)
-}
-
-export async function deleteConnection(
-	socket: any,
-	message: Sockets.DeleteConnection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const currentUser = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, 1)
-	})
-	if (currentUser && currentUser.activeConnectionId === message.id) {
-		await setUserActiveConnection(socket, { id: null }, emitToUser)
-	}
-	await db
-		.delete(schema.connections)
-		.where(eq(schema.connections.id, message.id))
-	await connectionsList(socket, {}, emitToUser)
-	const res: Sockets.DeleteConnection.Response = { id: message.id }
-	emitToUser("deleteConnection", res)
-}
-
-export async function setUserActiveConnection(
-	socket: any,
-	message: Sockets.SetUserActiveConnection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const currentUser = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, 1)
-	})
-	if (!currentUser) {
-		const res = { error: "User not found." }
-		emitToUser("error", res)
-		return
-	}
-	await db
-		.update(schema.users)
-		.set({
-			activeConnectionId: message.id
+export const connectionsList: Handler<Sockets.Connections.List.Params, Sockets.Connections.List.Response> = {
+	event: "connections:list",
+	handler: async (socket, params, emitToUser) => {
+		const connectionsList = await db.query.connections.findMany({
+			columns: {
+				id: true,
+				name: true,
+				type: true
+			},
+			orderBy: (c, { asc }) => [asc(c.type), asc(c.name)]
 		})
-		.where(eq(schema.users.id, currentUser.id))
-	// The user handler is not modularized yet, so call as in original
-	// @ts-ignore
-	await loadUser(socket, {}, emitToUser)
-	if (message.id) await connection(socket, { id: message.id }, emitToUser)
-	const res: Sockets.SetUserActiveConnection.Response = { ok: true }
-	emitToUser("setUserActiveConnection", res)
-}
-
-export async function testConnection(
-	socket: any,
-	message: Sockets.TestConnection.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const { Adapter, testConnection, listModels } = getConnectionAdapter(
-		message.connection.type
-	)
-	if (!Adapter) {
-		const res: Sockets.TestConnection.Response = {
-			ok: false,
-			error: "Unsupported connection type.",
-			models: []
-		}
-		emitToUser("testConnection", res)
-		return
-	}
-
-	try {
-		const result = await testConnection(message.connection)
-		let models: any[] = []
-		let error: string | null = null
-		if (result.ok) {
-			const modelsRes = await listModels(message.connection)
-			if (modelsRes.error) {
-				emitToUser("error", {
-					error: modelsRes.error
-				})
-				return
-			}
-			models = modelsRes.models || []
-			error = modelsRes.error || null
-		} else {
-			error = result.error || "Connection failed."
-		}
-		const res: Sockets.TestConnection.Response = {
-			ok: result.ok,
-			error: error || null,
-			models
-		}
-		emitToUser("testConnection", res)
-	} catch (error: any) {
-		console.error("Connection test error:", error)
-		const res: Sockets.TestConnection.Response = {
-			ok: false,
-			error: error?.message || String(error) || "Connection failed.",
-			models: []
-		}
-		emitToUser("testConnection", res)
+		const res: Sockets.Connections.List.Response = { connectionsList }
+		emitToUser("connections:list", res)
+		return res
 	}
 }
 
-export async function refreshModels(
-	socket: any,
-	message: Sockets.RefreshModels.Call,
-	emitToUser: (event: string, data: any) => void
-) {
-	const { listModels } = getConnectionAdapter(message.connection.type)
-
-	try {
-		const result = await listModels(message.connection)
-		if (result.error) {
-			const res = {
-				error: result.error
-			}
+export const connectionsGet: Handler<Sockets.Connections.Get.Params, Sockets.Connections.Get.Response> = {
+	event: "connections:get",
+	handler: async (socket, params, emitToUser) => {
+		const connection = await db.query.connections.findFirst({
+			where: (c, { eq }) => eq(c.id, params.id)
+		})
+		if (!connection) {
+			const res = { error: "Connection not found." }
 			emitToUser("error", res)
-		} else if (!result.models) {
-			const res: Sockets.RefreshModels.Response = {
+			throw new Error("Connection not found.")
+		}
+		const res: Sockets.Connections.Get.Response = { connection }
+		emitToUser("connections:get", res)
+		return res
+	}
+}
+
+export const connectionsCreate: Handler<Sockets.Connections.Create.Params, Sockets.Connections.Create.Response> = {
+	event: "connections:create",
+	handler: async (socket, params, emitToUser) => {
+		let data = { ...params.connection }
+		const Adapter = getConnectionAdapter(data.type)
+		data = { ...Adapter.connectionDefaults, ...data }
+		if ("id" in data) delete data.id
+		// Always remove id before insert to let DB auto-increment
+		if ("id" in data) delete data.id
+		const [conn] = await db.insert(schema.connections).values(data).returning()
+		await connectionsSetUserActive.handler(socket, { id: conn.id }, emitToUser)
+		await connectionsList.handler(socket, {}, emitToUser)
+		const res: Sockets.Connections.Create.Response = { connection: conn }
+		emitToUser("connections:create", res)
+		return res
+	}
+}
+
+export const connectionsUpdate: Handler<Sockets.Connections.Update.Params, Sockets.Connections.Update.Response> = {
+	event: "connections:update",
+	handler: async (socket, params, emitToUser) => {
+		const id = params.connection.id
+		if ("id" in params.connection) delete (params.connection as any).id
+		const [updated] = await db
+			.update(schema.connections)
+			.set(params.connection)
+			.where(eq(schema.connections.id, id))
+			.returning()
+		await connectionsGet.handler(socket, { id }, emitToUser)
+		const res: Sockets.Connections.Update.Response = { connection: updated }
+		emitToUser("connections:update", res)
+		await user(socket, {}, emitToUser)
+		await connectionsList.handler(socket, {}, emitToUser)
+		return res
+	}
+}
+
+export const connectionsDelete: Handler<Sockets.Connections.Delete.Params, Sockets.Connections.Delete.Response> = {
+	event: "connections:delete",
+	handler: async (socket, params, emitToUser) => {
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, 1)
+		})
+		if (currentUser && currentUser.activeConnectionId === params.id) {
+			await connectionsSetUserActive.handler(socket, { id: null }, emitToUser)
+		}
+		await db
+			.delete(schema.connections)
+			.where(eq(schema.connections.id, params.id))
+		await connectionsList.handler(socket, {}, emitToUser)
+		const res: Sockets.Connections.Delete.Response = { id: params.id }
+		emitToUser("connections:delete", res)
+		return res
+	}
+}
+
+export const connectionsSetUserActive: Handler<Sockets.Connections.SetUserActive.Params, Sockets.Connections.SetUserActive.Response> = {
+	event: "connections:setUserActive",
+	handler: async (socket, params, emitToUser) => {
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, 1)
+		})
+		if (!currentUser) {
+			const res = { error: "User not found." }
+			emitToUser("error", res)
+			throw new Error("User not found.")
+		}
+		await db
+			.update(schema.users)
+			.set({
+				activeConnectionId: params.id
+			})
+			.where(eq(schema.users.id, currentUser.id))
+		// The user handler is not modularized yet, so call as in original
+		// @ts-ignore
+		await loadUser(socket, {}, emitToUser)
+		if (params.id) await connectionsGet.handler(socket, { id: params.id }, emitToUser)
+		const res: Sockets.Connections.SetUserActive.Response = { ok: true }
+		emitToUser("connections:setUserActive", res)
+		return res
+	}
+}
+
+export const connectionsTest: Handler<Sockets.Connections.Test.Params, Sockets.Connections.Test.Response> = {
+	event: "connections:test",
+	handler: async (socket, params, emitToUser) => {
+		const { Adapter, testConnection, listModels } = getConnectionAdapter(
+			params.connection.type
+		)
+		if (!Adapter) {
+			const res: Sockets.Connections.Test.Response = {
+				ok: false,
+				error: "Unsupported connection type.",
+				models: []
+			}
+			emitToUser("connections:test", res)
+			return res
+		}
+
+		try {
+			const result = await testConnection(params.connection)
+			let models: any[] = []
+			let error: string | null = null
+			if (result.ok) {
+				const modelsRes = await listModels(params.connection)
+				if (modelsRes.error) {
+					emitToUser("error", {
+						error: modelsRes.error
+					})
+					throw new Error(modelsRes.error)
+				}
+				models = modelsRes.models || []
+				error = modelsRes.error || null
+			} else {
+				error = result.error || "Connection failed."
+			}
+			const res: Sockets.Connections.Test.Response = {
+				ok: result.ok,
+				error: error || null,
+				models
+			}
+			emitToUser("connections:test", res)
+			return res
+		} catch (error: any) {
+			console.error("Connection test error:", error)
+			const res: Sockets.Connections.Test.Response = {
+				ok: false,
+				error: error?.message || String(error) || "Connection failed.",
+				models: []
+			}
+			emitToUser("connections:test", res)
+			return res
+		}
+	}
+}
+
+export const connectionsRefreshModels: Handler<Sockets.Connections.RefreshModels.Params, Sockets.Connections.RefreshModels.Response> = {
+	event: "connections:refreshModels",
+	handler: async (socket, params, emitToUser) => {
+		const { listModels } = getConnectionAdapter(params.connection.type)
+
+		try {
+			const result = await listModels(params.connection)
+			if (result.error) {
+				const res = {
+					error: result.error
+				}
+				emitToUser("error", res)
+				throw new Error(result.error)
+			} else if (!result.models) {
+				const res: Sockets.Connections.RefreshModels.Response = {
+					error: "Failed to refresh models.",
+					models: []
+				}
+				emitToUser("connections:refreshModels", res)
+				return res
+			}
+			const res: Sockets.Connections.RefreshModels.Response = {
+				models: result.models,
+				error: null
+			}
+			emitToUser("connections:refreshModels", res)
+			return res
+		} catch (error: any) {
+			console.error("Refresh models error:", error)
+			const res: Sockets.Connections.RefreshModels.Response = {
 				error: "Failed to refresh models.",
 				models: []
 			}
-			emitToUser("refreshModels", res)
-			return
+			emitToUser("connections:refreshModels", res)
+			return res
 		}
-		const res: Sockets.RefreshModels.Response = {
-			models: result.models,
-			error: null
-		}
-		emitToUser("refreshModels", res)
-	} catch (error: any) {
-		console.error("Refresh models error:", error)
-		const res: Sockets.RefreshModels.Response = {
-			error: "Failed to refresh models.",
-			models: []
-		}
-		emitToUser("refreshModels", res)
 	}
+}
+
+// Registration function for all connection handlers
+export function registerConnectionHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, connectionsList, emitToUser)
+	register(socket, connectionsGet, emitToUser)
+	register(socket, connectionsCreate, emitToUser)
+	register(socket, connectionsUpdate, emitToUser)
+	register(socket, connectionsDelete, emitToUser)
+	register(socket, connectionsSetUserActive, emitToUser)
+	register(socket, connectionsTest, emitToUser)
+	register(socket, connectionsRefreshModels, emitToUser)
 }

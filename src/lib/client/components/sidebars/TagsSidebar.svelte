@@ -1,11 +1,13 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { getContext, onDestroy, onMount } from "svelte"
 	import { Modal } from "@skeletonlabs/skeleton-svelte"
 	import * as Icons from "@lucide/svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { z } from "zod"
-	import CharacterListItem from "../listItems/CharacterListItem.svelte"
+	import CharacterListItem from		socket.on("tags:list", (msg: any) => {
+			tags = msg.tagsList || []
+		})./listItems/CharacterListItem.svelte"
 	import PersonaListItem from "../listItems/PersonaListItem.svelte"
 	import ChatListItem from "../listItems/ChatListItem.svelte"
 	import LorebookListItem from "../listItems/LorebookListItem.svelte"
@@ -17,7 +19,7 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	const panelsCtx: PanelsCtx = $state(getContext("panelsCtx"))
 
 	let tagsList: SelectTag[] = $state([])
@@ -351,7 +353,7 @@
 	}
 
 	onMount(() => {
-		socket.on("tagsList", (msg: any) => {
+		socket.on("tags:list", (msg: any) => {
 			tagsList = msg.tagsList || []
 		})
 
@@ -384,7 +386,7 @@
 			relatedChats = msg.chats || []
 		})
 
-		socket.emit("tagsList", {})
+		socket.emit("tags:list", {})
 
 		onclose = async () => {
 			return true
@@ -392,7 +394,7 @@
 	})
 
 	onDestroy(() => {
-		socket.off("tagsList")
+		socket.off("tags:list")
 		socket.off("createTag")
 		socket.off("updateTag")
 		socket.off("deleteTag")

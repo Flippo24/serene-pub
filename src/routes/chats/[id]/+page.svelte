@@ -192,7 +192,7 @@
 			lastSeenMessageId = null
 			lastSeenMessageContent = ""
 			loadingOlderMessages = false
-			socket.emit("chat", { id: chatId, limit: 25, offset: 0 })
+			socket.emit("chats:get", { id: chatId, limit: 25, offset: 0 })
 			// console.log('Debug - Emitting getChatResponseOrder for chatId:', chatId)
 			socket.emit("getChatResponseOrder", { chatId })
 		}
@@ -388,7 +388,7 @@
 			chatId: chatId,
 			chatMessageId: msg.id
 		}
-		socket.emit("chatMessageSwipeRight", req)
+		socket.emit("chatMessages:swipeRight", req)
 	}
 
 	function swipeLeft(msg: SelectChatMessage): void {
@@ -396,7 +396,7 @@
 			chatId: chatId,
 			chatMessageId: msg.id
 		}
-		socket.emit("chatMessageSwipeLeft", req)
+		socket.emit("chatMessages:swipeLeft", req)
 	}
 
 	async function loadOlderMessages() {
@@ -408,7 +408,7 @@
 		const scrollHeight = chatMessagesContainer?.scrollHeight || 0
 		const currentOffset = chat.chatMessages.length
 
-		socket.emit("chat", {
+		socket.emit("chats:get", {
 			id: chatId,
 			limit: 25,
 			offset: currentOffset
@@ -471,7 +471,7 @@
 	}
 
 	onMount(() => {
-		socket.on("chat", (msg: Sockets.Chat.Response) => {
+		socket.on("chats:get", (msg: Sockets.Chats.Get.Response) => {
 			if (msg.chat.id === Number.parseInt(page.params.id)) {
 				if (chat && loadingOlderMessages) {
 					// Merge older messages (avoiding duplicates)

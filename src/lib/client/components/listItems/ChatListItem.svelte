@@ -4,8 +4,8 @@
 	import SidebarListItem from "../SidebarListItem.svelte"
 
 	interface Props {
-		chat: Sockets.ChatsList.Response["chatsList"][0]
-		onclick?: (chat: Sockets.ChatsList.Response["chatsList"][0]) => void
+		chat: Sockets.Chats.List.Response["chatList"][0]
+		onclick?: (chat: Sockets.Chats.List.Response["chatList"][0]) => void
 		onEdit?: (id: number) => void
 		onDelete?: (id: number) => void
 		showControls?: boolean

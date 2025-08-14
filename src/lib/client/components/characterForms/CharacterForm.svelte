@@ -137,7 +137,7 @@
 	let validationErrors: ValidationErrors = $state({})
 	let newLangKey = $state("")
 	let newLangNote = $state("")
-	let lorebookList: Sockets.LorebookList.Response["lorebookList"] = $state([])
+	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state([])
 	let formContainer: HTMLDivElement
 	let validationTimeout: NodeJS.Timeout
 
@@ -276,7 +276,7 @@
 		const newCharacter = { ...editCharacterData }
 		const avatarFile = newCharacter._avatarFile
 		delete newCharacter._avatarFile
-		socket.emit("createCharacter", {
+		socket.emit("characters:create", {
 			character: newCharacter,
 			avatarFile
 		})
@@ -286,7 +286,7 @@
 		const updatedCharacter = { ...editCharacterData }
 		const avatarFile = updatedCharacter._avatarFile
 		delete updatedCharacter._avatarFile
-		socket.emit("updateCharacter", {
+		socket.emit("characters:update", {
 			character: updatedCharacter,
 			avatarFile
 		})
@@ -380,7 +380,7 @@
 		// Add keyboard event listener
 		document.addEventListener("keydown", handleKeydown)
 
-		socket.on("createCharacter", (res: any) => {
+		socket.on("characters:create", (res: any) => {
 			if (res.character) {
 				validationErrors = {} // Clear any validation errors on success
 				toaster.success({
@@ -391,7 +391,7 @@
 			}
 		})
 
-		socket.on("updateCharacter", (res: any) => {
+		socket.on("characters:update", (res: any) => {
 			if (res.character) {
 				validationErrors = {} // Clear any validation errors on success
 				toaster.success({
@@ -401,18 +401,18 @@
 				closeForm()
 			}
 		})
-		socket.on("lorebookList", (message: Sockets.LorebookList.Response) => {
+		socket.on("lorebooks:list", (message: Sockets.Lorebooks.List.Response) => {
 			lorebookList =
 				message.lorebookList.sort((a, b) =>
 					a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 				) || []
 		})
 
-		socket.on("tagsList", (message: any) => {
+		socket.on("tags:list", (message: any) => {
 			availableTags = message.tagsList || []
 		})
 		if (characterId) {
-			socket.once("character", (message: Sockets.Character.Response) => {
+			socket.once("characters:get", (message: Sockets.Characters.Get.Response) => {
 				character = message.character
 				const characterData = { ...message.character }
 
@@ -452,17 +452,17 @@
 				}
 				originalCharacterData = { ...editCharacterData }
 			})
-			socket.emit("character", { id: characterId })
+			socket.emit("characters:get", { id: characterId })
 		}
-		socket.emit("lorebookList", {})
-		socket.emit("tagsList", {})
+		socket.emit("lorebooks:list", {})
+		socket.emit("tags:list", {})
 	})
 
 	onDestroy(() => {
 		socket.off("createCharacter")
 		socket.off("updateCharacter")
-		socket.off("character")
-		socket.off("tagsList")
+		socket.off("characters:get")
+		socket.off("tags:list")
 
 		// Remove keyboard event listener and clear timeout
 		document.removeEventListener("keydown", handleKeydown)
