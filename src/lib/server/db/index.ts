@@ -166,10 +166,14 @@ startLockUpdates()
 export let db = drizzle(dbConfig.dbPath, { schema })
 export { schema }
 
-// Compare two version strings in '0.0.0' format
+// Compare two version strings in '0.0.0' format, handling pre-release identifiers
 export function compareVersions(a: string, b: string): -1 | 0 | 1 {
-	const pa = a.split(".").map(Number)
-	const pb = b.split(".").map(Number)
+	// Strip pre-release identifiers (e.g., "-alpha", "-beta") for comparison
+	const cleanVersionA = a.split("-")[0]
+	const cleanVersionB = b.split("-")[0]
+	
+	const pa = cleanVersionA.split(".").map(Number)
+	const pb = cleanVersionB.split(".").map(Number)
 	for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
 		const na = pa[i] || 0
 		const nb = pb[i] || 0
