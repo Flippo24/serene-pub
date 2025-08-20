@@ -46,9 +46,9 @@
 
 	let chat: Sockets.Chat.Response["chat"] | undefined = $state()
 	let isCreating = $state(!chat)
-	let characters: Sockets.CharacterList.Response["characterList"] = $state([])
-	let personas: Sockets.PersonaList.Response["personaList"] = $state([])
-	let lorebookList: Sockets.LorebookList.Response["lorebookList"] = $state([])
+	let characters: Sockets.Characters.List.Response["characterList"] = $state([])
+	let personas: Sockets.Personas.List.Response["personaList"] = $state([])
+	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state([])
 
 	// Data structure to hold chat and selected characters/personas
 	let data:
@@ -200,7 +200,7 @@
 
 	$effect(() => {
 		if (editChatId) {
-			socket.emit("chat", { id: editChatId })
+			socket.emit("chats:get", { id: editChatId })
 		}
 	})
 
@@ -242,10 +242,10 @@
 		// characterPositions is now always up-to-date in data.characterPositions
 		if (chat && chat.id) {
 			const updateChat: Sockets.UpdateChat.Call = data
-			socket.emit("updateChat", updateChat)
+			socket.emit("chats:update", updateChat)
 		} else {
 			const createChat: Sockets.CreateChat.Call = data
-			socket.emit("createChat", createChat)
+			socket.emit("chats:create", createChat)
 		}
 		isCreating = false
 	}
@@ -306,7 +306,7 @@
 	}
 
 	onMount(() => {
-		socket.on("chat", (msg: Sockets.Chat.Response) => {
+		socket.on("chats:get", (msg: Sockets.Chats.Get.Response) => {
 			if (msg.chat && msg.chat.id === editChatId) {
 				chat = msg.chat
 				name = chat.name || ""
@@ -322,16 +322,16 @@
 				originalData = undefined
 			}
 		})
-		socket.on("characterList", (msg: Sockets.CharacterList.Response) => {
+		socket.on("characters:list", (msg: Sockets.Characters.List.Response) => {
 			characters = msg.characterList || []
 		})
-		socket.on("personaList", (msg: Sockets.PersonaList.Response) => {
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
 			personas = msg.personaList || []
 		})
-		socket.on("lorebookList", (msg: Sockets.LorebookList.Response) => {
+		socket.on("lorebooks:list", (msg: Sockets.Lorebooks.List.Response) => {
 			lorebookList = msg.lorebookList || []
 		})
-		socket.on("tagsList", (msg: any) => {
+		socket.on("tags:list", (msg: any) => {
 			tagsList = msg.tagsList || []
 		})
 		socket.on(
@@ -357,32 +357,32 @@
 				}
 			}
 		)
-		socket.on("createChat", (res: any) => {
+		socket.on("chats:create", (res: any) => {
 			toaster.success({
 				title: "Chat Created",
 				description: `Chat "${res.chat.name || "Unnamed Chat"}" created successfully.`
 			})
 			showEditChatForm = false
 		})
-		socket.on("updateChat", (res: any) => {
+		socket.on("chats:update", (res: any) => {
 			toaster.success({
 				title: "Chat Updated",
 				description: `Chat "${res.chat.name || "Unnamed Chat"}" updated successfully.`
 			})
 			showEditChatForm = false
 		})
-		socket.emit("characterList", {})
-		socket.emit("personaList", {})
-		socket.emit("lorebookList", {})
-		socket.emit("tagsList", {})
+		socket.emit("characters:list", {})
+		socket.emit("personas:list", {})
+		socket.emit("lorebooks:list", {})
+		socket.emit("tags:list", {})
 	})
 
 	onDestroy(() => {
-		socket.off("chat")
-		socket.off("characterList")
-		socket.off("personaList")
-		socket.off("lorebookList")
-		socket.off("tagsList")
+		socket.off("chats:get")
+		socket.off("characters:list")
+		socket.off("personas:list")
+		socket.off("lorebooks:list")
+		socket.off("tags:list")
 		socket.off("toggleChatCharacterActive")
 		socket.off("updateChatCharacterVisibility")
 		socket.off("createChat")

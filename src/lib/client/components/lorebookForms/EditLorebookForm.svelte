@@ -130,7 +130,7 @@
 	}
 
 	onMount(() => {
-		socket.on("lorebook", async (msg: Sockets.Lorebook.Response) => {
+		socket.on("lorebooks:get", async (msg: Sockets.Lorebooks.Get.Response) => {
 			if (msg.lorebook && msg.lorebook.id === lorebookId) {
 				editLorebook = { ...msg.lorebook }
 				originalLorebook = { ...msg.lorebook }
@@ -154,21 +154,21 @@
 				})
 			}
 		})
-		socket.on("tagsList", (msg: any) => {
+		socket.on("tags:list", (msg: any) => {
 			tagsList = msg.tagsList || []
 		})
 
 		// Load tags list
-		socket.emit("tagsList", {})
+		socket.emit("tags:list", {})
 
-		const lorebookReq: Sockets.Lorebook.Call = { id: lorebookId }
-		socket.emit("lorebook", lorebookReq)
+		const lorebookReq: Sockets.Lorebooks.Get.Params = { id: lorebookId }
+		socket.emit("lorebooks:get", lorebookReq)
 	})
 
 	onDestroy(() => {
-		socket.off("lorebook")
+		socket.off("lorebooks:get")
 		socket.off("updateLorebook")
-		socket.off("tagsList")
+		socket.off("tags:list")
 	})
 </script>
 

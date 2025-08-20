@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { getContext, onDestroy, onMount, tick } from "svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import * as Icons from "@lucide/svelte"
 	import NewNameModal from "../modals/NewNameModal.svelte"
 	import EditLorebookForm from "../lorebookForms/EditLorebookForm.svelte"
@@ -28,7 +28,7 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	let lorebookList: any[] = $state([])
 	let search: string = $state("")
 	let isCreating: boolean = $state(false)
@@ -115,10 +115,10 @@
 	async function handleOnCreateConfirm(name: string) {
 		if (!name.trim()) return
 		isCreating = false
-		const req: Sockets.CreateLorebook.Call = {
+		const req: Sockets.Lorebooks.Create.Params = {
 			name: name.trim()
 		}
-		socket.emit("createLorebook", req)
+		socket.emit("lorebooks:create", req)
 	}
 
 	async function handleSwitchTabGroup(e: ValueChangeDetails): Promise<void> {
@@ -216,10 +216,10 @@
 	function handleImportConfirm() {
 		if (importingBook && importingBook.name?.trim()) {
 			console.log("Importing lorebook:", $state.snapshot(importingBook))
-			const req: Sockets.LorebookImport.Call = {
+			const req: Sockets.Lorebooks.Import.Params = {
 				lorebookData: importingBook
 			}
-			socket.emit("lorebookImport", req)
+			socket.emit("lorebooks:import", req)
 			showImportModal = false
 			importingBook = undefined
 		}
@@ -232,10 +232,10 @@
 
 	function onDeleteConfirm() {
 		if (deletingLorebookId !== undefined) {
-			const req: Sockets.DeleteLorebook.Call = {
+			const req: Sockets.Lorebooks.Delete.Params = {
 				id: deletingLorebookId
 			}
-			socket.emit("deleteLorebook", req)
+			socket.emit("lorebooks:delete", req)
 			toaster.success({ title: "Lorebook Deleted" })
 		}
 		showDeleteConfirmationModal = false
@@ -260,25 +260,25 @@
 	})
 
 	onMount(() => {
-		socket.on("lorebookList", (msg: Sockets.LorebookList.Response) => {
+		socket.on("lorebooks:list", (msg: Sockets.Lorebooks.List.Response) => {
 			if (msg.lorebookList) {
 				lorebookList = msg.lorebookList
 			}
 		})
-		socket.on("lorebookImport", (msg: Sockets.LorebookImport.Response) => {
+		socket.on("lorebooks:import", (msg: Sockets.Lorebooks.Import.Response) => {
 			toaster.success({ title: "Lorebook Imported" })
 		})
-		socket.on("lorebookDelete", (msg: Sockets.DeleteLorebook.Response) => {
+		socket.on("lorebooks:delete", (msg: Sockets.Lorebooks.Delete.Response) => {
 			toaster.success({ title: "Lorebook Deleted" })
 		})
 		onclose = handleOnClose
-		socket.emit("lorebookList", {})
+		socket.emit("lorebooks:list", {})
 	})
 
 	onDestroy(() => {
-		socket.off("lorebookList")
-		socket.off("lorebookImport")
-		socket.off("lorebookDelete")
+		socket.off("lorebooks:list")
+		socket.off("lorebooks:import")
+		socket.off("lorebooks:delete")
 		onclose = undefined
 	})
 </script>

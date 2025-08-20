@@ -6,7 +6,7 @@
 	import OllamaIcon from "$lib/client/components/icons/OllamaIcon.svelte"
 	import * as Icons from "@lucide/svelte"
 	import { getContext, onMount, onDestroy } from "svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
 
@@ -17,13 +17,13 @@
 		getContext("systemSettingsCtx")
 	)
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 
 	// Data for lists
-	let characters: Sockets.CharacterList.Response["characterList"] = $state([])
-	let personas: Sockets.PersonaList.Response["personaList"] = $state([])
-	let chats: Sockets.ChatsList.Response["chatsList"] = $state([])
-	let connections: Sockets.ConnectionsList.Response["connectionsList"] =
+	let characters: Partial<SelectCharacter>[] = $state([])
+	let personas: Partial<SelectPersona>[] = $state([])
+	let chats: Partial<SelectChat>[] = $state([])
+	let connections: Sockets.Connections.List.Response["connectionsList"] =
 		$state([])
 
 	// Wizard state
@@ -120,13 +120,13 @@
 		
 		// Auto-set the default configs if not already set
 		if (!userCtx.user?.activeSamplingConfig) {
-			socket.emit("setUserActiveSamplingConfig", { id: 1 }) // Default
+			socket.emit("samplingConfigs:setUserActive", { id: 1 }) // Default
 		}
 		if (!userCtx.user?.activeContextConfig) {
-			socket.emit("setUserActiveContextConfig", { id: 1 }) // Default
+			socket.emit("contextConfigs:setUserActive", { id: 1 }) // Default
 		}
 		if (!userCtx.user?.activePromptConfig) {
-			socket.emit("setUserActivePromptConfig", { id: 1 }) // Roleplay - Simple
+			socket.emit("promptConfigs:setUserActive", { id: 1 }) // Roleplay - Simple
 		}
 
 		// Start the wizard
@@ -142,18 +142,15 @@
 	}
 
 	function connectToOllamaModel(modelName: string) {
-		if (!socket) return
-		socket.emit("ollamaConnectModel", { modelName: modelName })
+		socket.emit("ollama:connectModel", { modelName: modelName })
 	}
 
 	function checkOllamaConnection() {
-		if (!socket) return
-		socket.emit("ollamaVersion", {})
+		socket.emit("ollama:version", {})
 	}
 
 	function refreshOllamaModels() {
-		if (!socket) return
-		socket.emit("ollamaModelsList", {})
+		socket.emit("ollama:modelsList", {})
 	}
 
 	function createSamplePersona() {
@@ -166,7 +163,7 @@
 			isDefault: true
 		}
 
-		socket.emit("createPersona", { persona: samplePersona })
+		socket.emit("personas:create", { persona: samplePersona })
 	}
 
 	function finishQuickSetup() {
@@ -187,44 +184,40 @@
 
 	// Listen for socket events
 	onMount(() => {
-
-		socket.on("characterList", (msg: Sockets.CharacterList.Response) => {
+		socket.on("characters:list", (msg) => {
 			characters = msg.characterList || []
 			// If we're in the wizard and just got characters, advance if needed
 			if (showWizard && wizardStep === 2 && characters.length > 0) {
 				nextWizardStep()
 			}
 		})
-		socket.on("personaList", (msg: Sockets.PersonaList.Response) => {
+		socket.on("personas:list", (msg) => {
 			personas = msg.personaList || []
 			// If we're in the wizard and just got personas, advance if needed
 			if (showWizard && wizardStep === 3 && personas.length > 0) {
 				nextWizardStep()
 			}
 		})
-		socket.on("chatsList", (msg: Sockets.ChatsList.Response) => {
-			chats = msg.chatsList || []
+		socket.on("chats:list", (msg) => {
+			chats = msg.chatList || []
 		})
-		socket.on(
-			"connectionsList",
-			(msg: Sockets.ConnectionsList.Response) => {
-				connections = msg.connectionsList || []
-			}
-		)
+		socket.on("connections:list", (msg) => {
+			connections = msg.connectionsList || []
+		})
 
 		// Handle Ollama manager events
-		socket.on("ollamaVersion", (message: any) => {
+		socket.on("ollama:version", (message) => {
 			isOllamaConnected = !!message.version
 			if (isOllamaConnected && showWizard) {
 				refreshOllamaModels()
 			}
 		})
 
-		socket.on("ollamaModelsList", (message: any) => {
+		socket.on("ollama:modelsList", (message) => {
 			installedModels = message.models || []
 		})
 
-		socket.on("ollamaConnectModel", (message: any) => {
+		socket.on("ollama:connectModel", (message) => {
 			if (message.success) {
 				nextWizardStep()
 			} else {
@@ -236,30 +229,44 @@
 		})
 
 		// Handle successful connection creation (fallback for manual setup)
-		socket.on("createConnection", (res: any) => {
+		socket.on("connections:create", (res) => {
 			if (res.connection) {
+				// Auto-set as active connection
+				socket.emit("connections:setUserActive", {
+					id: res.connection.id
+				})
+				toaster.success({
+					title: "Connection Created",
+					description: `Successfully connected to ${res.connection.name}`
+				})
 				nextWizardStep()
 			}
 		})
 
 		// Handle successful character creation
-		socket.on("createCharacter", (res: any) => {
+		socket.on("characters:create", (res) => {
 			if (res.character) {
 				// Refresh character list to update hasCharacter
-				socket.emit("characterList", {})
+				socket.emit("characters:list", {})
+				if (showWizard) {
+					nextWizardStep()
+				}
 			}
 		})
 
 		// Handle successful persona creation
-		socket.on("createPersona", (res: any) => {
+		socket.on("personas:create", (res) => {
 			if (res.persona) {
 				// Refresh persona list to update hasPersona
-				socket.emit("personaList", {})
+				socket.emit("personas:list", {})
+				if (showWizard) {
+					nextWizardStep()
+				}
 			}
 		})
 
 		// Handle successful chat creation
-		socket.on("createChat", (res: any) => {
+		socket.on("chats:create", (res) => {
 			if (res.chat) {
 				// Close wizard if it's open
 				if (showWizard) {
@@ -270,24 +277,24 @@
 			}
 		})
 
-		socket.emit("characterList", {})
-		socket.emit("personaList", {})
-		socket.emit("chatsList", {})
-		socket.emit("connectionsList", {})
+		socket.emit("characters:list", {})
+		socket.emit("personas:list", {})
+		socket.emit("chats:list", {})
+		socket.emit("connections:list", {})
 	})
 
 	onDestroy(() => {
-		socket.off("characterList")
-		socket.off("personaList")
-		socket.off("chatsList")
-		socket.off("connectionsList")
-		socket.off("createConnection")
-		socket.off("createCharacter")
-		socket.off("createPersona")
-		socket.off("createChat")
-		socket.off("ollamaVersion")
-		socket.off("ollamaModelsList")
-		socket.off("ollamaConnectModel")
+		socket.off("characters:list")
+		socket.off("personas:list")
+		socket.off("chats:list")
+		socket.off("connections:list")
+		socket.off("connections:create")
+		socket.off("characters:create")
+		socket.off("personas:create")
+		socket.off("chats:create")
+		socket.off("ollama:version")
+		socket.off("ollama:modelsList")
+		socket.off("ollama:connectModel")
 	})
 </script>
 
@@ -792,7 +799,7 @@
 										model: selectedOllamaModel,
 										isEnabled: true
 									}
-									socket.emit("createConnection", {
+									socket.emit("connections:create", {
 										connection: newConnection
 									})
 								}

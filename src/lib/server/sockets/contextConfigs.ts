@@ -2,105 +2,172 @@ import { db } from "$lib/server/db"
 import { eq } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import { user as loadUser, user } from "./users"
+import type { Handler } from "$lib/shared/events"
 
+export const contextConfigsListHandler: Handler<Sockets.ContextConfigs.List.Params, Sockets.ContextConfigs.List.Response> = {
+	event: "contextConfigs:list",
+	handler: async (socket, params, emitToUser) => {
+		const contextConfigsList = await db.query.contextConfigs.findMany({
+			columns: {
+				id: true,
+				name: true,
+				isImmutable: true
+			},
+			orderBy: (c, { asc }) => [asc(c.isImmutable), asc(c.name)]
+		})
+		const res: Sockets.ContextConfigs.List.Response = { contextConfigsList }
+		emitToUser("contextConfigs:list", res)
+		return res
+	}
+}
+
+export const contextConfigsGet: Handler<Sockets.ContextConfigs.Get.Params, Sockets.ContextConfigs.Get.Response> = {
+	event: "contextConfigs:get",
+	handler: async (socket, params, emitToUser) => {
+		const contextConfig = await db.query.contextConfigs.findFirst({
+			where: (c, { eq }) => eq(c.id, params.id)
+		})
+		if (!contextConfig) {
+			emitToUser("contextConfigs:get:error", { error: "Context config not found" })
+			throw new Error("Context config not found")
+		}
+		const res: Sockets.ContextConfigs.Get.Response = { contextConfig }
+		emitToUser("contextConfigs:get", res)
+		return res
+	}
+}
+
+export const contextConfigsCreate: Handler<Sockets.ContextConfigs.Create.Params, Sockets.ContextConfigs.Create.Response> = {
+	event: "contextConfigs:create",
+	handler: async (socket, params, emitToUser) => {
+		const [contextConfig] = await db
+			.insert(schema.contextConfigs)
+			.values(params.contextConfig)
+			.returning()
+		await contextConfigsListHandler.handler(socket, {}, emitToUser)
+		const res: Sockets.ContextConfigs.Create.Response = { contextConfig }
+		emitToUser("contextConfigs:create", res)
+		return res
+	}
+}
+
+export const contextConfigsUpdate: Handler<Sockets.ContextConfigs.Update.Params, Sockets.ContextConfigs.Update.Response> = {
+	event: "contextConfigs:update",
+	handler: async (socket, params, emitToUser) => {
+		const id = params.contextConfig.id!
+		const { id: _, ...updateData } = params.contextConfig
+		console.log("Updating context config with ID:", id, "Data:", updateData)
+		const [contextConfig] = await db
+			.update(schema.contextConfigs)
+			.set(updateData)
+			.where(eq(schema.contextConfigs.id, id))
+			.returning()
+		await contextConfigsListHandler.handler(socket, {}, emitToUser)
+		const res: Sockets.ContextConfigs.Update.Response = { contextConfig }
+		emitToUser("contextConfigs:update", res)
+		await user(socket, {}, emitToUser)
+		return res
+	}
+}
+
+export const contextConfigsDelete: Handler<Sockets.ContextConfigs.Delete.Params, Sockets.ContextConfigs.Delete.Response> = {
+	event: "contextConfigs:delete",
+	handler: async (socket, params, emitToUser) => {
+		const userId = 1 // Replace with actual userId
+		let currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, userId)
+		})
+		if (currentUser?.activeContextConfigId === params.id) {
+			await contextConfigsSetUserActive.handler(socket, { id: null }, emitToUser)
+		}
+		await db
+			.delete(schema.contextConfigs)
+			.where(eq(schema.contextConfigs.id, params.id))
+		await contextConfigsListHandler.handler(socket, {}, emitToUser)
+		const res: Sockets.ContextConfigs.Delete.Response = { success: "Context config deleted successfully" }
+		emitToUser("contextConfigs:delete", res)
+		return res
+	}
+}
+
+export const contextConfigsSetUserActive: Handler<Sockets.ContextConfigs.SetUserActive.Params, Sockets.ContextConfigs.SetUserActive.Response> = {
+	event: "contextConfigs:setUserActive",
+	handler: async (socket, params, emitToUser) => {
+		const userId = 1 // Replace with actual userId
+		const [updatedUser] = await db
+			.update(schema.users)
+			.set({
+				activeContextConfigId: params.id
+			})
+			.where(eq(schema.users.id, userId))
+			.returning()
+		// You may want to emit the user and contextConfig updates here as in the original
+		await loadUser(socket, {}, emitToUser)
+		const res: Sockets.ContextConfigs.SetUserActive.Response = { user: updatedUser }
+		emitToUser("contextConfigs:setUserActive", res)
+		return res
+	}
+}
+
+// Legacy functions for compatibility
 export async function contextConfigsList(
 	socket: any,
-	message: Sockets.ContextConfigsList.Call,
+	message: {},
 	emitToUser: (event: string, data: any) => void
 ) {
-	const contextConfigsList = await db.query.contextConfigs.findMany({
-		columns: {
-			id: true,
-			name: true,
-			isImmutable: true
-		},
-		orderBy: (c, { asc }) => [asc(c.isImmutable), asc(c.name)]
-	})
-	const res: Sockets.ContextConfigsList.Response = { contextConfigsList }
-	emitToUser("contextConfigsList", res)
+	await contextConfigsListHandler.handler(socket, {}, emitToUser)
 }
 
 export async function contextConfig(
 	socket: any,
-	message: Sockets.ContextConfig.Call,
+	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const contextConfig = await db.query.contextConfigs.findFirst({
-		where: (c, { eq }) => eq(c.id, message.id)
-	})
-	if (contextConfig) {
-		const res: Sockets.ContextConfig.Response = { contextConfig }
-		emitToUser("contextConfig", res)
-	}
+	await contextConfigsGet.handler(socket, { id: message.id }, emitToUser)
 }
 
 export async function createContextConfig(
 	socket: any,
-	message: Sockets.CreateContextConfig.Call,
+	message: { contextConfig: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const [contextConfig] = await db
-		.insert(schema.contextConfigs)
-		.values(message.contextConfig)
-		.returning()
-	await contextConfigsList(socket, {}, emitToUser)
-	const res: Sockets.CreateContextConfig.Response = { contextConfig }
-	emitToUser("createContextConfig", res)
+	await contextConfigsCreate.handler(socket, { contextConfig: message.contextConfig }, emitToUser)
 }
 
 export async function updateContextConfig(
 	socket: any,
-	message: Sockets.UpdateContextConfig.Call,
+	message: { contextConfig: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const id = message.contextConfig.id
-	const updateData = { ...message.contextConfig }
-	delete updateData.id
-	console.log("Updating context config with ID:", id, "Data:", updateData)
-	const [contextConfig] = await db
-		.update(schema.contextConfigs)
-		.set(updateData)
-		.where(eq(schema.contextConfigs.id, id))
-		.returning()
-	await contextConfigsList(socket, {}, emitToUser)
-	const res: Sockets.UpdateContextConfig.Response = { contextConfig }
-	emitToUser("updateContextConfig", res)
-	await user(socket, {}, emitToUser)
+	await contextConfigsUpdate.handler(socket, { contextConfig: message.contextConfig }, emitToUser)
 }
 
 export async function deleteContextConfig(
 	socket: any,
-	message: Sockets.DeleteContextConfig.Call,
+	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const userId = 1 // Replace with actual userId
-	let user = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, userId)
-	})
-	if (user?.activeContextConfigId === message.id) {
-		await setUserActiveContextConfig(socket, { id: null }, emitToUser)
-	}
-	await db
-		.delete(schema.contextConfigs)
-		.where(eq(schema.contextConfigs.id, message.id))
-	await contextConfigsList(socket, {}, emitToUser)
-	const res: Sockets.DeleteContextConfig.Response = { id: message.id }
-	emitToUser("deleteContextConfig", res)
+	await contextConfigsDelete.handler(socket, { id: message.id }, emitToUser)
 }
 
 export async function setUserActiveContextConfig(
 	socket: any,
-	message: Sockets.SetUserActiveContextConfig.Call,
+	message: { id: number | null },
 	emitToUser: (event: string, data: any) => void
 ) {
-	const userId = 1 // Replace with actual userId
-	const updatedUser = await db
-		.update(schema.users)
-		.set({
-			activeContextConfigId: message.id
-		})
-		.where(eq(schema.users.id, userId))
-	// You may want to emit the user and contextConfig updates here as in the original
-	await loadUser(socket, {}, emitToUser)
-	emitToUser("setUserActiveContextConfig", { user: updatedUser })
+	await contextConfigsSetUserActive.handler(socket, { id: message.id }, emitToUser)
+}
+
+// Registration function for all context config handlers
+export function registerContextConfigHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, contextConfigsListHandler, emitToUser)
+	register(socket, contextConfigsGet, emitToUser)
+	register(socket, contextConfigsCreate, emitToUser)
+	register(socket, contextConfigsUpdate, emitToUser)
+	register(socket, contextConfigsDelete, emitToUser)
+	register(socket, contextConfigsSetUserActive, emitToUser)
 }

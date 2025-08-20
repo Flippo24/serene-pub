@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { getContext, onDestroy, onMount } from "svelte"
 	import * as Icons from "@lucide/svelte"
 	import ContextConfigUnsavedChangesModal from "../modals/ContextConfigUnsavedChangesModal.svelte"
@@ -13,18 +13,18 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	let userCtx: { user: SelectUser } = getContext("userCtx")
-	let configsList: Sockets.ContextConfigsList.Response["contextConfigsList"] =
+	let configsList: Sockets.ContextConfigs.List.Response["contextConfigsList"] =
 		$state([])
 	let selectedConfigId: number | undefined = $state(
 		userCtx.user.activeContextConfigId || undefined
 	)
-	let contextConfig: Sockets.ContextConfig.Response["contextConfig"] = $state(
-		{} as Sockets.ContextConfig.Response["contextConfig"]
+	let contextConfig: Sockets.ContextConfigs.Get.Response["contextConfig"] = $state(
+		{} as Sockets.ContextConfigs.Get.Response["contextConfig"]
 	)
-	let originalData: Sockets.ContextConfig.Response["contextConfig"] = $state(
-		{} as Sockets.ContextConfig.Response["contextConfig"]
+	let originalData: Sockets.ContextConfigs.Get.Response["contextConfig"] = $state(
+		{} as Sockets.ContextConfigs.Get.Response["contextConfig"]
 	)
 	let unsavedChanges = $derived(
 		JSON.stringify(contextConfig) !== JSON.stringify(originalData)
@@ -64,23 +64,23 @@
 
 	function handleSave() {
 		if (!validateForm()) return
-		socket.emit("updateContextConfig", {
+		socket.emit("contextConfigs:update", {
 			contextConfig
 		})
 		// After saving, reload the config from the server
-		// socket.emit("contextConfig", { id: selectedConfigId })
+		// socket.emit("contextConfigs:get", { id: selectedConfigId })
 	}
 
 	$effect(() => {
 		// When selectedConfigId changes, load the config from the server
 		if (selectedConfigId) {
-			socket.emit("contextConfig", { id: selectedConfigId })
+			socket.emit("contextConfigs:get", { id: selectedConfigId })
 		}
 	})
 
 	function handleDelete() {
 		if (contextConfig.isImmutable) {
-			socket.emit("deleteContextConfig", { id: contextConfig.id })
+			socket.emit("contextConfigs:delete", { id: contextConfig.id })
 			selectedConfigId = undefined
 		}
 	}
@@ -101,7 +101,7 @@
 			isImmutable: false
 		}
 		delete newContextConfig.id
-		socket.emit("createContextConfig", { contextConfig: newContextConfig })
+		socket.emit("contextConfigs:create", { contextConfig: newContextConfig })
 		showNewNameModal = false
 	}
 
@@ -140,7 +140,7 @@
 			!!selectedConfigId &&
 			selectedConfigId !== userCtx.user.activeContextConfigId
 		) {
-			socket.emit("setUserActiveContextConfig", {
+			socket.emit("contextConfigs:setUserActive", {
 				id: selectedConfigId
 			})
 		}
@@ -148,8 +148,8 @@
 
 	onMount(() => {
 		socket.on(
-			"contextConfigsList",
-			(msg: Sockets.ContextConfigsList.Response) => {
+			"contextConfigs:list",
+			(msg: Sockets.ContextConfigs.List.Response) => {
 				configsList = msg.contextConfigsList
 				if (!selectedConfigId && configsList.length > 0) {
 					selectedConfigId =
@@ -158,37 +158,37 @@
 			}
 		)
 
-		socket.on("contextConfig", (msg: Sockets.ContextConfig.Response) => {
+		socket.on("contextConfigs:get", (msg: Sockets.ContextConfigs.Get.Response) => {
 			contextConfig = { ...msg.contextConfig }
 			originalData = { ...msg.contextConfig }
 		})
 
 		socket.on(
-			"createContextConfig",
-			(msg: Sockets.CreateContextConfig.Response) => {
+			"contextConfigs:create",
+			(msg: Sockets.ContextConfigs.Create.Response) => {
 				selectedConfigId = msg.contextConfig.id
 			}
 		)
 		socket.on(
-			"updateContextConfig",
-			(msg: Sockets.UpdateContextConfig.Response) => {
+			"contextConfigs:update",
+			(msg: Sockets.ContextConfigs.Update.Response) => {
 				contextConfig = { ...msg.contextConfig }
 				originalData = { ...msg.contextConfig }
 				toaster.success({ title: "Context config saved successfully." })
 			}
 		)
-		socket.emit("contextConfigsList", {})
-		socket.emit("contextConfig", {
+		socket.emit("contextConfigs:list", {})
+		socket.emit("contextConfigs:get", {
 			id: selectedConfigId
 		})
 		onclose = handleOnClose
 	})
 
 	onDestroy(() => {
-		socket.off("contextConfigsList")
-		socket.off("contextConfig")
-		socket.off("createContextConfig")
-		socket.off("updateContextConfig")
+		socket.off("contextConfigs:list")
+		socket.off("contextConfigs:get")
+		socket.off("contextConfigs:create")
+		socket.off("contextConfigs:update")
 		onclose = undefined
 	})
 </script>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { getContext, onDestroy, onMount } from "svelte"
 	import * as Icons from "@lucide/svelte"
 	import ContextConfigUnsavedChangesModal from "../modals/ContextConfigUnsavedChangesModal.svelte"
@@ -14,18 +14,18 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	let userCtx: { user: SelectUser } = getContext("userCtx")
-	let promptsList: Sockets.PromptConfigsList.Response["promptConfigsList"] =
+	let promptsList: Sockets.PromptConfigs.List.Response["promptConfigsList"] =
 		$state([])
 	let selectedPromptId: number | undefined = $state(
 		userCtx.user.activePromptConfigId || undefined
 	)
-	let promptConfig: Sockets.PromptConfig.Response["promptConfig"] = $state(
-		{} as Sockets.PromptConfig.Response["promptConfig"]
+	let promptConfig: Sockets.PromptConfigs.Get.Response["promptConfig"] = $state(
+		{} as Sockets.PromptConfigs.Get.Response["promptConfig"]
 	)
-	let originalData: Sockets.PromptConfig.Response["promptConfig"] = $state(
-		{} as Sockets.PromptConfig.Response["promptConfig"]
+	let originalData: Sockets.PromptConfigs.Get.Response["promptConfig"] = $state(
+		{} as Sockets.PromptConfigs.Get.Response["promptConfig"]
 	)
 	let unsavedChanges = $derived(
 		JSON.stringify(promptConfig) !== JSON.stringify(originalData)
@@ -64,14 +64,14 @@
 
 	function handleSave() {
 		if (!validateForm()) return
-		socket.emit("updatePromptConfig", {
+		socket.emit("promptConfigs:update", {
 			promptConfig: { ...promptConfig, id: promptConfig.id }
 		})
 	}
 
 	function handleDelete() {
 		if (!promptConfig.isImmutable) {
-			socket.emit("deletePromptConfig", { id: promptConfig.id })
+			socket.emit("promptConfigs:delete", { id: promptConfig.id })
 			selectedPromptId = undefined
 		}
 	}
@@ -92,7 +92,7 @@
 			isImmutable: false
 		}
 		delete newPromptConfig.id
-		socket.emit("createPromptConfig", { promptConfig: newPromptConfig })
+		socket.emit("promptConfigs:create", { promptConfig: newPromptConfig })
 		showNewNameModal = false
 	}
 
@@ -131,7 +131,7 @@
 			!!selectedPromptId &&
 			selectedPromptId !== userCtx.user.activePromptConfigId
 		) {
-			socket.emit("setUserActivePromptConfig", {
+			socket.emit("promptConfigs:setUserActive", {
 				id: selectedPromptId
 			})
 		}
@@ -139,14 +139,14 @@
 
 	$effect(() => {
 		if (selectedPromptId) {
-			socket.emit("promptConfig", { id: selectedPromptId })
+			socket.emit("promptConfigs:get", { id: selectedPromptId })
 		}
 	})
 
 	onMount(() => {
 		socket.on(
-			"promptConfigsList",
-			(msg: Sockets.PromptConfigsList.Response) => {
+			"promptConfigs:list",
+			(msg: Sockets.PromptConfigs.List.Response) => {
 				promptsList = msg.promptConfigsList
 				if (!selectedPromptId && promptsList.length > 0) {
 					selectedPromptId =
@@ -155,20 +155,20 @@
 			}
 		)
 
-		socket.on("promptConfig", (msg: Sockets.PromptConfig.Response) => {
+		socket.on("promptConfigs:get", (msg: Sockets.PromptConfigs.Get.Response) => {
 			promptConfig = { ...msg.promptConfig }
 			originalData = { ...msg.promptConfig }
 		})
 
 		socket.on(
-			"createPromptConfig",
-			(msg: Sockets.CreatePromptConfig.Response) => {
+			"promptConfigs:create",
+			(msg: Sockets.PromptConfigs.Create.Response) => {
 				selectedPromptId = msg.promptConfig.id
 			}
 		)
 		socket.on(
-			"updatePromptConfig",
-			(msg: Sockets.UpdatePromptConfig.Response) => {
+			"promptConfigs:update",
+			(msg: Sockets.PromptConfigs.Update.Response) => {
 				if (msg.promptConfig.id === promptConfig.id) {
 					promptConfig = { ...msg.promptConfig }
 					originalData = { ...msg.promptConfig }
@@ -176,18 +176,18 @@
 				}
 			}
 		)
-		socket.emit("promptConfigsList", {})
+		socket.emit("promptConfigs:list", {})
 		if (selectedPromptId) {
-			socket.emit("promptConfig", { id: selectedPromptId })
+			socket.emit("promptConfigs:get", { id: selectedPromptId })
 		}
 		onclose = handleOnClose
 	})
 
 	onDestroy(() => {
-		socket.off("promptConfigsList")
-		socket.off("promptConfig")
-		socket.off("createPromptConfig")
-		socket.off("updatePromptConfig")
+		socket.off("promptConfigs:list")
+		socket.off("promptConfigs:get")
+		socket.off("promptConfigs:create")
+		socket.off("promptConfigs:update")
 	})
 </script>
 

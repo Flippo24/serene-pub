@@ -303,15 +303,15 @@
 			}
 		})
 
-		socket.on("tagsList", (msg: any) => {
+		socket.on("tags:list", (msg: any) => {
 			tagsList = msg.tagsList || []
 		})
 
 		// Load tags list
-		socket.emit("tagsList", {})
+		socket.emit("tags:list", {})
 
 		if (personaId) {
-			socket.once("persona", (message: Sockets.Persona.Response) => {
+			socket.once("personas:get", (message: Sockets.Personas.Get.Response) => {
 				if (message.persona) {
 					const personaData = { ...message.persona }
 					editPersonaData = {
@@ -325,15 +325,15 @@
 					originalPersonaData = { ...editPersonaData }
 				}
 			})
-			socket.emit("persona", { id: personaId })
+			socket.emit("personas:get", { id: personaId })
 		}
 	})
 
 	onDestroy(() => {
 		socket.off("createPersona")
 		socket.off("updatePersona")
-		socket.off("persona")
-		socket.off("tagsList")
+		socket.off("personas:get")
+		socket.off("tags:list")
 
 		// Remove keyboard event listener and clear timeout
 		document.removeEventListener("keydown", handleKeydown)

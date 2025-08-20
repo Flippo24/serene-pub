@@ -1,6 +1,20 @@
 <script lang="ts">
 	import PersonaSelectModal from "../modals/PersonaSelectModal.svelte"
-	import CharacterSelectModal from "../modals/CharacterSelectModal.svelte"
+	import CharacterSelectModal from "../modals/CharacterSe		socket.on("characters:list", (msg: Socke		socket.on("characters:list", (msg: Sockets.Characters.List.Response) => {
+			charactersList = msg.characterList || []
+		})
+
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
+			personasList = msg.personaList || []
+		})
+		socket.emit("characters:list", {})
+		socket.emit("personas:list", {})ters.List.Response) => {
+			charactersList = msg.characterList || []
+		})
+
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
+			personasList = msg.personaList || []
+		})al.svelte"
 	import * as skio from "sveltekit-io"
 	import Avatar from "../Avatar.svelte"
 	import * as Icons from "@lucide/svelte"
@@ -20,12 +34,12 @@
 	let showAddPersonaBindingModal = $state(false)
 	let showAddCharacterBindingModal = $state(false)
 	let lorebookBindingId: number | null = $state(null)
-	let characterList: Sockets.CharacterList.Response["characterList"] = $state(
+	let characterList: Sockets.Characters.List.Response["characterList"] = $state(
 		[]
 	)
 	let lorebookBindingList: Sockets.LorebookBindingList.Response["lorebookBindingList"] =
 		$state([])
-	let personaList: Sockets.PersonaList.Response["personaList"] = $state([])
+	let personaList: Sockets.Personas.List.Response["personaList"] = $state([])
 
 	let availableBindingCharacters = $derived.by(() => {
 		// Filter out the characters that are already bound to this lorebook
@@ -143,11 +157,11 @@
 	}
 
 	onMount(() => {
-		socket.on("characterList", (msg: Sockets.CharacterList.Response) => {
+		socket.on("characters:list", (msg: Sockets.Characters.List.Response) => {
 			characterList = msg.characterList || []
 		})
 
-		socket.on("personaList", (msg: Sockets.PersonaList.Response) => {
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
 			personaList = msg.personaList || []
 		})
 
@@ -179,15 +193,15 @@
 			}
 		)
 
-		socket.on("characterList", (msg: Sockets.CharacterList.Response) => {
+		socket.on("characters:list", (msg: Sockets.Characters.List.Response) => {
 			characterList = msg.characterList || []
 		})
 
-		socket.on("personaList", (msg: Sockets.PersonaList.Response) => {
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
 			personaList = msg.personaList || []
 		})
-		socket.emit("characterList", {})
-		socket.emit("personaList", {})
+		socket.emit("characters:list", {})
+		socket.emit("personas:list", {})
 		const bindingReq: Sockets.LorebookBindingList.Call = {
 			lorebookId
 		}
@@ -195,8 +209,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("characterList")
-		socket.off("personaList")
+		socket.off("characters:list")
+		socket.off("personas:list")
 		socket.off("lorebookBindingList")
 		socket.off("createLorebookBinding")
 		socket.off("updateLorebookBinding")

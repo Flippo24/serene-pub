@@ -9,6 +9,7 @@ import { TokenCounters } from "$lib/server/utils/TokenCounterManager"
 import { GroupReplyStrategies } from "$lib/shared/constants/GroupReplyStrategies"
 import { InterpolationEngine } from "../utils/promptBuilder"
 import { dev } from "$app/environment"
+import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for chat creation/update
 async function processChatTags(chatId: number, tagNames: string[]) {
@@ -62,10 +63,55 @@ async function processChatTags(chatId: number, tagNames: string[]) {
 // --- Global map for active adapters ---
 export const activeAdapters = new Map<string, BaseConnectionAdapter>()
 
+export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.List.Response> = {
+	event: "chats:list",
+	async handler(socket, params, emitToUser) {
+		const userId = 1 // Replace with actual user id
+		const chatsList = await db.query.chats.findMany({
+			with: {
+				chatCharacters: {
+					with: {
+						character: true
+					},
+					orderBy: (cc, { asc }) => asc(cc.position)
+				},
+				chatPersonas: {
+					with: {
+						persona: true
+					}
+				},
+				chatTags: {
+					with: {
+						tag: true
+					}
+				}
+			},
+			where: (c, { eq }) => eq(c.userId, userId)
+		})
+
+		// Drizzle may not properly handle orderby,
+		// Lets sort it manually
+		// Order the chatCharacters by position
+		chatsList.forEach((chat) => {
+			chat.chatCharacters.sort(
+				(a, b) => (a.position ?? 0) - (b.position ?? 0)
+			)
+			// Sort chatPersonas by position if it exists
+			if (chat.chatPersonas) {
+				chat.chatPersonas.sort(
+					(a, b) => (a.position ?? 0) - (b.position ?? 0)
+				)
+			}
+		})
+
+		return { chatList: chatsList as any }
+	}
+}
+
 // List all chats for the current user
 export async function chatsList(
 	socket: any,
-	message: Sockets.ChatsList.Call,
+	message: Sockets.Chats.List.Params,
 	emitToUser: (event: string, data: any) => void
 ) {
 	const userId = 1 // Replace with actual user id
@@ -106,8 +152,94 @@ export async function chatsList(
 		}
 	})
 
-	const res: Sockets.ChatsList.Response = { chatsList: chatsList as any }
-	emitToUser("chatsList", res)
+	const res: Sockets.Chats.List.Response = { chatList: chatsList as any }
+	emitToUser("chats:list", res)
+}
+
+export const chatsCreateHandler: Handler<Sockets.Chats.Create.Params, Sockets.Chats.Create.Response> = {
+	event: "chats:create", 
+	handler: async (socket, params, emitToUser) => {
+		const userId = 1 // Replace with actual user id
+		const tags = params.tags || []
+
+		// Remove tags from chat data as it will be handled separately
+		const chatDataWithoutTags = { ...params.chat }
+
+		const chatData: InsertChat = {
+			...chatDataWithoutTags,
+			userId,
+			isGroup: params.characterIds.length > 1
+		}
+		const [newChat] = await db
+			.insert(schema.chats)
+			.values(chatData)
+			.returning()
+
+		// Process tags after chat creation
+		if (tags.length > 0) {
+			await processChatTags(newChat.id, tags)
+		}
+		for (const personaId of params.personaIds) {
+			await db.insert(schema.chatPersonas).values({
+				chatId: newChat.id,
+				personaId
+			})
+		}
+		for (const characterId of params.characterIds) {
+			const position = params.characterPositions[characterId] || 0
+			await db.insert(schema.chatCharacters).values({
+				chatId: newChat.id,
+				characterId,
+				position
+			})
+		}
+		// Insert a first message for every character assigned to the chat, ordered by position
+		const chatCharacters = await db.query.chatCharacters.findMany({
+			where: (cc, { eq }) => eq(cc.chatId, newChat.id),
+			with: { character: true },
+			orderBy: (cc, { asc }) => asc(cc.position ?? 0)
+		})
+		const chatPersona = await db.query.chatPersonas.findFirst({
+			where: (cp, { eq, and, isNotNull }) =>
+				and(eq(cp.chatId, newChat.id), isNotNull(cp.personaId)),
+			with: { persona: true },
+			orderBy: (cp, { asc }) => asc(cp.position ?? 0)
+		})
+		for (const cc of chatCharacters) {
+			if (!cc.character) continue
+			const greetings = buildCharacterFirstChatMessage({
+				character: cc.character,
+				persona: chatPersona?.persona,
+				isGroup: !!newChat.isGroup
+			})
+			if (greetings.length > 0) {
+				const newMessage: InsertChatMessage = {
+					userId,
+					chatId: newChat.id,
+					personaId: null,
+					characterId: cc.character.id,
+					role: "assistant",
+					content: greetings[0],
+					isGenerating: false,
+					metadata: {
+						isGreeting: true,
+						swipes: {
+							currentIdx: 0,
+							history: greetings as any // Patch: force string[]
+						}
+					}
+				}
+				await db.insert(schema.chatMessages).values(newMessage)
+			}
+		}
+		const resChat = await getChatFromDB(newChat.id, userId)
+		if (!resChat) throw new Error("Failed to fetch created chat")
+		
+		await chatsListHandler.handler(socket, {}, emitToUser) // Refresh chat list
+		const res: Sockets.Chats.Create.Response = { chat: resChat as any }
+		emitToUser("chats:create", res)
+		return res
+	}
 }
 
 export async function createChat(
@@ -572,9 +704,621 @@ export async function updateChatMessage(
 	emitToUser("updateChatMessage", res)
 }
 
+export const chatsDeleteHandler: Handler<Sockets.Chats.Delete.Params, Sockets.Chats.Delete.Response> = {
+	event: "chats:delete",
+	async handler(socket, params, emitToUser) {
+		try {
+			const userId = 1 // Replace with actual user id
+			await db
+				.delete(schema.chats)
+				.where(
+					and(
+						eq(schema.chats.id, params.id),
+						eq(schema.chats.userId, userId)
+					)
+				)
+			return { success: "Chat deleted successfully" }
+		} catch (error) {
+			throw error
+		}
+	}
+}
+
+export const chatsGetHandler: Handler<Sockets.Chats.Get.Params, Sockets.Chats.Get.Response> = {
+	event: "chats:get",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			const chatData = await getChatFromDB(params.id, userId)
+			
+			if (!chatData) {
+				const res: Sockets.Chats.Get.Response = {
+					chat: null,
+					messages: null
+				}
+				emitToUser("chats:get", res)
+				return res
+			}
+
+			const res: Sockets.Chats.Get.Response = {
+				chat: chatData as any,
+				messages: (chatData as any).chatMessages || null
+			}
+			emitToUser("chats:get", res)
+			return res
+		} catch (error: any) {
+			console.error("Error fetching chat:", error)
+			emitToUser("chats:get:error", {
+				error: "Failed to fetch chat"
+			})
+			throw error
+		}
+	}
+}
+
+export const chatsUpdateHandler: Handler<Sockets.Chats.Update.Params, Sockets.Chats.Update.Response> = {
+	event: "chats:update",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Update the chat
+			await db
+				.update(schema.chats)
+				.set(params.chat)
+				.where(
+					and(
+						eq(schema.chats.id, params.chat.id!),
+						eq(schema.chats.userId, userId)
+					)
+				)
+
+			// Fetch updated chat
+			const updatedChat = await getChatFromDB(params.chat.id!, userId)
+			if (!updatedChat) {
+				throw new Error("Failed to fetch updated chat")
+			}
+
+			const res: Sockets.Chats.Update.Response = {
+				chat: updatedChat as any
+			}
+			emitToUser("chats:update", res)
+			await chatsListHandler.handler(socket, {}, emitToUser) // Refresh chat list
+			return res
+		} catch (error: any) {
+			console.error("Error updating chat:", error)
+			emitToUser("chats:update:error", {
+				error: "Failed to update chat"
+			})
+			throw error
+		}
+	}
+}
+
+export const chatMessagesSendPersonaMessageHandler: Handler<Sockets.ChatMessages.SendPersonaMessage.Params, Sockets.ChatMessages.SendPersonaMessage.Response> = {
+	event: "chatMessages:sendPersonaMessage",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const { chatId, personaId, content } = params
+			const userId = 1 // Replace with actual user id
+			
+			// Check if chat exists
+			const chat = await getPromptChatFromDb(chatId, userId)
+			if (!chat) {
+				const res: Sockets.ChatMessages.SendPersonaMessage.Response = {
+					chatMessage: undefined,
+					error: "Chat not found"
+				}
+				emitToUser("chatMessages:sendPersonaMessage", res)
+				return res
+			}
+
+			// Create the new message
+			const newMessage: InsertChatMessage = {
+				userId,
+				chatId,
+				personaId: personaId || null,
+				role: "user",
+				content
+			}
+
+			const [inserted] = await db
+				.insert(schema.chatMessages)
+				.values(newMessage)
+				.returning()
+
+			const res: Sockets.ChatMessages.SendPersonaMessage.Response = {
+				chatMessage: inserted as any
+			}
+			emitToUser("chatMessages:sendPersonaMessage", res)
+			return res
+		} catch (error: any) {
+			console.error("Error sending persona message:", error)
+			const res: Sockets.ChatMessages.SendPersonaMessage.Response = {
+				chatMessage: undefined,
+				error: "Failed to send message"
+			}
+			emitToUser("chatMessages:sendPersonaMessage:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesUpdateHandler: Handler<Sockets.ChatMessages.Update.Params, Sockets.ChatMessages.Update.Response> = {
+	event: "chatMessages:update",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const { id, content } = params
+			const userId = 1 // Replace with actual user id
+			
+			// Update the message
+			const [updated] = await db
+				.update(schema.chatMessages)
+				.set({ content })
+				.where(
+					and(
+						eq(schema.chatMessages.id, id),
+						eq(schema.chatMessages.userId, userId)
+					)
+				)
+				.returning()
+
+			if (!updated) {
+				const res: Sockets.ChatMessages.Update.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:update", res)
+				return res
+			}
+
+			const res: Sockets.ChatMessages.Update.Response = {
+				chatMessage: updated as any
+			}
+			emitToUser("chatMessages:update", res)
+			return res
+		} catch (error: any) {
+			console.error("Error updating chat message:", error)
+			const res: Sockets.ChatMessages.Update.Response = {
+				chatMessage: undefined,
+				error: "Failed to update message"
+			}
+			emitToUser("chatMessages:update:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesDeleteHandler: Handler<Sockets.ChatMessages.Delete.Params, Sockets.ChatMessages.Delete.Response> = {
+	event: "chatMessages:delete",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Delete the message
+			await db
+				.delete(schema.chatMessages)
+				.where(
+					and(
+						eq(schema.chatMessages.id, params.id),
+						eq(schema.chatMessages.userId, userId)
+					)
+				)
+
+			const res: Sockets.ChatMessages.Delete.Response = {
+				success: "Message deleted successfully"
+			}
+			emitToUser("chatMessages:delete", res)
+			return res
+		} catch (error: any) {
+			console.error("Error deleting chat message:", error)
+			const res: Sockets.ChatMessages.Delete.Response = {
+				error: "Failed to delete message"
+			}
+			emitToUser("chatMessages:delete:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regenerate.Params, Sockets.ChatMessages.Regenerate.Response> = {
+	event: "chatMessages:regenerate",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Get the message to regenerate
+			const messageToRegenerate = await db.query.chatMessages.findFirst({
+				where: (cm, { and, eq }) => and(
+					eq(cm.id, params.id),
+					eq(cm.userId, userId)
+				)
+			})
+
+			if (!messageToRegenerate) {
+				const res: Sockets.ChatMessages.Regenerate.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:regenerate", res)
+				return res
+			}
+
+			// Clear the content and set as generating
+			const [updated] = await db
+				.update(schema.chatMessages)
+				.set({ 
+					content: "",
+					isGenerating: true
+				})
+				.where(eq(schema.chatMessages.id, params.id))
+				.returning()
+
+			const res: Sockets.ChatMessages.Regenerate.Response = {
+				chatMessage: updated as any
+			}
+			emitToUser("chatMessages:regenerate", res)
+			return res
+		} catch (error: any) {
+			console.error("Error regenerating chat message:", error)
+			const res: Sockets.ChatMessages.Regenerate.Response = {
+				chatMessage: undefined,
+				error: "Failed to regenerate message"
+			}
+			emitToUser("chatMessages:regenerate:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesSwipeLeftHandler: Handler<Sockets.ChatMessages.SwipeLeft.Params, Sockets.ChatMessages.SwipeLeft.Response> = {
+	event: "chatMessages:swipeLeft",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Get the message
+			const message = await db.query.chatMessages.findFirst({
+				where: (cm, { and, eq }) => and(
+					eq(cm.id, params.id),
+					eq(cm.userId, userId)
+				)
+			})
+
+			if (!message) {
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			// Handle swipe left logic (move to previous swipe)
+			const metadata = message.metadata as any
+			if (metadata?.swipes && metadata.swipes.currentIdx > 0) {
+				metadata.swipes.currentIdx -= 1
+				const newContent = metadata.swipes.history[metadata.swipes.currentIdx]
+				
+				const [updated] = await db
+					.update(schema.chatMessages)
+					.set({ 
+						content: newContent,
+						metadata: metadata
+					})
+					.where(eq(schema.chatMessages.id, params.id))
+					.returning()
+
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: updated as any
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			const res: Sockets.ChatMessages.SwipeLeft.Response = {
+				chatMessage: message as any
+			}
+			emitToUser("chatMessages:swipeLeft", res)
+			return res
+		} catch (error: any) {
+			console.error("Error swiping left chat message:", error)
+			const res: Sockets.ChatMessages.SwipeLeft.Response = {
+				chatMessage: undefined,
+				error: "Failed to swipe left"
+			}
+			emitToUser("chatMessages:swipeLeft:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesSwipeRightHandler: Handler<Sockets.ChatMessages.SwipeRight.Params, Sockets.ChatMessages.SwipeRight.Response> = {
+	event: "chatMessages:swipeRight",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Get the message
+			const message = await db.query.chatMessages.findFirst({
+				where: (cm, { and, eq }) => and(
+					eq(cm.id, params.id),
+					eq(cm.userId, userId)
+				)
+			})
+
+			if (!message) {
+				const res: Sockets.ChatMessages.SwipeRight.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:swipeRight", res)
+				return res
+			}
+
+			// Handle swipe right logic (move to next swipe)
+			const metadata = message.metadata as any
+			if (metadata?.swipes && metadata.swipes.currentIdx < metadata.swipes.history.length - 1) {
+				metadata.swipes.currentIdx += 1
+				const newContent = metadata.swipes.history[metadata.swipes.currentIdx]
+				
+				const [updated] = await db
+					.update(schema.chatMessages)
+					.set({ 
+						content: newContent,
+						metadata: metadata
+					})
+					.where(eq(schema.chatMessages.id, params.id))
+					.returning()
+
+				const res: Sockets.ChatMessages.SwipeRight.Response = {
+					chatMessage: updated as any
+				}
+				emitToUser("chatMessages:swipeRight", res)
+				return res
+			}
+
+			const res: Sockets.ChatMessages.SwipeRight.Response = {
+				chatMessage: message as any
+			}
+			emitToUser("chatMessages:swipeRight", res)
+			return res
+		} catch (error: any) {
+			console.error("Error swiping right chat message:", error)
+			const res: Sockets.ChatMessages.SwipeRight.Response = {
+				chatMessage: undefined,
+				error: "Failed to swipe right"
+			}
+			emitToUser("chatMessages:swipeRight:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatsGetResponseOrderHandler: Handler<Sockets.Chats.GetResponseOrder.Params, Sockets.Chats.GetResponseOrder.Response> = {
+	event: "chats:getResponseOrder",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			const chat = await getPromptChatFromDb(params.chatId, userId)
+
+			if (!chat) {
+				const res: Sockets.Chats.GetResponseOrder.Response = {
+					characterId: null
+				}
+				emitToUser("chats:getResponseOrder", res)
+				return res
+			}
+
+			// Get next character turn using existing logic
+			const nextCharacterId = getNextCharacterTurn(
+				{
+					chatMessages: chat.chatMessages,
+					chatCharacters: chat.chatCharacters
+						.filter((cc) => cc.character !== null && cc.isActive)
+						.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) as any,
+					chatPersonas: chat.chatPersonas.filter(
+						(cp) => cp.persona !== null
+					) as any
+				},
+				{ triggered: false }
+			)
+
+			const res: Sockets.Chats.GetResponseOrder.Response = {
+				characterId: nextCharacterId
+			}
+			emitToUser("chats:getResponseOrder", res)
+			return res
+		} catch (error: any) {
+			console.error("Error getting chat response order:", error)
+			const res: Sockets.Chats.GetResponseOrder.Response = {
+				characterId: null
+			}
+			emitToUser("chats:getResponseOrder:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesCancelHandler: Handler<Sockets.ChatMessages.Cancel.Params, Sockets.ChatMessages.Cancel.Response> = {
+	event: "chatMessages:cancel",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			
+			// Find messages being generated for this chat
+			const generatingMessages = await db.query.chatMessages.findMany({
+				where: (cm, { and, eq }) => and(
+					eq(cm.chatId, params.chatId),
+					eq(cm.isGenerating, true),
+					eq(cm.userId, userId)
+				)
+			})
+
+			// Stop generation for all messages in this chat
+			for (const message of generatingMessages) {
+				await db
+					.update(schema.chatMessages)
+					.set({ 
+						isGenerating: false,
+						adapterId: null
+					})
+					.where(eq(schema.chatMessages.id, message.id))
+
+				// If there's an active adapter, try to abort it
+				if (message.adapterId) {
+					const adapter = activeAdapters.get(message.adapterId)
+					if (adapter) {
+						try {
+							adapter.abort()
+						} catch (e) {
+							// Silent fail for abort
+							console.warn("Failed to abort adapter:", e)
+						}
+					}
+				}
+			}
+
+			const res: Sockets.ChatMessages.Cancel.Response = {
+				success: `Cancelled ${generatingMessages.length} generating messages`
+			}
+			emitToUser("chatMessages:cancel", res)
+			return res
+		} catch (error: any) {
+			console.error("Error cancelling chat messages:", error)
+			const res: Sockets.ChatMessages.Cancel.Response = {
+				error: "Failed to cancel messages"
+			}
+			emitToUser("chatMessages:cancel:error", res)
+			throw error
+		}
+	}
+}
+
+export const updateChatHandler: Handler<Sockets.UpdateChat.Call, Sockets.UpdateChat.Response> = {
+	event: "updateChat",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			const tags = params.chat.tags || []
+
+			// Select the chat to compare data
+			const existingChat = await getPromptChatFromDb(params.chat.id, userId)
+
+			// Remove tags and id from chat data as they will be handled separately
+			const { tags: _, id: __, ...chatDataWithoutTags } = params.chat
+
+			await db
+				.update(schema.chats)
+				.set({
+					...chatDataWithoutTags,
+					isGroup: params.characterIds.length > 1,
+					userId: undefined
+				})
+				.where(
+					and(
+						eq(schema.chats.id, params.chat.id),
+						eq(schema.chats.userId, userId)
+					)
+				)
+
+			// Process tags after chat update
+			await processChatTags(params.chat.id, tags)
+
+			// Remove any characters that are not in the new list
+			const deletedCharacterIds =
+				existingChat?.chatCharacters
+					.filter(
+						(c) => !params.characterIds.includes(c.characterId || 0)
+					)
+					.map((c) => c.characterId)
+					.filter(
+						(id): id is number => id !== null && id !== undefined
+					) || []
+
+			// Remove any personas that are not in the new list
+			const deletedPersonaIds =
+				existingChat?.chatPersonas
+					.filter((p) => !params.personaIds.includes(p.personaId || 0))
+					.map((p) => p.personaId)
+					.filter(
+						(id): id is number => id !== null && id !== undefined
+					) || []
+
+			// Delete removed characters
+			if (deletedCharacterIds.length > 0) {
+				await db
+					.delete(schema.chatCharacters)
+					.where(
+						and(
+							eq(schema.chatCharacters.chatId, params.chat.id),
+							inArray(schema.chatCharacters.characterId, deletedCharacterIds)
+						)
+					)
+			}
+
+			// Delete removed personas
+			if (deletedPersonaIds.length > 0) {
+				await db
+					.delete(schema.chatPersonas)
+					.where(
+						and(
+							eq(schema.chatPersonas.chatId, params.chat.id),
+							inArray(schema.chatPersonas.personaId, deletedPersonaIds)
+						)
+					)
+			}
+
+			// Add new characters
+			for (const characterId of params.characterIds) {
+				const position = params.characterPositions[characterId] || 0
+				await db
+					.insert(schema.chatCharacters)
+					.values({
+						chatId: params.chat.id,
+						characterId,
+						position,
+						isActive: true
+					})
+					.onConflictDoUpdate({
+						target: [schema.chatCharacters.chatId, schema.chatCharacters.characterId],
+						set: { position, isActive: true }
+					})
+			}
+
+			// Add new personas
+			for (const personaId of params.personaIds) {
+				await db
+					.insert(schema.chatPersonas)
+					.values({
+						chatId: params.chat.id,
+						personaId
+					})
+					.onConflictDoNothing()
+			}
+
+			// Fetch updated chat
+			const updatedChat = await getPromptChatFromDb(params.chat.id, userId)
+
+			const res: Sockets.UpdateChat.Response = {
+				chat: updatedChat
+			}
+			emitToUser("updateChat", res)
+			return res
+		} catch (error: any) {
+			console.error("Error updating chat:", error)
+			const res: Sockets.UpdateChat.Response = {
+				error: "Failed to update chat"
+			}
+			emitToUser("updateChat:error", res)
+			throw error
+		}
+	}
+}
+
 export async function deleteChat(
 	socket: any,
-	message: Sockets.DeleteChat.Call,
+	message: Sockets.Chats.Delete.Params,
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
@@ -587,7 +1331,7 @@ export async function deleteChat(
 					eq(schema.chats.userId, userId)
 				)
 			)
-		const res: Sockets.DeleteChat.Response = { id: message.id }
+		const res: Sockets.Chats.Delete.Response = { success: "Chat deleted successfully" }
 		emitToUser("deleteChat", res)
 	} catch (error) {
 		// Optionally emit a separate error event
@@ -929,6 +1673,50 @@ export async function triggerGenerateMessage(
 		}
 		currentMsg++
 		triggered = false // After the first message, we don't trigger again
+	}
+}
+
+export const chatMessageHandler: Handler<Sockets.ChatMessage.Call, Sockets.ChatMessage.Response> = {
+	event: "chatMessage",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			if (params.chatMessage) {
+				// If chatMessage object is provided, emit it directly
+				const res: Sockets.ChatMessage.Response = {
+					chatMessage: params.chatMessage
+				}
+				emitToUser("chatMessage", res)
+				return res
+			} else if (params.id) {
+				// If id is provided, fetch from database
+				const chatMessage = await db.query.chatMessages.findFirst({
+					where: (m, { eq }) => eq(m.id, params.id!)
+				})
+				if (!chatMessage) {
+					const res: Sockets.ChatMessage.Response = {
+						error: "Chat message not found."
+					}
+					emitToUser("chatMessage:error", res)
+					throw new Error("Chat message not found")
+				}
+				const res: Sockets.ChatMessage.Response = { chatMessage }
+				emitToUser("chatMessage", res)
+				return res
+			} else {
+				const res: Sockets.ChatMessage.Response = {
+					error: "Must provide either id or chatMessage."
+				}
+				emitToUser("chatMessage:error", res)
+				throw new Error("Must provide either id or chatMessage")
+			}
+		} catch (error: any) {
+			console.error("Error in chatMessage handler:", error)
+			const res: Sockets.ChatMessage.Response = {
+				error: "Failed to get chat message"
+			}
+			emitToUser("chatMessage:error", res)
+			throw error
+		}
 	}
 }
 
@@ -1690,14 +2478,12 @@ export async function getChatResponseOrder(
 		const res: Sockets.GetChatResponseOrder.Response = {
 			error: "Chat not found.",
 			chatId: message.chatId,
-			characterIds: [],
-			nextCharacterId: null
-		}
-		emitToUser("getChatResponseOrder", res)
-		return
+		characterIds: [],
+		nextCharacterId: null
 	}
-
-	// Sort characters by position to get the response order (IDs only)
+	emitToUser("getChatResponseOrder", res)
+	return
+}	// Sort characters by position to get the response order (IDs only)
 	// First try active characters, if none exist, use all characters
 	const activeCharacters = chat.chatCharacters.filter(
 		(cc) => cc.character && cc.isActive
@@ -1734,4 +2520,413 @@ export async function getChatResponseOrder(
 	}
 
 	emitToUser("getChatResponseOrder", res)
+}
+
+// =============================================
+// TYPE-SAFE CHAT HANDLERS
+// =============================================
+
+/**
+ * Type-safe handler for calculating prompt token count
+ */
+export const promptTokenCountHandler: Handler<
+	Sockets.Chats.PromptTokenCount.Params,
+	Sockets.Chats.PromptTokenCount.Response
+> = {
+	event: "chats:promptTokenCount",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			const chat = await getPromptChatFromDb(params.chatId, userId)
+			if (!chat) {
+				return {
+					error: "Error Generating Prompt Token Count: Chat not found."
+				}
+			}
+			
+			const user = await db.query.users.findFirst({
+				where: (u, { eq }) => eq(u.id, userId),
+				with: {
+					activeConnection: true,
+					activeSamplingConfig: true,
+					activeContextConfig: true,
+					activePromptConfig: true
+				}
+			})
+			
+			if (
+				!chat ||
+				!user ||
+				!user.activeConnection ||
+				!user.activeSamplingConfig ||
+				!user.activeContextConfig ||
+				!user.activePromptConfig
+			) {
+				return {
+					error: "Incomplete configuration, failed to calculate token count."
+				}
+			}
+			
+			let chatForPrompt = { ...chat, chatMessages: [...chat.chatMessages] }
+			
+			const currentCharacterId = getNextCharacterTurn(
+				{
+					chatMessages: chat.chatMessages,
+					chatCharacters: chat.chatCharacters
+						.filter(
+							(cc: any) => cc && cc.character != null && cc.isActive
+						)
+						.sort(
+							(a, b) => (a.position ?? 0) - (b.position ?? 0)
+						) as any,
+					chatPersonas: chat.chatPersonas.filter(
+						(cp: any) => cp && cp.persona != null
+					) as any
+				},
+				{ triggered: true }
+			)
+
+			if (!currentCharacterId) {
+				return { error: "No character available for prompt." }
+			}
+
+			const { Adapter } = getConnectionAdapter(user.activeConnection.type)
+
+			// Provide required params for Adapter (use defaults if not available)
+			const tokenCounter = new TokenCounters("estimate")
+			const tokenLimit = 4096
+			const contextThresholdPercent = 0.8
+
+			const adapter = new Adapter({
+				chat: chatForPrompt,
+				connection: user.activeConnection,
+				sampling: user.activeSamplingConfig,
+				contextConfig: user.activeContextConfig,
+				promptConfig: user.activePromptConfig,
+				currentCharacterId,
+				tokenCounter,
+				tokenLimit,
+				contextThresholdPercent
+			})
+			
+			const promptResult = await adapter.compilePrompt({})
+			
+			// Map CompiledPrompt to expected Ack format
+			// Note: adapter.compilePrompt returns the app.d.ts CompiledPrompt format
+			return {
+				prompt: JSON.stringify(promptResult.prompt),
+				tokenCount: undefined, // Not available in adapter CompiledPrompt format
+				characterLimit: undefined, // Not available in adapter CompiledPrompt format  
+				tokenLimit: undefined, // Not available in adapter CompiledPrompt format
+				percentFull: undefined // Not available in adapter CompiledPrompt format
+			}
+		} catch (error) {
+			console.error("Error in promptTokenCountHandler:", error)
+			return {
+				error: "Failed to calculate prompt token count."
+			}
+		}
+	}
+}
+
+/**
+ * Type-safe handler for triggering message generation
+ */
+export const triggerGenerateMessageHandler: Handler<
+	Sockets.Chats.TriggerGenerateMessage.Params,
+	Sockets.Chats.TriggerGenerateMessage.Response
+> = {
+	event: "chats:triggerGenerateMessage",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			const msgLimit = 10
+			let currentMsg = 1
+			let triggered = true
+			let ok = true
+
+			while (currentMsg <= msgLimit && ok) {
+				let chat = await getPromptChatFromDb(params.chatId, userId)
+				if (!chat) {
+					return {
+						error: "Error Triggering Chat Message: Chat not found."
+					}
+				}
+
+				// Check if there are any ongoing generations before starting a new one
+				const hasGeneratingMessages = chat.chatMessages.some(
+					(msg) => msg.isGenerating
+				)
+				if (hasGeneratingMessages) {
+					console.log("Generation already in progress, stopping trigger loop")
+					break
+				}
+
+				// Find the next character who should reply (using triggered: true)
+				const nextCharacterId =
+					params.characterId ||
+					getNextCharacterTurn(
+						{
+							chatMessages: chat.chatMessages,
+							chatCharacters: chat.chatCharacters
+								.filter((cc) => cc.character !== null && cc.isActive)
+								.sort(
+									(a, b) => (a.position ?? 0) - (b.position ?? 0)
+								) as any,
+							chatPersonas: chat.chatPersonas.filter(
+								(cp) => cp.persona !== null
+							) as any
+						},
+						{ triggered }
+					)
+
+				if (!nextCharacterId) {
+					break
+				}
+				
+				if (chat && chat.chatCharacters.length > 0 && nextCharacterId) {
+					const nextCharacter = chat.chatCharacters.find(
+						(cc) => cc.character && cc.character.id === nextCharacterId
+					)
+					if (!nextCharacter || !nextCharacter.character) break
+					
+					const assistantMessage: InsertChatMessage = {
+						userId,
+						chatId: params.chatId,
+						personaId: null,
+						characterId: nextCharacter.character.id,
+						content: "",
+						role: "assistant",
+						isGenerating: true
+					}
+					
+					const [generatingMessage] = await db
+						.insert(schema.chatMessages)
+						.values(assistantMessage)
+						.returning()
+						
+					if (emitToUser) {
+						await chatMessage(
+							socket,
+							{ chatMessage: generatingMessage },
+							emitToUser
+						)
+					}
+					
+					ok = await generateResponse({
+						socket,
+						emitToUser,
+						chatId: params.chatId,
+						userId,
+						generatingMessage: generatingMessage as any
+					})
+
+					// If generation was aborted, stop the loop
+					if (!ok) {
+						console.log("Generation was aborted, stopping trigger loop")
+						break
+					}
+				}
+				currentMsg++
+			}
+			
+			return { success: true }
+		} catch (error) {
+			console.error("Error in triggerGenerateMessageHandler:", error)
+			return {
+				error: "Failed to trigger message generation."
+			}
+		}
+	}
+}
+
+/**
+ * Type-safe handler for toggling chat character active status
+ */
+export const toggleChatCharacterActiveHandler: Handler<
+	Sockets.Chats.ToggleChatCharacterActive.Params,
+	Sockets.Chats.ToggleChatCharacterActive.Response
+> = {
+	event: "chats:toggleChatCharacterActive",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			if (!userId) {
+				return { 
+					chatId: params.chatId,
+					characterId: params.characterId,
+					isActive: false,
+					error: "User not authenticated" 
+				}
+			}
+
+			const chat = await db.query.chats.findFirst({
+				where: (c, { eq, and }) =>
+					and(eq(c.id, params.chatId), eq(c.userId, userId)),
+				with: {
+					chatCharacters: {
+						where: (cc, { eq }) => eq(cc.characterId, params.characterId)
+					}
+				}
+			})
+			
+			if (!chat) {
+				return {
+					chatId: params.chatId,
+					characterId: params.characterId,
+					isActive: false,
+					error: "Error toggling character active: Chat not found."
+				}
+			}
+
+			if (!chat.chatCharacters || chat.chatCharacters.length === 0) {
+				return {
+					chatId: params.chatId,
+					characterId: params.characterId,
+					isActive: false,
+					error: "Chat character not found."
+				}
+			}
+
+			const chatCharacter = chat.chatCharacters[0]
+			const newActiveStatus = !chatCharacter.isActive
+
+			await db
+				.update(schema.chatCharacters)
+				.set({ isActive: newActiveStatus })
+				.where(
+					and(
+						eq(schema.chatCharacters.characterId, params.characterId),
+						eq(schema.chatCharacters.chatId, params.chatId)
+					)
+				)
+
+			// Refresh chat data
+			if (emitToUser) {
+				await getChat(socket, { id: chat.id }, emitToUser)
+			}
+
+			return {
+				chatId: params.chatId,
+				characterId: params.characterId,
+				isActive: newActiveStatus
+			}
+		} catch (error) {
+			console.error("Error in toggleChatCharacterActiveHandler:", error)
+			return {
+				chatId: params.chatId,
+				characterId: params.characterId,
+				isActive: false,
+				error: "Failed to toggle character active status."
+			}
+		}
+	}
+}
+
+/**
+ * Type-safe handler for updating chat character visibility
+ */
+export const updateChatCharacterVisibilityHandler: Handler<
+	Sockets.Chats.UpdateChatCharacterVisibility.Params,
+	Sockets.Chats.UpdateChatCharacterVisibility.Response
+> = {
+	event: "chats:updateChatCharacterVisibility",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = 1 // Replace with actual user id
+			if (!userId) {
+				return { 
+					chatId: params.chatId,
+					characterId: params.characterId,
+					visibility: params.visibility,
+					error: "User not authenticated" 
+				}
+			}
+
+			const chat = await db.query.chats.findFirst({
+				where: (c, { eq, and }) =>
+					and(eq(c.id, params.chatId), eq(c.userId, userId)),
+				with: {
+					chatCharacters: {
+						where: (cc, { eq }) => eq(cc.characterId, params.characterId)
+					}
+				}
+			})
+			
+			if (!chat) {
+				return {
+					chatId: params.chatId,
+					characterId: params.characterId,
+					visibility: params.visibility,
+					error: "Error updating character visibility: Chat not found."
+				}
+			}
+
+			if (!chat.chatCharacters || chat.chatCharacters.length === 0) {
+				return {
+					chatId: params.chatId,
+					characterId: params.characterId,
+					visibility: params.visibility,
+					error: "Chat character not found."
+				}
+			}
+
+			// Update visibility in database
+			await db
+				.update(schema.chatCharacters)
+				.set({ visibility: params.visibility })
+				.where(
+					and(
+						eq(schema.chatCharacters.characterId, params.characterId),
+						eq(schema.chatCharacters.chatId, params.chatId)
+					)
+				)
+
+			// Refresh chat data
+			if (emitToUser) {
+				await getChat(socket, { id: chat.id }, emitToUser)
+			}
+
+			return {
+				chatId: params.chatId,
+				characterId: params.characterId,
+				visibility: params.visibility
+			}
+		} catch (error) {
+			console.error("Error in updateChatCharacterVisibilityHandler:", error)
+			return {
+				chatId: params.chatId,
+				characterId: params.characterId,
+				visibility: params.visibility,
+				error: "Failed to update character visibility."
+			}
+		}
+	}
+}
+
+// Registration function for all chat handlers
+export function registerChatHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, chatsListHandler, emitToUser)
+	register(socket, chatsCreateHandler, emitToUser)
+	register(socket, chatsDeleteHandler, emitToUser)
+	register(socket, chatsGetHandler, emitToUser)
+	register(socket, chatsUpdateHandler, emitToUser)
+	register(socket, chatMessagesSendPersonaMessageHandler, emitToUser)
+	register(socket, chatMessagesUpdateHandler, emitToUser)
+	register(socket, chatMessagesDeleteHandler, emitToUser)
+	register(socket, chatMessagesRegenerateHandler, emitToUser)
+	register(socket, chatMessagesSwipeLeftHandler, emitToUser)
+	register(socket, chatMessagesSwipeRightHandler, emitToUser)
+	register(socket, chatsGetResponseOrderHandler, emitToUser)
+	register(socket, chatMessagesCancelHandler, emitToUser)
+	register(socket, updateChatHandler, emitToUser)
+	register(socket, chatMessageHandler, emitToUser)
+	register(socket, promptTokenCountHandler, emitToUser)
+	register(socket, triggerGenerateMessageHandler, emitToUser)
+	register(socket, toggleChatCharacterActiveHandler, emitToUser)
+	register(socket, updateChatCharacterVisibilityHandler, emitToUser)
 }

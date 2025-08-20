@@ -1,241 +1,241 @@
 import { db } from "$lib/server/db"
 import { eq, and } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
+import type { Handler } from "$lib/shared/events"
 
-export async function tagsList(
-	_socket: any,
-	_message: any,
-	emitToUser: (event: string, data: any) => void
-) {
-	const tagsList = await db.query.tags.findMany({
-		orderBy: (t, { asc }) => asc(t.name)
-	})
-	const res = { tagsList }
-	emitToUser("tagsList", res)
-}
-
-export async function createTag(
-	socket: any,
-	message: { tag: InsertTag },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		const [tag] = await db
-			.insert(schema.tags)
-			.values(message.tag)
-			.returning()
-
-		const res = { tag }
-		emitToUser("createTag", res)
-
-		// Also emit updated tags list
-		tagsList(socket, {}, emitToUser)
-	} catch (error) {
-		console.error("Error creating tag:", error)
-		socket.emit("createTagError", {
-			error: "Failed to create tag. Tag name might already exist."
+export const tagsList: Handler<Sockets.Tags.List.Params, Sockets.Tags.List.Response> = {
+	event: "tags:list",
+	handler: async (socket, params, emitToUser) => {
+		const tagsList = await db.query.tags.findMany({
+			orderBy: (t, { asc }) => asc(t.name)
 		})
+		const res: Sockets.Tags.List.Response = { tagsList }
+		emitToUser("tags:list", res)
+		return res
 	}
 }
 
-export async function updateTag(
-	socket: any,
-	message: { tag: SelectTag },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		const [tag] = await db
-			.update(schema.tags)
-			.set({
-				name: message.tag.name,
-				description: message.tag.description,
-				colorPreset: message.tag.colorPreset
+export const tagsCreate: Handler<Sockets.Tags.Create.Params, Sockets.Tags.Create.Response> = {
+	event: "tags:create",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const [tag] = await db
+				.insert(schema.tags)
+				.values(params.tag)
+				.returning()
+
+			const res: Sockets.Tags.Create.Response = { tag }
+			emitToUser("tags:create", res)
+
+			// Also emit updated tags list
+			await tagsList.handler(socket, {}, emitToUser)
+			return res
+		} catch (error) {
+			console.error("Error creating tag:", error)
+			emitToUser("tags:create:error", {
+				error: "Failed to create tag. Tag name might already exist."
 			})
-			.where(eq(schema.tags.id, message.tag.id))
-			.returning()
-
-		const res = { tag }
-		emitToUser("updateTag", res)
-
-		// Also emit updated tags list
-		tagsList(socket, {}, emitToUser)
-	} catch (error) {
-		console.error("Error updating tag:", error)
-		socket.emit("updateTagError", {
-			error: "Failed to update tag. Tag name might already exist."
-		})
+			throw error
+		}
 	}
 }
 
-export async function deleteTag(
-	socket: any,
-	message: { id: number },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		// First delete all character tag associations
-		await db
-			.delete(schema.characterTags)
-			.where(eq(schema.characterTags.tagId, message.id))
+export const tagsUpdate: Handler<Sockets.Tags.Update.Params, Sockets.Tags.Update.Response> = {
+	event: "tags:update",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const [tag] = await db
+				.update(schema.tags)
+				.set({
+					name: params.tag.name,
+					description: params.tag.description,
+					colorPreset: params.tag.colorPreset
+				})
+				.where(eq(schema.tags.id, params.tag.id))
+				.returning()
 
-		// Then delete the tag
-		await db.delete(schema.tags).where(eq(schema.tags.id, message.id))
+			const res: Sockets.Tags.Update.Response = { tag }
+			emitToUser("tags:update", res)
 
-		const res = { id: message.id }
-		emitToUser("deleteTag", res)
-
-		// Also emit updated tags list
-		tagsList(socket, {}, emitToUser)
-	} catch (error) {
-		console.error("Error deleting tag:", error)
-		socket.emit("deleteTagError", {
-			error: "Failed to delete tag."
-		})
+			// Also emit updated tags list
+			await tagsList.handler(socket, {}, emitToUser)
+			return res
+		} catch (error) {
+			console.error("Error updating tag:", error)
+			emitToUser("tags:update:error", {
+				error: "Failed to update tag. Tag name might already exist."
+			})
+			throw error
+		}
 	}
 }
 
-export async function tagRelatedData(
-	socket: any,
-	message: { tagId: number },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		// Get characters with this tag
+export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete.Response> = {
+	event: "tags:delete",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			// First delete all character tag associations
+			await db
+				.delete(schema.characterTags)
+				.where(eq(schema.characterTags.tagId, params.id))
+
+			// Also delete persona tag associations
+			await db
+				.delete(schema.personaTags)
+				.where(eq(schema.personaTags.tagId, params.id))
+
+			// Also delete lorebook tag associations
+			await db
+				.delete(schema.lorebookTags)
+				.where(eq(schema.lorebookTags.tagId, params.id))
+
+			// Then delete the tag
+			await db.delete(schema.tags).where(eq(schema.tags.id, params.id))
+
+			const res: Sockets.Tags.Delete.Response = { success: "Tag deleted successfully" }
+			emitToUser("tags:delete", res)
+
+			// Also emit updated tags list
+			await tagsList.handler(socket, {}, emitToUser)
+			return res
+		} catch (error) {
+			console.error("Error deleting tag:", error)
+			emitToUser("tags:delete:error", {
+				error: "Failed to delete tag."
+			})
+			throw error
+		}
+	}
+}
+
+export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Sockets.Tags.GetRelatedData.Response> = {
+	event: "tags:getRelatedData",
+	handler: async (socket, params, emitToUser) => {
+		// Get the tag
+		const tag = await db.query.tags.findFirst({
+			where: eq(schema.tags.id, params.tagId)
+		})
+
+		if (!tag) {
+			throw new Error("Tag not found")
+		}
+
+		// Get related characters
 		const characters = await db.query.characterTags.findMany({
-			where: eq(schema.characterTags.tagId, message.tagId),
+			where: eq(schema.characterTags.tagId, params.tagId),
 			with: {
 				character: {
 					columns: {
 						id: true,
 						name: true,
-						nickname: true,
-						description: true,
 						avatar: true
 					}
 				}
 			}
 		})
 
-		// Get personas with this tag
+		// Get related personas
 		const personas = await db.query.personaTags.findMany({
-			where: eq(schema.personaTags.tagId, message.tagId),
+			where: eq(schema.personaTags.tagId, params.tagId),
 			with: {
 				persona: {
 					columns: {
 						id: true,
 						name: true,
-						description: true,
-						avatar: true,
-						isDefault: true
+						avatar: true
 					}
 				}
 			}
 		})
 
-		// Get lorebooks with this tag
+		// Get related lorebooks
 		const lorebooks = await db.query.lorebookTags.findMany({
-			where: eq(schema.lorebookTags.tagId, message.tagId),
+			where: eq(schema.lorebookTags.tagId, params.tagId),
 			with: {
 				lorebook: {
 					columns: {
 						id: true,
-						name: true,
-						description: true,
-						createdAt: true
+						name: true
 					}
 				}
 			}
 		})
 
-		// Get chats with this tag directly
-		const chats = await db.query.chatTags.findMany({
-			where: eq(schema.chatTags.tagId, message.tagId),
-			with: {
-				chat: {
-					columns: {
-						id: true,
-						name: true,
-						scenario: true,
-						createdAt: true,
-						isGroup: true
-					},
-					with: {
-						chatCharacters: {
-							with: {
-								character: true
-							}
-						},
-						chatPersonas: {
-							with: {
-								persona: true
-							}
-						}
-					}
-				}
+		const res: Sockets.Tags.GetRelatedData.Response = {
+			tagData: {
+				tag,
+				characters: characters.map(ct => ct.character),
+				personas: personas.map(pt => pt.persona),
+				lorebooks: lorebooks.map(lt => lt.lorebook)
 			}
-		})
-
-		const res = {
-			characters: characters.map((ct) => ct.character).filter(Boolean),
-			personas: personas.map((pt) => pt.persona).filter(Boolean),
-			lorebooks: lorebooks.map((lt) => lt.lorebook).filter(Boolean),
-			chats: chats.map((ct) => ct.chat)
 		}
-
-		emitToUser("tagRelatedData", res)
-	} catch (error) {
-		console.error("Error getting tag related data:", error)
-		socket.emit("tagRelatedDataError", {
-			error: "Failed to load related data."
-		})
+		emitToUser("tags:getRelatedData", res)
+		return res
 	}
 }
 
-export async function addTagToCharacter(
-	socket: any,
-	message: { characterId: number; tagId: number },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.insert(schema.characterTags)
-			.values({
-				characterId: message.characterId,
-				tagId: message.tagId
+export const tagsAddToCharacter: Handler<Sockets.Tags.AddToCharacter.Params, Sockets.Tags.AddToCharacter.Response> = {
+	event: "tags:addToCharacter",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.insert(schema.characterTags)
+				.values({
+					characterId: params.characterId,
+					tagId: params.tagId
+				})
+				.onConflictDoNothing()
+
+			const res: Sockets.Tags.AddToCharacter.Response = { success: true }
+			emitToUser("tags:addToCharacter", res)
+			return res
+		} catch (error) {
+			console.error("Error adding tag to character:", error)
+			emitToUser("tags:addToCharacter:error", {
+				error: "Failed to add tag to character."
 			})
-			.onConflictDoNothing()
-
-		const res = { characterId: message.characterId, tagId: message.tagId }
-		emitToUser("addTagToCharacter", res)
-	} catch (error) {
-		console.error("Error adding tag to character:", error)
-		socket.emit("addTagToCharacterError", {
-			error: "Failed to add tag to character."
-		})
+			throw error
+		}
 	}
 }
 
-export async function removeTagFromCharacter(
-	socket: any,
-	message: { characterId: number; tagId: number },
-	emitToUser: (event: string, data: any) => void
-) {
-	try {
-		await db
-			.delete(schema.characterTags)
-			.where(
-				and(
-					eq(schema.characterTags.characterId, message.characterId),
-					eq(schema.characterTags.tagId, message.tagId)
+export const tagsRemoveFromCharacter: Handler<Sockets.Tags.RemoveFromCharacter.Params, Sockets.Tags.RemoveFromCharacter.Response> = {
+	event: "tags:removeFromCharacter",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			await db
+				.delete(schema.characterTags)
+				.where(
+					and(
+						eq(schema.characterTags.characterId, params.characterId),
+						eq(schema.characterTags.tagId, params.tagId)
+					)
 				)
-			)
 
-		const res = { characterId: message.characterId, tagId: message.tagId }
-		emitToUser("removeTagFromCharacter", res)
-	} catch (error) {
-		console.error("Error removing tag from character:", error)
-		socket.emit("removeTagFromCharacterError", {
-			error: "Failed to remove tag from character."
-		})
+			const res: Sockets.Tags.RemoveFromCharacter.Response = { success: true }
+			emitToUser("tags:removeFromCharacter", res)
+			return res
+		} catch (error) {
+			console.error("Error removing tag from character:", error)
+			emitToUser("tags:removeFromCharacter:error", {
+				error: "Failed to remove tag from character."
+			})
+			throw error
+		}
 	}
+}
+
+// Registration function for all tag handlers
+export function registerTagHandlers(
+	socket: any,
+	emitToUser: (event: string, data: any) => void,
+	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+) {
+	register(socket, tagsList, emitToUser)
+	register(socket, tagsCreate, emitToUser)
+	register(socket, tagsUpdate, emitToUser)
+	register(socket, tagsDelete, emitToUser)
+	register(socket, tagsGetRelatedData, emitToUser)
+	register(socket, tagsAddToCharacter, emitToUser)
+	register(socket, tagsRemoveFromCharacter, emitToUser)
 }

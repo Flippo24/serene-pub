@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { getContext, onMount } from "svelte"
 	import { Modal } from "@skeletonlabs/skeleton-svelte"
 	import * as Icons from "@lucide/svelte"
@@ -14,13 +14,13 @@
 
 	let { onclose = $bindable() }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	const panelsCtx: PanelsCtx = $state(getContext("panelsCtx"))
 	const systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
 
-	let personaList: Sockets.PersonaList.Response["personaList"] = $state([])
+	let personaList: Sockets.Personas.List.Response["personaList"] = $state([])
 	let search = $state("")
 	let personaId: number | undefined = $state()
 	let isCreating = $state(false)
@@ -33,11 +33,11 @@
 	let onEditFormCancel: (() => void) | undefined = $state()
 
 	onMount(() => {
-		socket.emit("personaList", {})
+		socket.emit("personas:list", {})
 		onclose = handleOnClose
 	})
 
-	socket.on("personaList", (msg: Sockets.PersonaList.Response) => {
+	socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
 		personaList = msg.personaList
 	})
 
@@ -113,7 +113,7 @@
 
 	function confirmDelete() {
 		if (personaToDelete !== undefined) {
-			socket.emit("deletePersona", { id: personaToDelete })
+			socket.emit("personas:delete", { id: personaToDelete })
 		}
 		showDeleteModal = false
 		personaToDelete = undefined

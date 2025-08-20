@@ -14,7 +14,7 @@
 	import ChatsSidebar from "./sidebars/ChatsSidebar.svelte"
 	import PromptsSidebar from "./sidebars/PromptsSidebar.svelte"
 	import TagsSidebar from "./sidebars/TagsSidebar.svelte"
-	import * as skio from "sveltekit-io"
+	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { KeyboardNavigationManager } from "$lib/client/utils/keyboardNavigation"
 	import SettingsSidebar from "$lib/client/components/sidebars/SettingsSidebar.svelte"
@@ -28,7 +28,7 @@
 
 	let { children }: Props = $props()
 
-	const socket = skio.get()
+	const socket = useTypedSocket()
 	
 	// Focus management refs
 	let mainContentRef: HTMLElement
@@ -241,38 +241,44 @@
 		})
 		keyboardNavManager.addGlobalListener()
 
-		socket.on("user", (message: Sockets.User.Response) => {
+		socket.on("users:get", (message) => {
 			userCtx.user = message.user
 		})
-		socket.on(
-			"systemSettings",
-			(message: Sockets.SystemSettings.Response) => {
-				systemSettingsCtx.settings = message.systemSettings
-			}
-		)
+		socket.on("systemSettings:get", (message) => {
+			systemSettingsCtx.settings = message.systemSettings
+		})
 
-		socket.on("error", (message: Sockets.Error.Response) => {
+		// Capture all error events (both specific errors and general error events)
+		socket.on("**:error", (message) => {
+			toaster.error({
+				title: message.error || "Error",
+				description: message.description
+			})
+		})
+
+		socket.on("error", (message) => {
 			toaster.error({
 				title: message.error,
 				description: message.description
 			})
 		})
 
-		socket.on("success", (message: Sockets.Success.Response) => {
+		socket.on("success", (message) => {
 			toaster.success({
 				title: message.title,
 				description: message.description
 			})
 		})
 
-		socket.emit("user", {})
-		socket.emit("systemSettings", {})
+		socket.emit("users:get", {})
+		socket.emit("systemSettings:get", {})
 	})
 
 	onDestroy(() => {
 		keyboardNavManager?.removeGlobalListener()
-		socket.off("user")
-		socket.off("systemSettings")
+		socket.off("users:get")
+		socket.off("systemSettings:get")
+		socket.off("**:error")
 		socket.off("error")
 		socket.off("success")
 	})
