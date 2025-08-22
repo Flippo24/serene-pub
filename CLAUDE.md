@@ -59,7 +59,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Database Schema
 
-The application uses a comprehensive schema defined in `src/lib/server/db/schema.ts`:
+The application uses a comprehensive schema defined in `$lib/server/db/schema.ts`:
 
 **Core Entities:**
 

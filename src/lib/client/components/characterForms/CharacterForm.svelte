@@ -71,6 +71,9 @@
 	let systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
+	let userSettingsCtx: UserSettingsCtx = $state(
+		getContext("userSettingsCtx")
+	)
 
 	let editCharacterData: EditCharacterData = $state({
 		id: undefined,
@@ -316,10 +319,7 @@
 	}
 
 	async function onShowAllCharacterFieldsClick(event: { checked: boolean }) {
-		const res: Sockets.UpdateShowAllCharacterFields.Call = {
-			enabled: event.checked
-		}
-		socket.emit("updateShowAllCharacterFields", res)
+		socket?.emit("userSettings:updateShowAllCharacterFields", { enabled: event.checked })
 	}
 
 	// Helper for editing arrays
@@ -411,6 +411,16 @@
 		socket.on("tags:list", (message: any) => {
 			availableTags = message.tagsList || []
 		})
+
+		socket.on("userSettings:updateShowAllCharacterFields", (message) => {
+			if (message.success) {
+				toaster.success({
+					title: `Character fields display ${message.enabled ? 'expanded' : 'simplified'}`
+				})
+			} else {
+				toaster.error({ title: "Failed to update character fields setting" })
+			}
+		})
 		if (characterId) {
 			socket.once("characters:get", (message: Sockets.Characters.Get.Response) => {
 				character = message.character
@@ -459,10 +469,11 @@
 	})
 
 	onDestroy(() => {
-		socket.off("createCharacter")
-		socket.off("updateCharacter")
+		socket.off("characters:create")
+		socket.off("characters:update")
 		socket.off("characters:get")
 		socket.off("tags:list")
+		socket.off("userSettings:updateShowAllCharacterFields")
 
 		// Remove keyboard event listener and clear timeout
 		document.removeEventListener("keydown", handleKeydown)
@@ -745,7 +756,7 @@
 				</div>
 			{/if}
 		</fieldset>
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -793,7 +804,7 @@
 				></textarea>
 			{/if}
 		</div>
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -942,7 +953,7 @@
 				{/if}
 			</fieldset>
 		{/if}
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -965,7 +976,7 @@
 				{/if}
 			</div>
 		{/if}
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -1046,7 +1057,7 @@
 				{/if}
 			</div>
 		{/if}
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -1103,7 +1114,7 @@
 				{/if}
 			</div>
 		{/if}
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
@@ -1137,7 +1148,7 @@
 				{/if}
 			</div>
 		{/if}
-		{#if systemSettingsCtx.settings.showAllCharacterFields}
+		{#if userSettingsCtx.settings?.showAllCharacterFields}
 			<div class="flex flex-col gap-1">
 				<label class="font-semibold" for="charVersion">
 					Character Version
@@ -1254,7 +1265,7 @@
 		<fieldset class="mt-2 flex items-center gap-2">
 			<Switch
 				name="show-all-character-fields"
-				checked={systemSettingsCtx.settings.showAllCharacterFields}
+				checked={userSettingsCtx.settings?.showAllCharacterFields ?? false}
 				onCheckedChange={onShowAllCharacterFieldsClick}
 				aria-describedby="show-all-fields-description"
 			/>

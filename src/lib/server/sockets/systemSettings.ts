@@ -1,11 +1,14 @@
 import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, and, isNull } from "drizzle-orm"
+import { z } from "zod"
 import type { Handler } from "$lib/shared/events"
 
 export const systemSettingsGet: Handler<Sockets.SystemSettings.Get.Params, Sockets.SystemSettings.Get.Response> = {
 	event: "systemSettings:get",
 	handler: async (socket, params, emitToUser) => {
+		// Allow systemSettings:get regardless of authentication status
+		// This is needed for determining if accounts are enabled
 		try {
 			const settings = await db.query.systemSettings.findFirst({
 				where: eq(schema.systemSettings.id, 1),
@@ -37,6 +40,32 @@ export const systemSettingsGet: Handler<Sockets.SystemSettings.Get.Params, Socke
 export const systemSettingsUpdateOllamaManagerEnabled: Handler<Sockets.SystemSettings.UpdateOllamaManagerEnabled.Params, Sockets.SystemSettings.UpdateOllamaManagerEnabled.Response> = {
 	event: "systemSettings:updateOllamaManagerEnabled",
 	handler: async (socket, params, emitToUser) => {
+		// Check system settings first
+		const systemSettings = await db.query.systemSettings.findFirst({
+			where: eq(schema.systemSettings.id, 1)
+		})
+		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
+
+		// If accounts are disabled, use fallback user 1 if no user is set
+		if (!isAccountsEnabled && !socket.user) {
+			const fallbackUser = await db.query.users.findFirst({
+				where: eq(schema.users.id, 1),
+				columns: { id: true, username: true, isAdmin: true }
+			})
+			if (fallbackUser) {
+				socket.user = fallbackUser
+			}
+		}
+
+		// Check if user is admin
+		if (!socket.user?.isAdmin) {
+			console.warn(`[systemSettingsUpdateOllamaManagerEnabled] Non-admin user ${socket.user?.id} attempted to update Ollama Manager settings`)
+			emitToUser("systemSettings:updateOllamaManagerEnabled:error", {
+				error: "Access denied: Admin privileges required"
+			})
+			throw new Error("Access denied: Admin privileges required")
+		}
+
 		try {
 			await db
 				.update(schema.systemSettings)
@@ -62,84 +91,169 @@ export const systemSettingsUpdateOllamaManagerEnabled: Handler<Sockets.SystemSet
 	}
 }
 
-export const systemSettingsUpdateShowAllCharacterFields: Handler<Sockets.SystemSettings.UpdateShowAllCharacterFields.Params, Sockets.SystemSettings.UpdateShowAllCharacterFields.Response> = {
-	event: "systemSettings:updateShowAllCharacterFields",
+// URL validation schema
+const urlSchema = z.string().url().refine((url) => {
+	try {
+		const parsed = new URL(url)
+		return parsed.port !== "" || parsed.hostname === "localhost"
+	} catch {
+		return false
+	}
+}, "URL must include a port (e.g., http://localhost:11434)")
+
+export const systemSettingsUpdateOllamaManagerBaseUrl: Handler<Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Params, Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Response> = {
+	event: "systemSettings:updateOllamaManagerBaseUrl",
 	handler: async (socket, params, emitToUser) => {
+		// Check system settings first
+		const systemSettings = await db.query.systemSettings.findFirst({
+			where: eq(schema.systemSettings.id, 1)
+		})
+		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
+
+		// If accounts are disabled, use fallback user 1 if no user is set
+		if (!isAccountsEnabled && !socket.user) {
+			const fallbackUser = await db.query.users.findFirst({
+				where: eq(schema.users.id, 1),
+				columns: { id: true, username: true, isAdmin: true }
+			})
+			if (fallbackUser) {
+				socket.user = fallbackUser
+			}
+		}
+
+		// Check if user is admin
+		if (!socket.user?.isAdmin) {
+			console.warn(`[systemSettingsUpdateOllamaManagerBaseUrl] Non-admin user ${socket.user?.id} attempted to update Ollama Manager base URL`)
+			emitToUser("systemSettings:updateOllamaManagerBaseUrl:error", {
+				error: "Access denied: Admin privileges required"
+			})
+			throw new Error("Access denied: Admin privileges required")
+		}
+
 		try {
+			// Validate URL format
+			const result = urlSchema.safeParse(params.baseUrl)
+			if (!result.success) {
+				const errorResponse = {
+					success: false,
+					baseUrl: params.baseUrl
+				} as Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Response
+				emitToUser("systemSettings:updateOllamaManagerBaseUrl:error", {
+					error: result.error.errors[0]?.message || "Invalid URL format"
+				})
+				return errorResponse
+			}
+
 			await db
 				.update(schema.systemSettings)
 				.set({
-					showAllCharacterFields: params.enabled
+					ollamaManagerBaseUrl: params.baseUrl
 				})
 				.where(eq(schema.systemSettings.id, 1))
 
-			const res: Sockets.SystemSettings.UpdateShowAllCharacterFields.Response = {
+			const res: Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Response = {
 				success: true,
-				enabled: params.enabled
+				baseUrl: params.baseUrl
 			}
-			emitToUser("systemSettings:updateShowAllCharacterFields", res)
+			emitToUser("systemSettings:updateOllamaManagerBaseUrl", res)
 			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
 			return res
 		} catch (error: any) {
-			console.error("Update show all character fields error:", error)
-			emitToUser("systemSettings:updateShowAllCharacterFields:error", {
-				error: "Failed to update show all character fields setting"
+			console.error("Update Ollama Manager base URL error:", error)
+			emitToUser("systemSettings:updateOllamaManagerBaseUrl:error", {
+				error: "Failed to update Ollama Manager base URL"
 			})
 			throw error
 		}
 	}
 }
 
-export const systemSettingsUpdateEasyCharacterCreation: Handler<Sockets.SystemSettings.UpdateEasyCharacterCreation.Params, Sockets.SystemSettings.UpdateEasyCharacterCreation.Response> = {
-	event: "systemSettings:updateEasyCharacterCreation",
+export const systemSettingsUpdateAccountsEnabled: Handler<Sockets.SystemSettings.UpdateAccountsEnabled.Params, Sockets.SystemSettings.UpdateAccountsEnabled.Response> = {
+	event: "systemSettings:updateAccountsEnabled",
 	handler: async (socket, params, emitToUser) => {
-		try {
-			await db
-				.update(schema.systemSettings)
-				.set({
-					enableEasyCharacterCreation: params.enabled
-				})
-				.where(eq(schema.systemSettings.id, 1))
+		// Check system settings first
+		const systemSettings = await db.query.systemSettings.findFirst({
+			where: eq(schema.systemSettings.id, 1)
+		})
+		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
 
-			const res: Sockets.SystemSettings.UpdateEasyCharacterCreation.Response = {
-				success: true,
-				enabled: params.enabled
-			}
-			emitToUser("systemSettings:updateEasyCharacterCreation", res)
-			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
-			return res
-		} catch (error: any) {
-			console.error("Update easy character creation error:", error)
-			emitToUser("systemSettings:updateEasyCharacterCreation:error", {
-				error: "Failed to update easy character creation setting"
+		// If accounts are disabled, use fallback user 1 if no user is set
+		if (!isAccountsEnabled && !socket.user) {
+			const fallbackUser = await db.query.users.findFirst({
+				where: eq(schema.users.id, 1),
+				columns: { id: true, username: true, isAdmin: true }
 			})
-			throw error
+			if (fallbackUser) {
+				socket.user = fallbackUser
+			}
 		}
-	}
-}
 
-export const systemSettingsUpdateEasyPersonaCreation: Handler<Sockets.SystemSettings.UpdateEasyPersonaCreation.Params, Sockets.SystemSettings.UpdateEasyPersonaCreation.Response> = {
-	event: "systemSettings:updateEasyPersonaCreation",
-	handler: async (socket, params, emitToUser) => {
+		// Check if user is admin
+		if (!socket.user?.isAdmin) {
+			console.warn(`[systemSettingsUpdateAccountsEnabled] Non-admin user ${socket.user?.id} attempted to update accounts enabled setting`)
+			emitToUser("systemSettings:updateAccountsEnabled:error", {
+				error: "Access denied: Admin privileges required"
+			})
+			throw new Error("Access denied: Admin privileges required")
+		}
+
 		try {
+			// Check if accounts are already enabled
+			const currentSettings = await db.query.systemSettings.findFirst({
+				where: eq(schema.systemSettings.id, 1)
+			})
+
+			if (currentSettings?.isAccountsEnabled && !params.enabled) {
+				// Don't allow disabling accounts once enabled
+				const errorResponse = {
+					success: false,
+					enabled: params.enabled
+				} as Sockets.SystemSettings.UpdateAccountsEnabled.Response
+				emitToUser("systemSettings:updateAccountsEnabled:error", {
+					error: "Accounts cannot be disabled once enabled"
+				})
+				return errorResponse
+			}
+
+			// If trying to enable accounts, check if current user has a passphrase set
+			if (params.enabled && !currentSettings?.isAccountsEnabled) {
+				const userPassphrase = await db.query.passphrases.findFirst({
+					where: (p, { eq, and, isNull }) => and(
+						eq(p.userId, socket.user!.id),
+						isNull(p.invalidatedAt)
+					)
+				})
+
+				if (!userPassphrase) {
+					const errorResponse = {
+						success: false,
+						enabled: false
+					} as Sockets.SystemSettings.UpdateAccountsEnabled.Response
+					emitToUser("systemSettings:updateAccountsEnabled:error", {
+						error: "You must set a passphrase before enabling user accounts. Please set your passphrase first."
+					})
+					return errorResponse
+				}
+			}
+
 			await db
 				.update(schema.systemSettings)
 				.set({
-					enableEasyPersonaCreation: params.enabled
+					isAccountsEnabled: params.enabled
 				})
 				.where(eq(schema.systemSettings.id, 1))
 
-			const res: Sockets.SystemSettings.UpdateEasyPersonaCreation.Response = {
+			const res: Sockets.SystemSettings.UpdateAccountsEnabled.Response = {
 				success: true,
 				enabled: params.enabled
 			}
-			emitToUser("systemSettings:updateEasyPersonaCreation", res)
+			emitToUser("systemSettings:updateAccountsEnabled", res)
 			await systemSettingsGet.handler(socket, {}, emitToUser) // Refresh system settings after update
 			return res
 		} catch (error: any) {
-			console.error("Update easy persona creation error:", error)
-			emitToUser("systemSettings:updateEasyPersonaCreation:error", {
-				error: "Failed to update easy persona creation setting"
+			console.error("Update accounts enabled error:", error)
+			emitToUser("systemSettings:updateAccountsEnabled:error", {
+				error: "Failed to update accounts setting"
 			})
 			throw error
 		}
@@ -154,7 +268,6 @@ export function registerSystemSettingsHandlers(
 ) {
 	register(socket, systemSettingsGet, emitToUser)
 	register(socket, systemSettingsUpdateOllamaManagerEnabled, emitToUser)
-	register(socket, systemSettingsUpdateShowAllCharacterFields, emitToUser)
-	register(socket, systemSettingsUpdateEasyCharacterCreation, emitToUser)
-	register(socket, systemSettingsUpdateEasyPersonaCreation, emitToUser)
+	register(socket, systemSettingsUpdateOllamaManagerBaseUrl, emitToUser)
+	register(socket, systemSettingsUpdateAccountsEnabled, emitToUser)
 }

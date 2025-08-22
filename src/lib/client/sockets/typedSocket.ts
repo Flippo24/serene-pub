@@ -2,14 +2,64 @@ import * as skio from "sveltekit-io"
 
 // Type mapping for socket events - this maps event names to their param/response types
 type SocketEventMap = {
+	// Authentication events
+	"auth:login": {
+		params: Sockets.Auth.Login.Params
+		response: Sockets.Auth.Login.Response
+	}
+	"auth:login:success": {
+		params: Sockets.Auth.LoginSuccess.Params
+		response: Sockets.Auth.LoginSuccess.Response
+	}
+	"auth:login:error": {
+		params: Sockets.Auth.LoginError.Params
+		response: Sockets.Auth.LoginError.Response
+	}
+	"auth:logout": {
+		params: Sockets.Auth.Logout.Params
+		response: Sockets.Auth.Logout.Response
+	}
+	"auth:logout:success": {
+		params: Sockets.Auth.LogoutSuccess.Params
+		response: Sockets.Auth.LogoutSuccess.Response
+	}
+	"auth:logout:error": {
+		params: Sockets.Auth.LogoutError.Params
+		response: Sockets.Auth.LogoutError.Response
+	}
+
 	// User events
 	"users:get": {
+		params: Sockets.Users.Get.Params
+		response: Sockets.Users.Get.Response
+	}
+	"users:current": {
 		params: Sockets.Users.Get.Params
 		response: Sockets.Users.Get.Response
 	}
 	"users:setTheme": {
 		params: Sockets.Users.SetTheme.Params
 		response: Sockets.Users.SetTheme.Response
+	}
+	"users:current:setPassphrase": {
+		params: Sockets.Users.SetPassphrase.Params
+		response: Sockets.Users.SetPassphrase.Response
+	}
+	"users:current:hasPassphrase": {
+		params: Sockets.Users.HasPassphrase.Params
+		response: Sockets.Users.HasPassphrase.Response
+	}
+	"users:current:updateDisplayName": {
+		params: Sockets.Users.UpdateDisplayName.Params
+		response: Sockets.Users.UpdateDisplayName.Response
+	}
+	"users:current:changePassphrase": {
+		params: Sockets.Users.ChangePassphrase.Params
+		response: Sockets.Users.ChangePassphrase.Response
+	}
+	"users:current:logout": {
+		params: Sockets.Users.Logout.Params
+		response: Sockets.Users.Logout.Response
 	}
 
 	// Character events
@@ -285,17 +335,43 @@ type SocketEventMap = {
 		params: Sockets.SystemSettings.UpdateOllamaManagerEnabled.Params
 		response: Sockets.SystemSettings.UpdateOllamaManagerEnabled.Response
 	}
-	"systemSettings:updateShowAllCharacterFields": {
-		params: Sockets.SystemSettings.UpdateShowAllCharacterFields.Params
-		response: Sockets.SystemSettings.UpdateShowAllCharacterFields.Response
+	"systemSettings:updateOllamaManagerBaseUrl": {
+		params: Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Params
+		response: Sockets.SystemSettings.UpdateOllamaManagerBaseUrl.Response
 	}
-	"systemSettings:updateEasyCharacterCreation": {
-		params: Sockets.SystemSettings.UpdateEasyCharacterCreation.Params
-		response: Sockets.SystemSettings.UpdateEasyCharacterCreation.Response
+	"systemSettings:updateAccountsEnabled": {
+		params: Sockets.SystemSettings.UpdateAccountsEnabled.Params
+		response: Sockets.SystemSettings.UpdateAccountsEnabled.Response
 	}
-	"systemSettings:updateEasyPersonaCreation": {
-		params: Sockets.SystemSettings.UpdateEasyPersonaCreation.Params
-		response: Sockets.SystemSettings.UpdateEasyPersonaCreation.Response
+
+	// User Settings events
+	"userSettings:get": {
+		params: Sockets.UserSettings.Get.Params
+		response: Sockets.UserSettings.Get.Response
+	}
+	"userSettings:updateShowHomePageBanner": {
+		params: Sockets.UserSettings.UpdateShowHomePageBanner.Params
+		response: Sockets.UserSettings.UpdateShowHomePageBanner.Response
+	}
+	"userSettings:updateEasyPersonaCreation": {
+		params: Sockets.UserSettings.UpdateEasyPersonaCreation.Params
+		response: Sockets.UserSettings.UpdateEasyPersonaCreation.Response
+	}
+	"userSettings:updateEasyCharacterCreation": {
+		params: Sockets.UserSettings.UpdateEasyCharacterCreation.Params
+		response: Sockets.UserSettings.UpdateEasyCharacterCreation.Response
+	}
+	"userSettings:updateShowAllCharacterFields": {
+		params: Sockets.UserSettings.UpdateShowAllCharacterFields.Params
+		response: Sockets.UserSettings.UpdateShowAllCharacterFields.Response
+	}
+	"userSettings:updateTheme": {
+		params: Sockets.UserSettings.UpdateTheme.Params
+		response: Sockets.UserSettings.UpdateTheme.Response
+	}
+	"userSettings:updateDarkMode": {
+		params: Sockets.UserSettings.UpdateDarkMode.Params
+		response: Sockets.UserSettings.UpdateDarkMode.Response
 	}
 
 	// Lorebook events

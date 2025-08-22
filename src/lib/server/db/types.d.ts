@@ -125,4 +125,14 @@ export global {
 	// Chat Lorebook types
 	export type SelectChatLorebook = typeof schema.chatLorebooks.$inferSelect
 	export type InsertChatLorebook = typeof schema.chatLorebooks.$inferInsert
+
+	export type SelectSystemSettings =
+		typeof schema.systemSettings.$inferSelect
+	export type InsertSystemSettings =
+		typeof schema.systemSettings.$inferInsert
+
+	export type SelectUserSettings =
+		typeof schema.userSettings.$inferSelect
+	export type InsertUserSettings =
+		typeof schema.userSettings.$inferInsert
 }

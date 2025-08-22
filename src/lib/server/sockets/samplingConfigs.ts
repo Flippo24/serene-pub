@@ -100,8 +100,9 @@ export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Pa
 export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUserActive.Params, Sockets.SamplingConfigs.SetUserActive.Response> = {
 	event: "samplingConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		const currentUser = await db.query.users.findFirst({
-			where: (u, { eq }) => eq(u.id, 1)
+			where: (u, { eq }) => eq(u.id, userId)
 		})
 		if (!currentUser) {
 			emitToUser("samplingConfigs:setUserActive:error", { error: "User not found." })

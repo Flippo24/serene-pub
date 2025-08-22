@@ -19,6 +19,9 @@
 	const systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
+	const userSettingsCtx: UserSettingsCtx = $state(
+		getContext("userSettingsCtx")
+	)
 
 	let personaList: Sockets.Personas.List.Response["personaList"] = $state([])
 	let search = $state("")
@@ -87,7 +90,7 @@
 		}
 
 		// Check if easy persona creation is enabled
-		if (systemSettingsCtx.settings.enableEasyPersonaCreation) {
+		if (userSettingsCtx.settings?.enableEasyPersonaCreation) {
 			showPersonaCreator = true
 		} else {
 			// Use regular edit form for creation

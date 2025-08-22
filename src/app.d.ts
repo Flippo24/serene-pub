@@ -70,20 +70,12 @@ declare global {
 			| undefined
 	}
 
-	interface ThemeCtx {
-		mode: "light" | "dark"
-		theme: string
+	interface SystemSettingsCtx {
+		settings?: Omit<SelectSystemSettings, "id">
 	}
 
-	interface SystemSettingsCtx {
-		settings: {
-			ollamaManagerEnabled: boolean
-			ollamaManagerBaseUrl: string
-			showAllCharacterFields: boolean
-			enableEasyCharacterCreation: boolean
-			enableEasyPersonaCreation: boolean
-			showHomePageBanner: boolean
-		}
+	interface UserSettingsCtx {
+		settings?: Omit<SelectUserSettings, "id" | "userId">
 	}
 
 	export interface CharaImportMetadata {

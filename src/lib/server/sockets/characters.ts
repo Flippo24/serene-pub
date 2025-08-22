@@ -167,7 +167,7 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 		try {
 			const data = { ...params.character }
 			const id = data.id
-			const userId = 1 // Replace with actual userId
+			const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 			const tags = (data as any).tags || []
 
 			// Remove fields that shouldn't be in the database update
@@ -216,33 +216,18 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 export const charactersDelete: Handler<Sockets.Characters.Delete.Params, Sockets.Characters.Delete.Response> = {
 	event: "characters:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // Replace with actual userId
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 
-		// Delete character tags first (cascade should handle this, but being explicit)
+		// Soft delete the character by setting isDeleted = true
 		await db
-			.delete(schema.characterTags)
-			.where(eq(schema.characterTags.characterId, params.id))
-
-		// Delete the character
-		await db
-			.delete(schema.characters)
+			.update(schema.characters)
+			.set({ isDeleted: true })
 			.where(
 				and(
 					eq(schema.characters.id, params.id),
 					eq(schema.characters.userId, userId)
 				)
 			)
-		
-		// Delete the character data directory if it exists
-		const avatarDir = getCharacterDataDir({
-			characterId: params.id,
-			userId
-		})
-		try {
-			await fsPromises.rmdir(avatarDir, { recursive: true })
-		} catch (err) {
-			console.error("Error deleting character data directory:", err)
-		}
 		
 		await charactersList.handler(socket, {}, emitToUser)
 		
@@ -273,20 +258,6 @@ export const charactersImportCard: Handler<Sockets.Characters.ImportCard.Params,
 			throw e
 		}
 	}
-}
-
-// Registration function for all character handlers
-export function registerCharacterHandlers(
-	socket: any,
-	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
-) {
-	register(socket, charactersList, emitToUser)
-	register(socket, charactersGet, emitToUser)
-	register(socket, charactersCreate, emitToUser)
-	register(socket, charactersUpdate, emitToUser)
-	register(socket, charactersDelete, emitToUser)
-	register(socket, charactersImportCard, emitToUser)
 }
 
 // Registration function for all character handlers

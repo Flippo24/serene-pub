@@ -7,7 +7,12 @@ import {
 	boolean,
 	uniqueIndex,
 	json,
-	date
+	date,
+	type PgTableWithColumns,
+	numeric,
+	timestamp,
+	varchar,
+	uuid
 } from "drizzle-orm/pg-core"
 import { GroupReplyStrategies } from "../../shared/constants/GroupReplyStrategies"
 import { ChatCharacterVisibility } from "../../shared/constants/ChatCharacterVisibility"
@@ -15,6 +20,7 @@ import { ChatCharacterVisibility } from "../../shared/constants/ChatCharacterVis
 export const users = pgTable("users", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
 	username: text("username").notNull(),
+	displayName: text("display_name"),
 	activeConnectionId: integer("active_connection_id").references(
 		() => connections.id,
 		{
@@ -39,14 +45,25 @@ export const users = pgTable("users", {
 			onDelete: "set null"
 		}
 	),
-	theme: text("theme").notNull().default("hamlindigo"),
-	darkMode: boolean("dark_mode").notNull().default(true)
+	theme: text("theme").notNull().default("hamlindigo"), // Remove next
+	darkMode: boolean("dark_mode").notNull().default(true), // Remove next
+	isAdmin: boolean("is_admin").notNull().default(false),
+	isDeleted: boolean("is_deleted").notNull().default(false),
+	createdAt: date("created_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`),
+	updatedAt: date("updated_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`)
+		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
 })
 
 export const userRelations = relations(users, ({ many, one }) => ({
 	lorebooks: many(lorebooks),
 	characters: many(characters),
 	chats: many(chats),
+	chatGuests: many(chatGuests),
+	tags: many(tags),
 	activeSamplingConfig: one(samplingConfigs, {
 		fields: [users.activeSamplingConfigId],
 		references: [samplingConfigs.id]
@@ -63,8 +80,93 @@ export const userRelations = relations(users, ({ many, one }) => ({
 		fields: [users.activePromptConfigId],
 		references: [promptConfigs.id]
 	}),
-	personas: many(personas)
+	personas: many(personas),
+	userSettings: one(userSettings),
+	passphrases: many(passphrases)
 }))
+
+export const userSettings = pgTable("user_settings", {
+	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	theme: text("theme").notNull().default("hamlindigo"),
+	darkMode: boolean("dark_mode").notNull().default(true),
+	showHomePageBanner: boolean("show_home_page_banner").default(true),
+	enableEasyPersonaCreation: boolean("enable_easy_persona_creation")
+		.notNull()
+		.default(true),
+	enableEasyCharacterCreation: boolean("enable_easy_character_creation")
+		.notNull()
+		.default(true),
+	showAllCharacterFields: boolean("show_all_character_fields")
+		.notNull()
+		.default(false),
+	createdAt: date("created_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`),
+	updatedAt: date("updated_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`)
+		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`)
+})
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+	user: one(users, {
+		fields: [userSettings.userId],
+		references: [users.id]
+	})
+}))
+
+export const passphrases: PgTableWithColumns<any> & { usePermissions?: boolean } = pgTable(
+	"passphrases",
+	{
+		id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		hash: text("hash").notNull(),
+		salt: varchar("salt", { length: 512 }).notNull(),
+		iterations: numeric("iterations").notNull(),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+		invalidatedAt: timestamp("invalidated_at")
+	},
+	(t) => [
+		uniqueIndex("unique_user_passphrases").on(t.userId)
+	]
+)
+
+export const passphrasesRelations = relations(passphrases, ({ one }) => ({
+	user: one(users, {
+		fields: [passphrases.userId],
+		references: [users.id]
+	})
+}))
+
+export const userTokens = pgTable(
+		"user_tokens",
+	{
+		id: uuid("id")
+			.primaryKey()
+			.default(sql`(gen_random_uuid ())`),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "set null" }),
+		token: text("token").notNull(),
+		createdAt: timestamp("created_at").notNull().defaultNow(),
+		expiresAt: timestamp("expires_at").notNull(),
+		browser: varchar("browser", { length: 256 }).notNull(),
+		os: varchar("os", { length: 256 }).notNull()
+	}
+)
+
+export const usersTokenRelations = relations(userTokens, ({ many, one }) => ({
+	user: one(users, {
+		fields: [userTokens.userId],
+		references: [users.id]
+	})
+}))
+
 
 export const samplingConfigs = pgTable("sampling_configs", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
@@ -353,6 +455,9 @@ export const historyEntriesRelations = relations(historyEntries, ({ one }) => ({
 
 export const tags = pgTable("tags", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
 	name: text("name").notNull(), // Tag name (unique)
 	description: text("description"),
 	colorPreset: text("color_preset")
@@ -360,7 +465,11 @@ export const tags = pgTable("tags", {
 		.default("preset-filled-primary-500") // Color preset for the tag
 })
 
-export const tagsRelations = relations(tags, ({ many }) => ({
+export const tagsRelations = relations(tags, ({ many, one }) => ({
+	user: one(users, {
+		fields: [tags.userId],
+		references: [users.id]
+	}),
 	characterTags: many(characterTags),
 	personaTags: many(personaTags),
 	lorebookTags: many(lorebookTags),
@@ -501,7 +610,8 @@ export const characters = pgTable("characters", {
 		.notNull()
 		.default({})
 		.$type<Record<string, any>>(),
-	isFavorite: boolean("is_favorite").notNull().default(false) // 1 if favorite, 0 otherwise
+	isFavorite: boolean("is_favorite").notNull().default(false), // 1 if favorite, 0 otherwise
+	isDeleted: boolean("is_deleted").notNull().default(false)
 })
 
 export const charactersRelations = relations(characters, ({ many, one }) => ({
@@ -536,7 +646,8 @@ export const personas = pgTable("personas", {
 		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`), // Updated at timestamp
 	lorebookId: integer("lorebook_id").references(() => lorebooks.id, {
 		onDelete: "set null"
-	}) // Optional lorebook for this persona
+	}), // Optional lorebook for this persona
+	isDeleted: boolean("is_deleted").notNull().default(false)
 })
 
 export const personasRelations = relations(personas, ({ one, many }) => ({
@@ -584,6 +695,7 @@ export const chatsRelations = relations(chats, ({ one, many }) => ({
 	chatMessages: many(chatMessages),
 	chatPersonas: many(chatPersonas),
 	chatCharacters: many(chatCharacters),
+	chatGuests: many(chatGuests),
 	lorebook: one(lorebooks, {
 		fields: [chats.lorebookId],
 		references: [lorebooks.id]
@@ -736,6 +848,34 @@ export const chatLorebooksRelations = relations(chatLorebooks, ({ one }) => ({
 	})
 }))
 
+// Many-to-many: chats <-> users (guests)
+export const chatGuests = pgTable(
+	"chat_guests",
+	{
+		chatId: integer("chat_id")
+			.notNull()
+			.references(() => chats.id, { onDelete: "cascade" }),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		isPlayer: boolean("is_player").notNull().default(true)
+	},
+	(table) => ({
+		pk: uniqueIndex("chat_guests_pk").on(table.chatId, table.userId)
+	})
+)
+
+export const chatGuestsRelations = relations(chatGuests, ({ one }) => ({
+	chat: one(chats, {
+		fields: [chatGuests.chatId],
+		references: [chats.id]
+	}),
+	user: one(users, {
+		fields: [chatGuests.userId],
+		references: [users.id]
+	})
+}))
+
 /**
  * Singleton table for system-wide settings
  */
@@ -747,14 +887,7 @@ export const systemSettings = pgTable("system_settings", {
 	ollamaManagerBaseUrl: text("ollama_base_url")
 		.notNull()
 		.default("http://localhost:11434/"),
-	showAllCharacterFields: boolean("show_all_character_fields")
+	isAccountsEnabled: boolean("is_accounts_enabled")
 		.notNull()
 		.default(false),
-	enableEasyCharacterCreation: boolean("enable_easy_character_creation")
-		.notNull()
-		.default(true),
-	enableEasyPersonaCreation: boolean("enable_easy_persona_creation")
-		.notNull()
-		.default(true),
-	showHomePageBanner: boolean("show_home_page_banner").default(true),
 })

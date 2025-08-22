@@ -84,7 +84,7 @@ export const promptConfigsDelete: Handler<Sockets.PromptConfigs.Delete.Params, S
 export const promptConfigsSetUserActive: Handler<Sockets.PromptConfigs.SetUserActive.Params, Sockets.PromptConfigs.SetUserActive.Response> = {
 	event: "promptConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // Replace with actual userId
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		const [updatedUser] = await db
 			.update(schema.users)
 			.set({

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from "svelte"
 	import * as Icons from "@lucide/svelte"
-
 	import * as skio from "sveltekit-io"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { z } from "zod"
@@ -97,10 +96,10 @@
 
 	function handleSave() {
 		if (!validateForm()) return
-		const updateReq: Sockets.UpdateLorebook.Call = {
+		const updateReq: Sockets.Lorebooks.Update.Call = {
 			lorebook: editLorebook!
 		}
-		socket.emit("updateLorebook", updateReq)
+		socket.emit("lorebooks:update", updateReq)
 	}
 
 	function validateForm(): boolean {
@@ -142,7 +141,7 @@
 			}
 			await tick() // Force state to update
 		})
-		socket.on("updateLorebook", async (msg: Sockets.Lorebook.Response) => {
+		socket.on("lorebooks:update", async (msg: Sockets.Lorebooks.Update.Response) => {
 			if (msg.lorebook && msg.lorebook.id === lorebookId) {
 				// Update both editLorebook and originalLorebook to reflect the save
 				editLorebook = { ...msg.lorebook }
@@ -167,7 +166,7 @@
 
 	onDestroy(() => {
 		socket.off("lorebooks:get")
-		socket.off("updateLorebook")
+		socket.off("lorebooks:update")
 		socket.off("tags:list")
 	})
 </script>

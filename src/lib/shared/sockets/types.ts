@@ -14,6 +14,55 @@ declare global {
 			description?: string
 		}
 
+		// Authentication namespace
+		namespace Auth {
+			namespace Login {
+				interface Params {
+					username: string
+					password: string
+				}
+				interface Response {
+					user: {
+						id: number
+						username: string
+						isAdmin: boolean
+					}
+					token: string
+				}
+			}
+			namespace LoginError {
+				interface Params {}
+				interface Response {
+					error: string
+				}
+			}
+			namespace LoginSuccess {
+				interface Params {}
+				interface Response {
+					user: {
+						id: number
+						username: string
+						isAdmin: boolean
+					}
+					token: string
+				}
+			}
+			namespace Logout {
+				interface Params {}
+				interface Response {}
+			}
+			namespace LogoutError {
+				interface Params {}
+				interface Response {
+					error: string
+				}
+			}
+			namespace LogoutSuccess {
+				interface Params {}
+				interface Response {}
+			}
+		}
+
 		// Characters namespace - using Params/Ack pattern
 		namespace Characters {
 			namespace List {
@@ -809,6 +858,46 @@ declare global {
 				}
 				interface Response {}
 			}
+			namespace SetPassphrase {
+				interface Params {
+					passphrase: string
+				}
+				interface Response {
+					success: boolean
+					message?: string
+				}
+			}
+			namespace HasPassphrase {
+				interface Params {}
+				interface Response {
+					hasPassphrase: boolean
+				}
+			}
+			namespace UpdateDisplayName {
+				interface Params {
+					displayName: string
+				}
+				interface Response {
+					success: boolean
+					displayName: string
+				}
+			}
+			namespace ChangePassphrase {
+				interface Params {
+					currentPassphrase: string
+					newPassphrase: string
+				}
+				interface Response {
+					success: boolean
+					message?: string
+				}
+			}
+			namespace Logout {
+				interface Params {}
+				interface Response {
+					success: boolean
+				}
+			}
 		}
 
 		// Ollama namespace
@@ -1063,9 +1152,7 @@ declare global {
 					systemSettings: {
 						ollamaManagerEnabled: boolean
 						ollamaManagerBaseUrl: string
-						showAllCharacterFields: boolean
-						enableEasyCharacterCreation: boolean
-						enableEasyPersonaCreation: boolean
+						isAccountsEnabled: boolean
 					}
 				}
 			}
@@ -1078,7 +1165,69 @@ declare global {
 					enabled: boolean
 				}
 			}
-			namespace UpdateShowAllCharacterFields {
+			namespace UpdateOllamaManagerBaseUrl {
+				interface Params {
+					baseUrl: string
+				}
+				interface Response {
+					success: boolean
+					baseUrl: string
+				}
+			}
+			namespace UpdateAccountsEnabled {
+				interface Params {
+					enabled: boolean
+				}
+				interface Response {
+					success: boolean
+					enabled: boolean
+				}
+			}
+		}
+
+		// User Settings namespace
+		namespace UserSettings {
+			namespace Get {
+				interface Params {}
+				interface Response {
+					userSettings: {
+						theme: string
+						darkMode: boolean
+						showHomePageBanner: boolean
+						enableEasyPersonaCreation: boolean
+						enableEasyCharacterCreation: boolean
+						showAllCharacterFields: boolean
+					}
+				}
+			}
+			namespace UpdateTheme {
+				interface Params {
+					theme: string
+				}
+				interface Response {
+					success: boolean
+					theme: string
+				}
+			}
+			namespace UpdateDarkMode {
+				interface Params {
+					enabled: boolean
+				}
+				interface Response {
+					success: boolean
+					enabled: boolean
+				}
+			}
+			namespace UpdateShowHomePageBanner {
+				interface Params {
+					enabled: boolean
+				}
+				interface Response {
+					success: boolean
+					enabled: boolean
+				}
+			}
+			namespace UpdateEasyPersonaCreation {
 				interface Params {
 					enabled: boolean
 				}
@@ -1096,7 +1245,7 @@ declare global {
 					enabled: boolean
 				}
 			}
-			namespace UpdateEasyPersonaCreation {
+			namespace UpdateShowAllCharacterFields {
 				interface Params {
 					enabled: boolean
 				}

@@ -73,7 +73,7 @@ export const contextConfigsUpdate: Handler<Sockets.ContextConfigs.Update.Params,
 export const contextConfigsDelete: Handler<Sockets.ContextConfigs.Delete.Params, Sockets.ContextConfigs.Delete.Response> = {
 	event: "contextConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // Replace with actual userId
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		let currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, userId)
 		})
@@ -93,7 +93,7 @@ export const contextConfigsDelete: Handler<Sockets.ContextConfigs.Delete.Params,
 export const contextConfigsSetUserActive: Handler<Sockets.ContextConfigs.SetUserActive.Params, Sockets.ContextConfigs.SetUserActive.Response> = {
 	event: "contextConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // Replace with actual userId
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		const [updatedUser] = await db
 			.update(schema.users)
 			.set({

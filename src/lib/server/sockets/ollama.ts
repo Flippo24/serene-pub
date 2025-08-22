@@ -137,7 +137,7 @@ export const ollamaDeleteModelHandler: Handler<Sockets.Ollama.DeleteModel.Params
 export const ollamaConnectModelHandler: Handler<Sockets.Ollama.ConnectModel.Params, Sockets.Ollama.ConnectModel.Response> = {
 	event: "ollama:connectModel",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 
 		try {
 			let existingConnection = await db.query.connections.findFirst({

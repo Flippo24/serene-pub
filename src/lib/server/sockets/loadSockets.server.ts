@@ -2,6 +2,7 @@ import dotenv from "dotenv"
 import os from "os"
 import * as skio from "sveltekit-io"
 import { connectSockets } from "$lib/server/sockets/index"
+import { authMiddleware } from "$lib/server/sockets/auth"
 
 dotenv.config()
 
@@ -23,11 +24,16 @@ export async function loadSocketsServer() {
 		maxHttpBufferSize: 1e8
 	})
 
-	if (typeof io.to !== "function") {
-		io.to = () => ({ emit: () => {} })
+	// Add authentication middleware
+	if ('use' in io && typeof io.use === 'function') {
+		io.use(authMiddleware as any)
 	}
 
-	connectSockets(io)
+	if (typeof (io as any).to !== "function") {
+		(io as any).to = () => ({ emit: () => {} })
+	}
+
+	connectSockets(io as any)
 	if (process.env.NODE_ENV !== "production") {
 		console.log("Socket server ready at", host)
 	}

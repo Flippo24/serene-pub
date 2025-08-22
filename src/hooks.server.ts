@@ -2,6 +2,9 @@ import { dev } from "$app/environment"
 import { loadSocketsServer } from "$lib/server/sockets/loadSockets.server"
 import { appVersion } from "$lib/shared/constants/version"
 import type { Handle } from "@sveltejs/kit"
+// import { userAuthentication, routeGuard } from "$server/middleware"
+
+const middleware: Middleware[] = [] // [userAuthentication, routeGuard]
 
 loadSocketsServer()
 declare module "@sveltejs/kit" {
@@ -86,5 +89,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 	event.locals.latestReleaseTag = latestReleaseTag
 	event.locals.isNewerReleaseAvailable = isNewerReleaseAvailable
+
+	for (const handler of middleware) {
+		await handler(event)
+	}
+
 	return resolve(event)
 }

@@ -3,6 +3,7 @@ import { migrate } from "drizzle-orm/pglite/migrator"
 import * as dbConfig from "./drizzle.config"
 import type { MigrationConfig } from "drizzle-orm/migrator"
 import fs from "fs"
+import crypto from "crypto"
 import { dev } from "$app/environment"
 import { drizzle } from "drizzle-orm/pglite"
 import { sync } from "./defaults"
@@ -16,6 +17,7 @@ interface DbLock {
 interface MetaFile {
 	version: string
 	lock?: DbLock
+	cryptoSecretKey?: string
 }
 
 // Move meta.json handling to the beginning
@@ -23,17 +25,28 @@ const metaPath = dbConfig.dataDir + "/meta.json"
 
 // Ensure meta.json exists
 if (!fs.existsSync(metaPath)) {
-	fs.writeFileSync(metaPath, JSON.stringify({ version: "0.0.0" }, null, 2))
+	fs.writeFileSync(metaPath, JSON.stringify({ 
+		version: "0.0.0",
+		cryptoSecretKey: crypto.randomUUID()
+	}, null, 2))
 }
 
 // Read meta.json with error handling
 let meta: MetaFile
 try {
 	meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
+	// Ensure cryptoSecretKey exists in existing meta.json
+	if (!meta.cryptoSecretKey) {
+		meta.cryptoSecretKey = crypto.randomUUID()
+		fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
+	}
 } catch (error) {
 	console.warn(`Warning: Invalid meta.json detected, recreating. Error: ${error}`)
 	// Recreate meta.json if it's corrupted
-	meta = { version: "0.0.0" }
+	meta = { 
+		version: "0.0.0",
+		cryptoSecretKey: crypto.randomUUID()
+	}
 	fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 }
 
@@ -46,7 +59,7 @@ async function checkDatabaseLock(): Promise<void> {
 		meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 	} catch (error) {
 		console.warn(`Warning: Error reading meta.json during lock check. Error: ${error}`)
-		meta = { version: "0.0.0" }
+		meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 	}
 
@@ -72,7 +85,7 @@ async function checkDatabaseLock(): Promise<void> {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
 			console.warn(`Warning: Error reading meta.json during lock recheck. Error: ${error}`)
-			meta = { version: "0.0.0" }
+			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 			fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 		}
 
@@ -98,7 +111,7 @@ function updateDatabaseLock(): void {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
 			console.warn(`Warning: Error reading meta.json during lock update. Error: ${error}`)
-			meta = { version: "0.0.0" }
+			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		}
 
 		meta.lock = {
@@ -137,7 +150,7 @@ function stopLockUpdates(): void {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
 			console.warn(`Warning: Error reading meta.json during lock clear. Error: ${error}`)
-			meta = { version: "0.0.0" }
+			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		}
 		delete meta.lock
 		fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
@@ -181,6 +194,29 @@ export function compareVersions(a: string, b: string): -1 | 0 | 1 {
 		if (na > nb) return 1
 	}
 	return 0
+}
+
+/**
+ * Get the crypto secret key from meta.json, creating one if it doesn't exist
+ */
+export function getCryptoSecretKey(): string {
+	try {
+		const currentMeta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
+		if (!currentMeta.cryptoSecretKey) {
+			currentMeta.cryptoSecretKey = crypto.randomUUID()
+			fs.writeFileSync(metaPath, JSON.stringify(currentMeta, null, 2))
+		}
+		return currentMeta.cryptoSecretKey
+	} catch (error) {
+		console.warn(`Warning: Error reading meta.json for crypto key. Error: ${error}`)
+		// Recreate meta.json if it's corrupted
+		const newMeta = { 
+			version: "0.0.0",
+			cryptoSecretKey: crypto.randomUUID()
+		}
+		fs.writeFileSync(metaPath, JSON.stringify(newMeta, null, 2))
+		return newMeta.cryptoSecretKey
+	}
 }
 
 async function runMigrations() {

@@ -172,7 +172,7 @@
 		delete newCharacter._avatarFile
 		delete newCharacter._avatar
 
-		socket.emit("createCharacter", {
+		socket.emit("characters:create", {
 			character: newCharacter,
 			avatarFile
 		})
@@ -241,7 +241,7 @@
 	)
 
 	onMount(() => {
-		socket.on("createCharacter", (res: any) => {
+		socket.on("characters:create", (res: any) => {
 			if (res.character) {
 				resetForm() // This will close the modal and reset data
 			}
@@ -249,7 +249,7 @@
 	})
 
 	onDestroy(() => {
-		socket.off("createCharacter")
+		socket.off("characters:create")
 	})
 </script>
 

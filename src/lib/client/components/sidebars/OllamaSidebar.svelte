@@ -23,7 +23,6 @@
 	let activeTab = $state<
 		"installed" | "available" | "downloads" | "settings"
 	>("installed")
-	let themeCtx: ThemeCtx = $state(getContext("themeCtx"))
 	let isConnected = $state(false)
 	let systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")

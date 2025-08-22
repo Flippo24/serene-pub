@@ -553,7 +553,7 @@
 		})
 
 		socket.on(
-			"updateCharacter",
+			"characters:update",
 			(msg: Sockets.UpdateCharacter.Response) => {
 				const charId = msg.character?.id
 				if (!charId || !chat) return

@@ -1,13 +1,11 @@
 <script lang="ts">
-	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
+	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
 	import { getContext, onDestroy, onMount } from "svelte"
 	import { Modal } from "@skeletonlabs/skeleton-svelte"
 	import * as Icons from "@lucide/svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { z } from "zod"
-	import CharacterListItem from		socket.on("tags:list", (msg: any) => {
-			tags = msg.tagsList || []
-		})./listItems/CharacterListItem.svelte"
+	import CharacterListItem from "../listItems/CharacterListItem.svelte"
 	import PersonaListItem from "../listItems/PersonaListItem.svelte"
 	import ChatListItem from "../listItems/ChatListItem.svelte"
 	import LorebookListItem from "../listItems/LorebookListItem.svelte"
@@ -219,7 +217,7 @@
 	function handleTagClick(tag: SelectTag) {
 		selectedTag = tag
 		// Load related data for the selected tag
-		socket.emit("tagRelatedData", { tagId: tag.id })
+		socket.emit("tags:getRelatedData", { tagId: tag.id })
 	}
 
 	function validateNewTag(): boolean {
@@ -271,7 +269,7 @@
 			colorPreset: newTagColorPreset
 		}
 
-		socket.emit("createTag", { tag })
+		socket.emit("tags:create", { tag })
 		isCreating = false
 	}
 
@@ -285,13 +283,13 @@
 			colorPreset: editTagColorPreset
 		}
 
-		socket.emit("updateTag", { tag })
+		socket.emit("tags:update", { tag })
 		isEditing = false
 	}
 
 	function confirmDelete() {
 		if (!tagToDelete) return
-		socket.emit("deleteTag", { id: tagToDelete.id })
+		socket.emit("tags:delete", { id: tagToDelete.id })
 		showDeleteModal = false
 		tagToDelete = null
 		if (selectedTag?.id === tagToDelete.id) {
@@ -357,14 +355,14 @@
 			tagsList = msg.tagsList || []
 		})
 
-		socket.on("createTag", (msg: any) => {
+		socket.on("tags:create", (msg: any) => {
 			toaster.success({
 				title: "Tag Created",
 				description: `Tag "${msg.tag.name}" created successfully.`
 			})
 		})
 
-		socket.on("updateTag", (msg: any) => {
+		socket.on("tags:update", (msg: any) => {
 			selectedTag = msg.tag
 			toaster.success({
 				title: "Tag Updated",
@@ -372,18 +370,18 @@
 			})
 		})
 
-		socket.on("deleteTag", (msg: any) => {
+		socket.on("tags:delete", (msg: any) => {
 			toaster.success({
 				title: "Tag Deleted",
 				description: "Tag deleted successfully."
 			})
 		})
 
-		socket.on("tagRelatedData", (msg: any) => {
-			relatedCharacters = msg.characters || []
-			relatedPersonas = msg.personas || []
-			relatedLorebooks = msg.lorebooks || []
-			relatedChats = msg.chats || []
+		socket.on("tags:getRelatedData", (msg: any) => {
+			relatedCharacters = msg.tagData.characters || []
+			relatedPersonas = msg.tagData.personas || []
+			relatedLorebooks = msg.tagData.lorebooks || []
+			relatedChats = msg.tagData.chats || []
 		})
 
 		socket.emit("tags:list", {})
@@ -395,10 +393,10 @@
 
 	onDestroy(() => {
 		socket.off("tags:list")
-		socket.off("createTag")
-		socket.off("updateTag")
-		socket.off("deleteTag")
-		socket.off("tagRelatedData")
+		socket.off("tags:create")
+		socket.off("tags:update")
+		socket.off("tags:delete")
+		socket.off("tags:getRelatedData")
 		onclose = undefined
 	})
 </script>

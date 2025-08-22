@@ -58,7 +58,7 @@ export const lorebooksListHandler: Handler<Sockets.Lorebooks.List.Params, Socket
 	event: "lorebooks:list",
 	async handler(socket, params, emitToUser) {
 		// Fetch all lorebooks for the user
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		if (!userId) return { lorebookList: [] }
 		const books = await db.query.lorebooks.findMany({
 			where: (l, { eq }) => eq(l.userId, userId),
@@ -373,7 +373,7 @@ export async function createLorebook(
 		}
 
 		const res: Sockets.Lorebooks.Create.Response = { lorebook: newBook }
-		emitToUser("createLorebook", res)
+		emitToUser("lorebooks:create", res)
 		await lorebookList(socket, { userId }, emitToUser)
 	} catch (error) {
 		console.error("Error creating lorebook:", error)
@@ -447,7 +447,7 @@ export async function updateLorebook(
 		}
 
 		const res: Sockets.UpdateLorebook.Response = { lorebook: bookWithTags }
-		emitToUser("updateLorebook", res)
+		emitToUser("lorebooks:update", res)
 		await lorebookList(socket, { userId }, emitToUser)
 	} catch (error) {
 		console.error("Error updating lorebook:", error)
@@ -484,7 +484,7 @@ export async function deleteLorebook(
 			)
 
 		const res: Sockets.DeleteLorebook.Response = { id: book.id }
-		emitToUser("deleteLorebook", res)
+		emitToUser("lorebooks:delete", res)
 		await lorebookList(socket, { userId }, emitToUser)
 	} catch (error) {
 		console.error("Error deleting lorebook:", error)

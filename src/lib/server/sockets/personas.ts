@@ -159,7 +159,7 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 		try {
 			const data = { ...params.persona }
 			const id = data.id
-			const userId = 1 // Replace with actual userId
+			const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 			const tags = (data as any).tags || []
 
 			// Remove fields that shouldn't be in the database update
@@ -207,16 +207,12 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 export const personasDelete: Handler<Sockets.Personas.Delete.Params, Sockets.Personas.Delete.Response> = {
 	event: "personas:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // Replace with actual userId
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 
-		// Delete persona tags first (cascade should handle this, but being explicit)
+		// Soft delete the persona by setting isDeleted = true
 		await db
-			.delete(schema.personaTags)
-			.where(eq(schema.personaTags.personaId, params.id))
-
-		// Delete the persona
-		await db
-			.delete(schema.personas)
+			.update(schema.personas)
+			.set({ isDeleted: true })
 			.where(
 				and(
 					eq(schema.personas.id, params.id),

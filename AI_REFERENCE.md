@@ -217,7 +217,7 @@ src/
 ### Database
 
 - `src/lib/server/db/drizzle.config.ts` - Database connection and migration config
-- `src/lib/server/db/schema.ts` - Database schema definitions
+- `$lib/server/db/schema.ts` - Database schema definitions
 - `drizzle/` - Migration files and metadata
 
 ### Deployment

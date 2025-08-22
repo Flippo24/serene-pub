@@ -8,6 +8,11 @@
 	}
 
 	let { char = $bindable(), src = $bindable() }: Props = $props()
+
+	// Determine if this is a character or persona
+	// Characters have specific fields that personas don't have like 'personality', 'scenario', 'firstMessage'
+	// Personas have 'isDefault' field that characters don't have
+	let isCharacter = $derived(char && ('personality' in char || 'scenario' in char || 'firstMessage' in char))
 </script>
 
 <Avatar
@@ -20,5 +25,9 @@
 			: char.name!
 		: "Unknown"}
 >
-	<Icons.User size={36} />
+	{#if isCharacter}
+		<Icons.UsersRound size={36} />
+	{:else}
+		<Icons.UserRound size={36} />
+	{/if}
 </Avatar>

@@ -2,7 +2,7 @@
 	import Header from "./Header.svelte"
 	import "../../../app.css"
 	import * as Icons from "@lucide/svelte"
-	import { fly, fade } from "svelte/transition"
+	import { fly } from "svelte/transition"
 	import { onMount, setContext, onDestroy } from "svelte"
 	import SamplingSidebar from "./sidebars/SamplingSidebar.svelte"
 	import ConnectionsSidebar from "./sidebars/ConnectionsSidebar.svelte"
@@ -21,6 +21,7 @@
 	import type { Snippet } from "svelte"
 	import { Theme } from "$lib/client/consts/Theme"
 	import OllamaIcon from "./icons/OllamaIcon.svelte"
+	import LoginForm from "./LoginForm.svelte"
 
 	interface Props {
 		children?: Snippet
@@ -29,14 +30,14 @@
 	let { children }: Props = $props()
 
 	const socket = useTypedSocket()
-	
+
 	// Focus management refs
 	let mainContentRef: HTMLElement
-	let leftSidebarRef: HTMLElement  
+	let leftSidebarRef: HTMLElement
 	let rightSidebarRef: HTMLElement
 	let keyboardNavManager: KeyboardNavigationManager
 
-	let userCtx: { user: any } = $state({} as { user: any })
+	let userCtx: { user: SelectUser } = $state({} as { user: any })
 	let panelsCtx: PanelsCtx = $state({
 		leftPanel: null,
 		rightPanel: null,
@@ -47,30 +48,27 @@
 		onLeftPanelClose: undefined,
 		onRightPanelClose: undefined,
 		onMobilePanelClose: undefined,
-		leftNav: {},
+		leftNav: {
+			sampling: {
+				icon: Icons.SlidersHorizontal,
+				title: "Sampling"
+			},
+			connections: { icon: Icons.Cable, title: "Connections" },
+			contexts: { icon: Icons.BookOpenText, title: "Contexts" },
+			prompts: { icon: Icons.MessageCircle, title: "Prompts" },
+			settings: { icon: Icons.Settings, title: "Settings" }
+		},
 		rightNav: {
 			tags: { icon: Icons.Tag, title: "Tags" },
-			personas: { icon: Icons.UserCog, title: "Personas" },
-			characters: { icon: Icons.Users, title: "Characters" },
+			personas: { icon: Icons.UserRound, title: "Personas" },
+			characters: { icon: Icons.UsersRound, title: "Characters" },
 			lorebooks: { icon: Icons.BookMarked, title: "Lorebooks+" },
 			chats: { icon: Icons.MessageSquare, title: "Chats" }
 		},
 		digest: {}
 	})
-	let themeCtx: ThemeCtx = $state({
-		mode: (localStorage.getItem("mode") as "light" | "dark") || "dark",
-		theme: localStorage.getItem("theme") || Theme.HAMLINDIGO
-	})
-	let systemSettingsCtx: SystemSettingsCtx = $state({
-		settings: {
-			ollamaManagerEnabled: false,
-			ollamaManagerBaseUrl: "",
-			showAllCharacterFields: false,
-			enableEasyCharacterCreation: true,
-			enableEasyPersonaCreation: true,
-			showHomePageBanner: true
-		}
-	})
+	let systemSettingsCtx: SystemSettingsCtx = $state({ settings: undefined })
+	let userSettingsCtx: UserSettingsCtx = $state({ settings: undefined })
 
 	$effect(() => {
 		console.log(
@@ -79,21 +77,41 @@
 		)
 	})
 
+	// Derived state for authentication flow
+	let isSettingsLoaded = $derived(!!systemSettingsCtx?.settings)
+	let isAccountsEnabled = $derived(
+		systemSettingsCtx?.settings?.isAccountsEnabled
+	)
+	let hasUser = $derived(!!userCtx.user)
+	let shouldShowLogin = $derived(
+		isAccountsEnabled && !hasUser && isSettingsLoaded
+	)
+	let shouldShowApp = $derived(
+		isSettingsLoaded && hasUser
+	)
+
 	// Update leftNav based on Ollama Manager setting
 	$effect(() => {
+		if (!isSettingsLoaded) return
+
+		// Start with base navigation items
 		const baseLeftNav = {
 			sampling: {
 				icon: Icons.SlidersHorizontal,
 				title: "Sampling"
 			},
-			connections: { icon: Icons.Cable, title: "Connections" },
-			...(systemSettingsCtx.settings.ollamaManagerEnabled && {
-				ollama: { icon: OllamaIcon, title: "Ollama Manager" }
-			}),
-			contexts: { icon: Icons.BookOpenText, title: "Contexts" },
-			prompts: { icon: Icons.MessageCircle, title: "Prompts" },
-			settings: { icon: Icons.Settings, title: "Settings" }
+			connections: { icon: Icons.Cable, title: "Connections" }
 		}
+
+		// Add Ollama Manager if enabled
+		if (systemSettingsCtx?.settings?.ollamaManagerEnabled) {
+			baseLeftNav.ollama = { icon: OllamaIcon, title: "Ollama Manager" }
+		}
+
+		// Add remaining navigation items
+		baseLeftNav.contexts = { icon: Icons.BookOpenText, title: "Contexts" }
+		baseLeftNav.prompts = { icon: Icons.MessageCircle, title: "Prompts" }
+		baseLeftNav.settings = { icon: Icons.Settings, title: "Settings" }
 
 		panelsCtx.leftNav = baseLeftNav
 	})
@@ -105,6 +123,7 @@
 		key: string
 		toggle?: boolean
 	}): void {
+		if (!isSettingsLoaded) return
 		// Determine which nav the key belongs to
 		const isLeft = Object.prototype.hasOwnProperty.call(
 			panelsCtx.leftNav,
@@ -171,21 +190,22 @@
 		panel
 	}: {
 		panel: "left" | "right" | "mobile"
-	}) {
+	}): Promise<boolean> {
+		if (!isSettingsLoaded) return Promise.resolve(false)
 		let res: boolean = true // Default to allowing close
 		if (panel === "mobile") {
 			res = panelsCtx.onMobilePanelClose
-				? await panelsCtx.onMobilePanelClose()
+				? ((await panelsCtx.onMobilePanelClose()) ?? true)
 				: true
 			panelsCtx.mobilePanel = res ? null : panelsCtx.mobilePanel
 		} else if (panel === "left") {
 			res = panelsCtx.onLeftPanelClose
-				? await panelsCtx.onLeftPanelClose()
+				? ((await panelsCtx.onLeftPanelClose()) ?? true)
 				: true
 			panelsCtx.leftPanel = res ? null : panelsCtx.leftPanel
 		} else if (panel === "right") {
 			res = panelsCtx.onRightPanelClose
-				? await panelsCtx.onRightPanelClose()
+				? ((await panelsCtx.onRightPanelClose()) ?? true)
 				: true
 			panelsCtx.rightPanel = res ? null : panelsCtx.rightPanel
 		}
@@ -198,54 +218,66 @@
 	}
 
 	$effect(() => {
-		const mode = themeCtx.mode
-		localStorage.setItem("mode", mode)
+		const mode =
+			userSettingsCtx?.settings?.darkMode !== undefined
+				? userSettingsCtx?.settings?.darkMode
+					? "dark"
+					: "light"
+				: "dark"
 		document.documentElement.setAttribute("data-mode", mode)
 	})
 
 	$effect(() => {
-		const theme = themeCtx.theme
-		localStorage.setItem("theme", theme)
+		const theme = userSettingsCtx.settings?.theme || Theme.HAMLINDIGO
 		document.documentElement.setAttribute("data-theme", theme)
+	})
+
+	$effect(() => {
+		if (isSettingsLoaded) {
+			console.log("Settings loaded, getting current user")
+			socket.emit("users:current", {})
+		}
+	})
+
+	$effect(() => {
+		if (hasUser) {
+			socket.emit("userSettings:get", {})
+		}
 	})
 
 	onMount(() => {
 		setContext("panelsCtx", panelsCtx as PanelsCtx)
 		setContext("userCtx", userCtx)
-		setContext("themeCtx", themeCtx)
 		setContext("systemSettingsCtx", systemSettingsCtx)
+		setContext("userSettingsCtx", userSettingsCtx)
 
-		// Initialize keyboard navigation
-		keyboardNavManager = new KeyboardNavigationManager({
-			panelsCtx,
-			onFocusMain: () => {
-				if (mainContentRef) {
-					KeyboardNavigationManager.focusFirstInteractive(mainContentRef)
-					KeyboardNavigationManager.announceToScreenReader("Main content focused")
-				}
-			},
-			onFocusLeftSidebar: () => {
-				if (leftSidebarRef) {
-					KeyboardNavigationManager.focusFirstInteractive(leftSidebarRef)
-					const panelName = panelsCtx.leftNav[panelsCtx.leftPanel!]?.title || panelsCtx.leftPanel
-					KeyboardNavigationManager.announceToScreenReader(`${panelName} sidebar focused`)
-				}
-			},
-			onFocusRightSidebar: () => {
-				if (rightSidebarRef) {
-					KeyboardNavigationManager.focusFirstInteractive(rightSidebarRef)
-					const panelName = panelsCtx.rightNav[panelsCtx.rightPanel!]?.title || panelsCtx.rightPanel
-					KeyboardNavigationManager.announceToScreenReader(`${panelName} sidebar focused`)
-				}
+		socket.on("systemSettings:get", (message) => {
+			console.log("Received systemSettings:get", message)
+			systemSettingsCtx.settings = {
+				ollamaManagerEnabled:
+					message.systemSettings.ollamaManagerEnabled,
+				ollamaManagerBaseUrl:
+					message.systemSettings.ollamaManagerBaseUrl,
+				isAccountsEnabled: message.systemSettings.isAccountsEnabled
 			}
 		})
-		keyboardNavManager.addGlobalListener()
 
-		socket.on("users:get", (message) => {
+		socket.on("users:current", (message) => {
+			console.log("Received users:current", message)
 			userCtx.user = message.user
+
+			// Once we have a user, get user settings
+			// This works for both enabled and disabled accounts
+			if (message.user) {
+				console.log("Emitting userSettings:get")
+				socket.emit("userSettings:get", {})
+			}
 		})
-		socket.on("systemSettings:get", (message) => {
-			systemSettingsCtx.settings = message.systemSettings
+
+		// Listen for user settings
+		socket.on("userSettings:get", (message) => {
+			console.log("Received userSettings:get", message)
+			userSettingsCtx.settings = message.userSettings
 		})
 
 		// Capture all error events (both specific errors and general error events)
@@ -270,21 +302,98 @@
 			})
 		})
 
-		socket.emit("users:get", {})
 		socket.emit("systemSettings:get", {})
+
+		if (!isSettingsLoaded) return
+
+		// Initialize keyboard navigation
+		keyboardNavManager = new KeyboardNavigationManager({
+			panelsCtx,
+			onFocusMain: () => {
+				if (mainContentRef) {
+					KeyboardNavigationManager.focusFirstInteractive(
+						mainContentRef
+					)
+					KeyboardNavigationManager.announceToScreenReader(
+						"Main content focused"
+					)
+				}
+			},
+			onFocusLeftSidebar: () => {
+				if (
+					leftSidebarRef &&
+					panelsCtx.leftNav &&
+					panelsCtx.leftPanel
+				) {
+					KeyboardNavigationManager.focusFirstInteractive(
+						leftSidebarRef
+					)
+					const panelName =
+						panelsCtx.leftNav[panelsCtx.leftPanel]?.title ||
+						panelsCtx.leftPanel
+					KeyboardNavigationManager.announceToScreenReader(
+						`${panelName} sidebar focused`
+					)
+				}
+			},
+			onFocusRightSidebar: () => {
+				if (
+					rightSidebarRef &&
+					panelsCtx.rightNav &&
+					panelsCtx.rightPanel
+				) {
+					KeyboardNavigationManager.focusFirstInteractive(
+						rightSidebarRef
+					)
+					const panelName =
+						panelsCtx.rightNav[panelsCtx.rightPanel]?.title ||
+						panelsCtx.rightPanel
+					KeyboardNavigationManager.announceToScreenReader(
+						`${panelName} sidebar focused`
+					)
+				}
+			}
+		})
+		keyboardNavManager.addGlobalListener()
+	})
+
+	// Effect to handle user authentication flow after system settings are loaded
+	$effect(() => {
+		if (!systemSettingsCtx) return
+
+		console.log("Auth effect triggered", {
+			hasSystemSettings: !!systemSettingsCtx.settings,
+			isAccountsEnabled: systemSettingsCtx.settings?.isAccountsEnabled,
+			hasUser: !!userCtx.user
+		})
+
+		// Only proceed if we have system settings
+		if (!systemSettingsCtx.settings) return
+
+		// If accounts are disabled, get user 1 automatically
+		if (!systemSettingsCtx.settings.isAccountsEnabled && !userCtx.user) {
+			console.log("Accounts disabled, emitting users:get")
+			socket.emit("users:get", {})
+		}
+		// If accounts are enabled and we don't have a user, the login form will be shown
 	})
 
 	onDestroy(() => {
 		keyboardNavManager?.removeGlobalListener()
 		socket.off("users:get")
 		socket.off("systemSettings:get")
+		socket.off("userSettings:get")
 		socket.off("**:error")
 		socket.off("error")
 		socket.off("success")
 	})
 </script>
 
-{#if !!userCtx.user}
+{#if shouldShowLogin}
+	<!-- Show login form when accounts are enabled but no user is authenticated -->
+	<LoginForm />
+{:else if shouldShowApp}
+	<!-- Show normal app when accounts are disabled OR when accounts are enabled and user is authenticated -->
 	<div
 		class="bg-surface-100-900 relative h-full max-h-[100dvh] w-full justify-between"
 		role="application"
@@ -294,11 +403,7 @@
 			class="relative flex h-svh max-w-full min-w-full flex-1 flex-col overflow-hidden lg:flex-row lg:gap-2"
 		>
 			<!-- Left Sidebar -->
-			<aside 
-				class="desktop-sidebar"
-				role="complementary"
-				aria-label="Left navigation panel"
-			>
+			<aside class="desktop-sidebar" aria-label="Left navigation panel">
 				{#if panelsCtx.leftPanel}
 					{@const title =
 						panelsCtx.leftNav[panelsCtx.leftPanel]?.title ||
@@ -310,11 +415,15 @@
 						out:fly={{ x: -100, duration: 200 }}
 						role="region"
 						aria-labelledby="left-panel-title"
-						aria-label="{title} sidebar - {Object.keys(panelsCtx.leftNav).indexOf(panelsCtx.leftPanel) + 1} of {Object.keys(panelsCtx.leftNav).length}"
+						aria-label="{title} sidebar - {Object.keys(
+							panelsCtx.leftNav
+						).indexOf(panelsCtx.leftPanel) + 1} of {Object.keys(
+							panelsCtx.leftNav
+						).length}"
 						tabindex="-1"
 					>
 						<div class="flex items-center justify-between p-4">
-							<h2 
+							<h2
 								id="left-panel-title"
 								class="text-foreground text-lg font-semibold capitalize"
 							>
@@ -326,7 +435,10 @@
 								aria-label="Close {title} panel"
 								type="button"
 							>
-								<Icons.X class="text-foreground h-5 w-5" aria-hidden="true" />
+								<Icons.X
+									class="text-foreground h-5 w-5"
+									aria-hidden="true"
+								/>
 							</button>
 						</div>
 						<div class="flex-1 overflow-y-auto">
@@ -360,10 +472,9 @@
 				{/if}
 			</aside>
 			<!-- Main Content -->
-			<main 
+			<main
 				bind:this={mainContentRef}
 				class="flex h-full flex-col overflow-hidden"
-				role="main"
 				tabindex="-1"
 			>
 				<Header />
@@ -372,9 +483,8 @@
 				</div>
 			</main>
 			<!-- Right Sidebar -->
-			<aside 
+			<aside
 				class="desktop-sidebar pt-1"
-				role="complementary"
 				aria-label="Right navigation panel"
 			>
 				{#if panelsCtx.rightPanel}
@@ -388,7 +498,11 @@
 						out:fly={{ x: 100, duration: 200 }}
 						role="region"
 						aria-labelledby="right-panel-title"
-						aria-label="{title} sidebar - {Object.keys(panelsCtx.rightNav).indexOf(panelsCtx.rightPanel) + 1} of {Object.keys(panelsCtx.rightNav).length}"
+						aria-label="{title} sidebar - {Object.keys(
+							panelsCtx.rightNav
+						).indexOf(panelsCtx.rightPanel) + 1} of {Object.keys(
+							panelsCtx.rightNav
+						).length}"
 						tabindex="-1"
 					>
 						<div class="flex items-center justify-between p-4">
@@ -404,7 +518,10 @@
 								aria-label="Close {title} panel"
 								type="button"
 							>
-								<Icons.X class="text-foreground h-5 w-5" aria-hidden="true" />
+								<Icons.X
+									class="text-foreground h-5 w-5"
+									aria-hidden="true"
+								/>
 							</button>
 						</div>
 						<nav class="flex-1 overflow-y-auto">

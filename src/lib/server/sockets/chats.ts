@@ -66,7 +66,7 @@ export const activeAdapters = new Map<string, BaseConnectionAdapter>()
 export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.List.Response> = {
 	event: "chats:list",
 	async handler(socket, params, emitToUser) {
-		const userId = 1 // Replace with actual user id
+		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
 		const chatsList = await db.query.chats.findMany({
 			with: {
 				chatCharacters: {

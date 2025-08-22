@@ -21,6 +21,9 @@
 	const systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
+	const userSettingsCtx: UserSettingsCtx = $state(
+		getContext("userSettingsCtx")
+	)
 
 	let characterList: any[] = $state([])
 	let search = $state("")
@@ -98,7 +101,7 @@
 		}
 
 		// Check if easy character creation is enabled
-		if (systemSettingsCtx.settings.enableEasyCharacterCreation) {
+		if (userSettingsCtx.settings?.enableEasyCharacterCreation) {
 			showCharacterCreator = true
 		} else {
 			// Use regular edit form for creation

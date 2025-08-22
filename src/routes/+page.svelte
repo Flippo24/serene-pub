@@ -12,7 +12,7 @@
 
 	let userCtx: UserCtx = $state(getContext("userCtx"))
 	let panelsCtx: PanelsCtx = $state(getContext("panelsCtx"))
-	let themeCtx: ThemeCtx = $state(getContext("themeCtx"))
+	let userSettingsCtx: UserSettingsCtx = $state(getContext("userSettingsCtx"))
 	let systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
@@ -176,10 +176,10 @@
 	}
 
 	function toggleBanner() {
-		const res: Sockets.UpdateShowHomePageBanner.Call = {
+		const res: Sockets.UserSettings.UpdateShowHomePageBanner.Params = {
 			enabled: false
 		}
-		socket.emit("updateShowHomePageBanner", res)
+		socket.emit("userSettings:updateShowHomePageBanner", res)
 	}
 
 	// Listen for socket events
@@ -306,12 +306,14 @@
 <div
 	class="flex flex-1 flex-col items-center justify-center gap-4 px-2 md:px-0"
 >
-	{#if systemSettingsCtx.settings.showHomePageBanner}
+	{#if userSettingsCtx.settings?.showHomePageBanner}
 		<div class="relative w-full">
 			<img
-				src={themeCtx.mode === "dark"
-					? "logo-w-text-dark.png"
-					: "logo-w-text.png"}
+				src={(userSettingsCtx.settings?.darkMode !== undefined 
+					? userSettingsCtx.settings.darkMode 
+					: true) === false
+					? "logo-w-text.png"
+					: "logo-w-text-dark.png"}
 				alt="Serene Pub Logo"
 				class="bg-primary-500/25 w-full rounded-xl"
 			/>
