@@ -5,7 +5,7 @@ import { handlePersonaAvatarUpload } from "../utils"
 import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for persona creation/update
-async function processPersonaTags(personaId: number, tagNames: string[]) {
+async function processPersonaTags(personaId: number, tagNames: string[], userId: number) {
 	if (!tagNames || tagNames.length === 0) return
 
 	// First, remove all existing tags for this persona
@@ -19,9 +19,10 @@ async function processPersonaTags(personaId: number, tagNames: string[]) {
 	for (const tagName of tagNames) {
 		if (!tagName.trim()) continue
 
-		// Check if tag exists
+		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: eq(schema.tags.name, tagName.trim())
+			where: (t, { and, eq }) => 
+				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -29,7 +30,8 @@ async function processPersonaTags(personaId: number, tagNames: string[]) {
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim()
+					name: tagName.trim(),
+					userId
 					// description and colorPreset will use database defaults
 				})
 				.returning()
@@ -56,6 +58,7 @@ async function processPersonaTags(personaId: number, tagNames: string[]) {
 export const personasList: Handler<Sockets.Personas.List.Params, Sockets.Personas.List.Response> = {
 	event: "personas:list",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user!.id
 		const personaList = await db.query.personas.findMany({
 			columns: {
 				id: true,
@@ -72,7 +75,7 @@ export const personasList: Handler<Sockets.Personas.List.Params, Sockets.Persona
 					}
 				}
 			},
-			where: (p, { eq }) => eq(p.userId, 1) // TODO: Replace with actual user id
+			where: (p, { eq }) => eq(p.userId, userId)
 		})
 		const res: Sockets.Personas.List.Response = { personaList }
 		emitToUser("personas:list", res)
@@ -83,8 +86,10 @@ export const personasList: Handler<Sockets.Personas.List.Params, Sockets.Persona
 export const personasGet: Handler<Sockets.Personas.Get.Params, Sockets.Personas.Get.Response> = {
 	event: "personas:get",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user!.id
 		const persona = await db.query.personas.findFirst({
-			where: (p, { eq }) => eq(p.id, params.id),
+			where: (p, { and, eq }) => 
+				and(eq(p.id, params.id), eq(p.userId, userId)),
 			with: {
 				personaTags: {
 					with: {
@@ -117,6 +122,7 @@ export const personasCreate: Handler<Sockets.Personas.Create.Params, Sockets.Per
 	event: "personas:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
 			const data = { ...params.persona }
 			const tags = (data as any).tags || []
 
@@ -126,12 +132,12 @@ export const personasCreate: Handler<Sockets.Personas.Create.Params, Sockets.Per
 
 			const [persona] = await db
 				.insert(schema.personas)
-				.values({ ...data, userId: 1 })
+				.values({ ...data, userId })
 				.returning()
 
 			// Process tags after persona creation
 			if (tags.length > 0) {
-				await processPersonaTags(persona.id, tags)
+				await processPersonaTags(persona.id, tags, userId)
 			}
 
 			if (params.avatarFile) {
@@ -159,7 +165,7 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 		try {
 			const data = { ...params.persona }
 			const id = data.id
-			const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+			const userId = socket.user!.id
 			const tags = (data as any).tags || []
 
 			// Remove fields that shouldn't be in the database update
@@ -180,7 +186,7 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 				.returning()
 
 			// Process tags after persona update
-			await processPersonaTags(id, tags)
+			await processPersonaTags(id, tags, userId)
 
 			if (params.avatarFile) {
 				await handlePersonaAvatarUpload({
@@ -207,7 +213,7 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 export const personasDelete: Handler<Sockets.Personas.Delete.Params, Sockets.Personas.Delete.Response> = {
 	event: "personas:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 
 		// Soft delete the persona by setting isDeleted = true
 		await db

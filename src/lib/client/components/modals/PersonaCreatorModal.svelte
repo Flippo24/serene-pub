@@ -156,7 +156,7 @@
 		delete newPersona._avatarFile
 		delete newPersona._avatar
 
-		socket.emit("createPersona", {
+		socket.emit("personas:create", {
 			persona: newPersona,
 			avatarFile
 		})
@@ -220,7 +220,7 @@
 	)
 
 	onMount(() => {
-		socket.on("createPersona", (res: any) => {
+		socket.on("personas:create", (res: any) => {
 			if (res.persona) {
 				resetForm() // This will close the modal and reset data
 			}

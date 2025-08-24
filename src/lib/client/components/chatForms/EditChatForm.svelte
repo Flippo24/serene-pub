@@ -397,7 +397,7 @@
 			chatId: chat!.id,
 			characterId: c.id
 		}
-		socket.emit("toggleChatCharacterActive", req)
+		socket.emit("chats:toggleCharacterActive", req)
 	}
 
 	function updateCharacterVisibility(
@@ -409,7 +409,7 @@
 			characterId: c.id,
 			visibility
 		}
-		socket.emit("updateChatCharacterVisibility", req)
+		socket.emit("chats:updateCharacterVisibility", req)
 	}
 
 	function getVisibilityIcon(visibility: string) {

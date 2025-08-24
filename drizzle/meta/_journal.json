@@ -134,6 +134,20 @@
       "when": 1755848477411,
       "tag": "0018_mature_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1756021868720,
+      "tag": "0019_thin_black_tarantula",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1756022576030,
+      "tag": "0020_dazzling_revanche",
+      "breakpoints": true
     }
   ]
 }

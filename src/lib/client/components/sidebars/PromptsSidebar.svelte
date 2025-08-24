@@ -16,10 +16,11 @@
 
 	const socket = useTypedSocket()
 	let userCtx: { user: SelectUser } = getContext("userCtx")
+	let userSettingsCtx: UserSettingsCtx = getContext("userSettingsCtx")
 	let promptsList: Sockets.PromptConfigs.List.Response["promptConfigsList"] =
 		$state([])
 	let selectedPromptId: number | undefined = $state(
-		userCtx.user.activePromptConfigId || undefined
+		userSettingsCtx.settings?.activePromptConfigId || undefined
 	)
 	let promptConfig: Sockets.PromptConfigs.Get.Response["promptConfig"] = $state(
 		{} as Sockets.PromptConfigs.Get.Response["promptConfig"]
@@ -129,7 +130,7 @@
 	$effect(() => {
 		if (
 			!!selectedPromptId &&
-			selectedPromptId !== userCtx.user.activePromptConfigId
+			selectedPromptId !== userSettingsCtx.settings?.activePromptConfigId
 		) {
 			socket.emit("promptConfigs:setUserActive", {
 				id: selectedPromptId
@@ -150,7 +151,7 @@
 				promptsList = msg.promptConfigsList
 				if (!selectedPromptId && promptsList.length > 0) {
 					selectedPromptId =
-						userCtx.user.activePromptConfigId ?? promptsList[0].id
+						userSettingsCtx.settings?.activePromptConfigId ?? promptsList[0].id
 				}
 			}
 		)

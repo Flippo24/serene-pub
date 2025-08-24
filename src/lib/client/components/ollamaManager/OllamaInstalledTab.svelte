@@ -96,8 +96,8 @@
 	// Check Ollama connection and refresh models
 	async function refreshModels() {
 		isLoading = true
-		socket.emit("ollamaModelsList", {})
-		socket.emit("ollamaListRunningModels", {})
+		socket.emit("ollama:modelsList", {})
+		socket.emit("ollama:listRunningModels", {})
 		socket.emit("connections:list", {})
 	}
 
@@ -117,7 +117,7 @@
 			return
 		}
 
-		socket.emit("ollamaDeleteModel", { modelName: model.name })
+		socket.emit("ollama:deleteModel", { modelName: model.name })
 	}
 
 	// Delete modal handlers
@@ -153,7 +153,7 @@
 			return
 		}
 
-		socket.emit("ollamaConnectModel", { modelName: model.name })
+		socket.emit("ollama:connectModel", { modelName: model.name })
 	}
 
 	// View model website

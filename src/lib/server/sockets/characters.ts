@@ -8,7 +8,7 @@ import { fileTypeFromBuffer } from "file-type"
 import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for character creation/update
-async function processCharacterTags(characterId: number, tagNames: string[]) {
+async function processCharacterTags(characterId: number, tagNames: string[], userId: number) {
 	if (!tagNames || tagNames.length === 0) return
 
 	// First, remove all existing tags for this character
@@ -22,9 +22,10 @@ async function processCharacterTags(characterId: number, tagNames: string[]) {
 	for (const tagName of tagNames) {
 		if (!tagName.trim()) continue
 
-		// Check if tag exists
+		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: eq(schema.tags.name, tagName.trim())
+			where: (t, { and, eq }) => 
+				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -32,7 +33,8 @@ async function processCharacterTags(characterId: number, tagNames: string[]) {
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim()
+					name: tagName.trim(),
+					userId
 					// description and colorPreset will use database defaults
 				})
 				.returning()
@@ -59,6 +61,7 @@ async function processCharacterTags(characterId: number, tagNames: string[]) {
 export const charactersList: Handler<Sockets.Characters.List.Params, Sockets.Characters.List.Response> = {
 	event: "characters:list",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user!.id
 		const characterList = await db.query.characters.findMany({
 			columns: {
 				id: true,
@@ -76,7 +79,7 @@ export const charactersList: Handler<Sockets.Characters.List.Params, Sockets.Cha
 					}
 				}
 			},
-			where: (c, { eq }) => eq(c.userId, 1), // TODO: Replace with actual user id
+			where: (c, { eq }) => eq(c.userId, userId),
 			orderBy: (c, { asc }) => asc(c.id)
 		})
 		const res: Sockets.Characters.List.Response = { characterList }
@@ -88,8 +91,10 @@ export const charactersList: Handler<Sockets.Characters.List.Params, Sockets.Cha
 export const charactersGet: Handler<Sockets.Characters.Get.Params, Sockets.Characters.Get.Response> = {
 	event: "characters:get",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user!.id
 		const character = await db.query.characters.findFirst({
-			where: (c, { eq }) => eq(c.id, params.id),
+			where: (c, { and, eq }) => 
+				and(eq(c.id, params.id), eq(c.userId, userId)),
 			with: {
 				characterTags: {
 					with: {
@@ -120,6 +125,7 @@ export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets
 	event: "characters:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
 			const data = { ...params.character }
 			const tags = (data as any).tags || []
 
@@ -131,15 +137,13 @@ export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets
 
 			const [character] = await db
 				.insert(schema.characters)
-				.values({ ...data, userId: 1 })
+				.values({ ...data, userId })
 				.returning()
 
 			// Process tags after character creation
-			if (tags.length > 0) {
-				await processCharacterTags(character.id, tags)
-			}
-
-			if (params.avatarFile) {
+			if (tags && tags.length > 0) {
+				await processCharacterTags(character.id, tags, userId)
+			}			if (params.avatarFile) {
 				await handleCharacterAvatarUpload({
 					character,
 					avatarFile: params.avatarFile
@@ -167,7 +171,7 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 		try {
 			const data = { ...params.character }
 			const id = data.id
-			const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+			const userId = socket.user!.id
 			const tags = (data as any).tags || []
 
 			// Remove fields that shouldn't be in the database update
@@ -190,7 +194,7 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 				.returning()
 
 			// Process tags after character update
-			await processCharacterTags(id, tags)
+			await processCharacterTags(id, tags, userId)
 
 			if (params.avatarFile) {
 				await handleCharacterAvatarUpload({
@@ -216,7 +220,7 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 export const charactersDelete: Handler<Sockets.Characters.Delete.Params, Sockets.Characters.Delete.Response> = {
 	event: "characters:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 
 		// Soft delete the character by setting isDeleted = true
 		await db

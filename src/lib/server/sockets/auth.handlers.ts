@@ -3,6 +3,7 @@ import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq } from "drizzle-orm"
 import { generateLocalToken } from "$lib/server/auth/tokens/generateLocalToken"
+import { loginRateLimit } from "$lib/server/services/loginRateLimit"
 
 /**
  * Handle user login authentication
@@ -14,9 +15,24 @@ async function handleLogin(
 	{ username, passphrase }: { username: string; passphrase: string }
 ) {
 	try {
+		// Get client IP for rate limiting
+		const clientIP = socket.handshake.address || socket.conn.remoteAddress || 'unknown'
+		
+		// Check rate limiting first
+		if (loginRateLimit.isRateLimited(clientIP)) {
+			const timeUntilReset = loginRateLimit.getTimeUntilReset(clientIP)
+			socket.emit("auth:login:error", { 
+				error: "Too many failed attempts",
+				description: `Please wait ${timeUntilReset} seconds before trying again`,
+				rateLimited: true,
+				timeUntilReset
+			})
+			return
+		}
+
 		// Find user by username
 		const user = await db.query.users.findFirst({
-			where: eq(schema.users.username, username),
+			where: (u, { eq }) => eq(u.username, username),
 			columns: {
 				id: true,
 				username: true,
@@ -25,16 +41,33 @@ async function handleLogin(
 		})
 
 		if (!user) {
-			socket.emit("auth:login:error", { error: "Invalid credentials" })
+			// Record failed attempt
+			loginRateLimit.recordFailedAttempt(clientIP)
+			const remaining = loginRateLimit.getRemainingAttempts(clientIP)
+			
+			socket.emit("auth:login:error", { 
+				error: "Invalid credentials",
+				remainingAttempts: remaining
+			})
 			return
 		}
 
 		// TODO: Add passphrase verification here
 		// For now, we'll accept any passphrase for development purposes
 		if (!passphrase) {
-			socket.emit("auth:login:error", { error: "Passphrase is required" })
+			// Record failed attempt
+			loginRateLimit.recordFailedAttempt(clientIP)
+			const remaining = loginRateLimit.getRemainingAttempts(clientIP)
+			
+			socket.emit("auth:login:error", { 
+				error: "Passphrase is required",
+				remainingAttempts: remaining
+			})
 			return
 		}
+
+		// Clear rate limit on successful login
+		loginRateLimit.clearRateLimit(clientIP)
 
 		// Create a new authentication token
 		const token = await generateLocalToken({
@@ -63,7 +96,16 @@ async function handleLogin(
 
 	} catch (error) {
 		console.error("Login error:", error)
-		socket.emit("auth:login:error", { error: "Authentication failed" })
+		
+		// Record failed attempt for server errors too
+		const clientIP = socket.handshake.address || socket.conn.remoteAddress || 'unknown'
+		loginRateLimit.recordFailedAttempt(clientIP)
+		const remaining = loginRateLimit.getRemainingAttempts(clientIP)
+		
+		socket.emit("auth:login:error", { 
+			error: "Authentication failed",
+			remainingAttempts: remaining
+		})
 	}
 }
 

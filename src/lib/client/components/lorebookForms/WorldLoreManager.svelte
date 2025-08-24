@@ -151,7 +151,7 @@
 			const req: Sockets.CreateWorldLoreEntry.Call = {
 				worldLoreEntry: { ...entry, lorebookId, _uuid: undefined }
 			}
-			socket.emit("createWorldLoreEntry", req)
+			socket.emit("lorebooks:createWorldLoreEntry", req)
 			newEntriesData = newEntriesData.filter(
 				(e) => e._uuid !== entry._uuid
 			)
@@ -160,7 +160,7 @@
 			const req: Sockets.UpdateWorldLoreEntry.Call = {
 				worldLoreEntry: { ...entry, lorebookId }
 			}
-			socket.emit("updateWorldLoreEntry", req)
+			socket.emit("lorebooks:updateWorldLoreEntry", req)
 			delete editEntriesData[entry.id]
 		}
 		// tick().then(() => {
@@ -250,7 +250,7 @@
 			lorebookId,
 			positions: positionMap
 		}
-		socket.emit("updateWorldLoreEntryPositions", req)
+		socket.emit("lorebooks:updateWorldLoreEntryPositions", req)
 	}
 
 	function onDeleteClick(id: number) {
@@ -260,7 +260,7 @@
 
 	function onDeleteConfirm() {
 		showDeleteConfirmModal = false
-		socket.emit("deleteWorldLoreEntry", {
+		socket.emit("lorebooks:deleteWorldLoreEntry", {
 			id: deleteEntryId,
 			lorebookId
 		})
@@ -274,7 +274,7 @@
 
 	onMount(() => {
 		socket.on(
-			"worldLoreEntryList",
+			"lorebooks:worldLoreEntryList",
 			async (msg: Sockets.WorldLoreEntryList.Response) => {
 				if (
 					msg.worldLoreEntryList.length &&
@@ -287,7 +287,7 @@
 		)
 
 		socket.on(
-			"createWorldLoreEntry",
+			"lorebooks:createWorldLoreEntry",
 			(msg: Sockets.CreateWorldLoreEntry.Response) => {
 				if (
 					msg.worldLoreEntry &&
@@ -299,7 +299,7 @@
 		)
 
 		socket.on(
-			"updateWorldLoreEntry",
+			"lorebooks:updateWorldLoreEntry",
 			(msg: Sockets.UpdateWorldLoreEntry.Response) => {
 				if (
 					msg.worldLoreEntry &&
@@ -310,7 +310,7 @@
 			}
 		)
 		socket.on(
-			"deleteWorldLoreEntry",
+			"lorebooks:deleteWorldLoreEntry",
 			(msg: Sockets.DeleteWorldLoreEntry.Response) => {
 				if (msg.id && worldLoreEntryList.some((e) => e.id === msg.id)) {
 					toaster.success({ title: "World Lore Entry deleted" })
@@ -321,7 +321,7 @@
 			}
 		)
 		socket.on(
-			"lorebookBindingList",
+			"lorebooks:bindingList",
 			async (msg: Sockets.LorebookBindingList.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					lorebookBindingList = [...msg.lorebookBindingList]
@@ -330,7 +330,7 @@
 			}
 		)
 		socket.on(
-			"updateWorldLoreEntryPositions",
+			"lorebooks:updateWorldLoreEntryPositions",
 			(msg: Sockets.UpdateWorldLoreEntryPositions.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					toaster.success({ title: "Entries reordered" })
@@ -338,22 +338,22 @@
 			}
 		)
 		const req: Sockets.WorldLoreEntryList.Call = { lorebookId: lorebookId }
-		socket.emit("worldLoreEntryList", req)
+		socket.emit("lorebooks:worldLoreEntryList", req)
 		const bindingReq: Sockets.LorebookBindingList.Call = {
 			lorebookId: lorebookId
 		}
-		socket.emit("lorebookBindingList", bindingReq)
+		socket.emit("lorebooks:bindingList", bindingReq)
 		isReady = true
 	})
 
 	onDestroy(() => {
 		hasUnsavedChanges = false
-		socket.off("worldLoreEntryList")
-		socket.off("createWorldLoreEntry")
-		socket.off("updateWorldLoreEntry")
-		socket.off("deleteWorldLoreEntry")
-		socket.off("lorebookBindingList")
-		socket.off("updateWorldLoreEntryPositions")
+		socket.off("lorebooks:worldLoreEntryList")
+		socket.off("lorebooks:createWorldLoreEntry")
+		socket.off("lorebooks:updateWorldLoreEntry")
+		socket.off("lorebooks:deleteWorldLoreEntry")
+		socket.off("lorebooks:bindingList")
+		socket.off("lorebooks:updateWorldLoreEntryPositions")
 	})
 </script>
 

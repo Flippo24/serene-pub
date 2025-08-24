@@ -11,7 +11,7 @@ export const systemSettingsGet: Handler<Sockets.SystemSettings.Get.Params, Socke
 		// This is needed for determining if accounts are enabled
 		try {
 			const settings = await db.query.systemSettings.findFirst({
-				where: eq(schema.systemSettings.id, 1),
+				where: (s, { eq }) => eq(s.id, 1),
 				columns: {
 					id: false // We don't need the ID in the response
 				}
@@ -42,14 +42,14 @@ export const systemSettingsUpdateOllamaManagerEnabled: Handler<Sockets.SystemSet
 	handler: async (socket, params, emitToUser) => {
 		// Check system settings first
 		const systemSettings = await db.query.systemSettings.findFirst({
-			where: eq(schema.systemSettings.id, 1)
+			where: (s, { eq }) => eq(s.id, 1)
 		})
 		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
 
 		// If accounts are disabled, use fallback user 1 if no user is set
 		if (!isAccountsEnabled && !socket.user) {
 			const fallbackUser = await db.query.users.findFirst({
-				where: eq(schema.users.id, 1),
+				where: (u, { eq }) => eq(u.id, 1),
 				columns: { id: true, username: true, isAdmin: true }
 			})
 			if (fallbackUser) {
@@ -57,13 +57,12 @@ export const systemSettingsUpdateOllamaManagerEnabled: Handler<Sockets.SystemSet
 			}
 		}
 
-		// Check if user is admin
+		// Check if user is admin - strict requirement
 		if (!socket.user?.isAdmin) {
 			console.warn(`[systemSettingsUpdateOllamaManagerEnabled] Non-admin user ${socket.user?.id} attempted to update Ollama Manager settings`)
-			emitToUser("systemSettings:updateOllamaManagerEnabled:error", {
-				error: "Access denied: Admin privileges required"
-			})
-			throw new Error("Access denied: Admin privileges required")
+			const res = { error: "Access denied. Only admin users can modify system settings." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can modify system settings.")
 		}
 
 		try {
@@ -106,14 +105,14 @@ export const systemSettingsUpdateOllamaManagerBaseUrl: Handler<Sockets.SystemSet
 	handler: async (socket, params, emitToUser) => {
 		// Check system settings first
 		const systemSettings = await db.query.systemSettings.findFirst({
-			where: eq(schema.systemSettings.id, 1)
+			where: (s, { eq }) => eq(s.id, 1)
 		})
 		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
 
 		// If accounts are disabled, use fallback user 1 if no user is set
 		if (!isAccountsEnabled && !socket.user) {
 			const fallbackUser = await db.query.users.findFirst({
-				where: eq(schema.users.id, 1),
+				where: (u, { eq }) => eq(u.id, 1),
 				columns: { id: true, username: true, isAdmin: true }
 			})
 			if (fallbackUser) {
@@ -121,13 +120,12 @@ export const systemSettingsUpdateOllamaManagerBaseUrl: Handler<Sockets.SystemSet
 			}
 		}
 
-		// Check if user is admin
+		// Check if user is admin - strict requirement
 		if (!socket.user?.isAdmin) {
 			console.warn(`[systemSettingsUpdateOllamaManagerBaseUrl] Non-admin user ${socket.user?.id} attempted to update Ollama Manager base URL`)
-			emitToUser("systemSettings:updateOllamaManagerBaseUrl:error", {
-				error: "Access denied: Admin privileges required"
-			})
-			throw new Error("Access denied: Admin privileges required")
+			const res = { error: "Access denied. Only admin users can modify system settings." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can modify system settings.")
 		}
 
 		try {
@@ -173,14 +171,14 @@ export const systemSettingsUpdateAccountsEnabled: Handler<Sockets.SystemSettings
 	handler: async (socket, params, emitToUser) => {
 		// Check system settings first
 		const systemSettings = await db.query.systemSettings.findFirst({
-			where: eq(schema.systemSettings.id, 1)
+			where: (s, { eq }) => eq(s.id, 1)
 		})
 		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
 
 		// If accounts are disabled, use fallback user 1 if no user is set
 		if (!isAccountsEnabled && !socket.user) {
 			const fallbackUser = await db.query.users.findFirst({
-				where: eq(schema.users.id, 1),
+				where: (u, { eq }) => eq(u.id, 1),
 				columns: { id: true, username: true, isAdmin: true }
 			})
 			if (fallbackUser) {
@@ -188,19 +186,18 @@ export const systemSettingsUpdateAccountsEnabled: Handler<Sockets.SystemSettings
 			}
 		}
 
-		// Check if user is admin
+		// Check if user is admin - strict requirement
 		if (!socket.user?.isAdmin) {
 			console.warn(`[systemSettingsUpdateAccountsEnabled] Non-admin user ${socket.user?.id} attempted to update accounts enabled setting`)
-			emitToUser("systemSettings:updateAccountsEnabled:error", {
-				error: "Access denied: Admin privileges required"
-			})
-			throw new Error("Access denied: Admin privileges required")
+			const res = { error: "Access denied. Only admin users can modify system settings." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can modify system settings.")
 		}
 
 		try {
 			// Check if accounts are already enabled
 			const currentSettings = await db.query.systemSettings.findFirst({
-				where: eq(schema.systemSettings.id, 1)
+				where: (s, { eq }) => eq(s.id, 1)
 			})
 
 			if (currentSettings?.isAccountsEnabled && !params.enabled) {

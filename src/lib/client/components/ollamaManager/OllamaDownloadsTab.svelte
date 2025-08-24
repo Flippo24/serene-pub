@@ -59,7 +59,7 @@
 	}
 
 	function cancelDownload(modelName: string) {
-		socket.emit("ollamaCancelPull", {
+		socket.emit("ollama:cancelPull", {
 			modelName
 		} as Sockets.OllamaCancelPull.Call)
 	}
@@ -90,7 +90,7 @@
 		)
 
 		// Request current download progress from server after setting up listeners
-		socket.emit("ollamaGetDownloadProgress", {})
+		socket.emit("ollama:getDownloadProgress", {})
 	})
 
 	onDestroy(() => {

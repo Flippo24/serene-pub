@@ -1,11 +1,12 @@
 import { db } from "$lib/server/db"
-import { eq, and, desc, isNull } from "drizzle-orm"
+import { eq, and, desc, isNull, or, like, ne } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import type { Handler } from "$lib/shared/events"
 import { z } from "zod"
 import * as passphrase from "$lib/server/providers/users/passphrase"
 import { cookies } from "$lib/server/auth"
 import * as userTokens from "$lib/server/providers/users/tokens"
+import { getUserConfigurations } from "../utils/getUserConfigurations"
 
 // Passphrase validation schema
 const passphraseSchema = z.string()
@@ -23,17 +24,28 @@ const displayNameSchema = z.string()
 export const usersGet: Handler<Sockets.Users.Get.Params, Sockets.Users.Get.Response> = {
 	event: "users:get",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 		const user = await db.query.users.findFirst({
-			where: (u, { eq }) => eq(u.id, userId),
-			with: {
-				activeConnection: true,
-				activeSamplingConfig: true,
-				activeContextConfig: true,
-				activePromptConfig: true
-			}
+			where: (u, { eq }) => eq(u.id, userId)
 		})
-		const res: Sockets.Users.Get.Response = { user: user! }
+		
+		if (!user) {
+			throw new Error("User not found")
+		}
+
+		// Get user configurations with fallback to system defaults
+		const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
+		
+		// Add active configs to user object for compatibility
+		const userWithConfigs = {
+			...user,
+			activeConnection: connection,
+			activeSamplingConfig: sampling,
+			activeContextConfig: contextConfig,
+			activePromptConfig: promptConfig
+		}
+		
+		const res: Sockets.Users.Get.Response = { user: userWithConfigs }
 		emitToUser("users:get", res)
 		return res
 	}
@@ -43,7 +55,7 @@ export const usersCurrent: Handler<Sockets.Users.Get.Params, Sockets.Users.Get.R
 	event: "users:current",
 	handler: async (socket, params, emitToUser) => {
 		// Get the authenticated user from socket (set by auth middleware)
-		const userId = socket.user?.id
+		const userId = socket.user!.id
 		
 		if (!userId) {
 			console.error("[usersCurrent] No authenticated user found on socket")
@@ -52,13 +64,7 @@ export const usersCurrent: Handler<Sockets.Users.Get.Params, Sockets.Users.Get.R
 		}
 
 		const user = await db.query.users.findFirst({
-			where: (u, { eq }) => eq(u.id, userId),
-			with: {
-				activeConnection: true,
-				activeSamplingConfig: true,
-				activeContextConfig: true,
-				activePromptConfig: true
-			}
+			where: (u, { eq }) => eq(u.id, userId)
 		})
 
 		if (!user) {
@@ -67,7 +73,19 @@ export const usersCurrent: Handler<Sockets.Users.Get.Params, Sockets.Users.Get.R
 			throw new Error("User not found")
 		}
 
-		const res: Sockets.Users.Get.Response = { user }
+		// Get user configurations with fallback to system defaults
+		const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
+		
+		// Add active configs to user object for compatibility
+		const userWithConfigs = {
+			...user,
+			activeConnection: connection,
+			activeSamplingConfig: sampling,
+			activeContextConfig: contextConfig,
+			activePromptConfig: promptConfig
+		}
+
+		const res: Sockets.Users.Get.Response = { user: userWithConfigs }
 		emitToUser("users:current", res)
 		return res
 	}
@@ -76,7 +94,7 @@ export const usersCurrent: Handler<Sockets.Users.Get.Params, Sockets.Users.Get.R
 export const usersSetTheme: Handler<Sockets.Users.SetTheme.Params, Sockets.Users.SetTheme.Response> = {
 	event: "users:setTheme",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 		const { theme, darkMode } = params
 
 		if (!theme) {
@@ -100,7 +118,7 @@ export const usersSetTheme: Handler<Sockets.Users.SetTheme.Params, Sockets.Users
 export const usersCurrentSetPassphrase: Handler<Sockets.Users.SetPassphrase.Params, Sockets.Users.SetPassphrase.Response> = {
 	event: "users:current:setPassphrase",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id
+		const userId = socket.user!.id
 		
 		if (!userId) {
 			console.error("[usersCurrentSetPassphrase] No authenticated user found on socket")
@@ -142,7 +160,7 @@ export const usersCurrentSetPassphrase: Handler<Sockets.Users.SetPassphrase.Para
 export const usersCurrentHasPassphrase: Handler<Sockets.Users.HasPassphrase.Params, Sockets.Users.HasPassphrase.Response> = {
 	event: "users:current:hasPassphrase",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id
+		const userId = socket.user!.id
 		
 		if (!userId) {
 			console.error("[usersCurrentHasPassphrase] No authenticated user found on socket")
@@ -179,17 +197,28 @@ export async function user(
 	message: {},
 	emitToUser: (event: string, data: any) => void
 ) {
-	const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+	const userId = socket.user!.id
 	const user = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, userId),
-		with: {
-			activeConnection: true,
-			activeSamplingConfig: true,
-			activeContextConfig: true,
-			activePromptConfig: true
-		}
+		where: (u, { eq }) => eq(u.id, userId)
 	})
-	socket.server.to("user_" + userId).emit("user", { user })
+	
+	if (!user) {
+		throw new Error("User not found")
+	}
+
+	// Get user configurations with fallback to system defaults
+	const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
+	
+	// Add active configs to user object for compatibility
+	const userWithConfigs = {
+		...user,
+		activeConnection: connection,
+		activeSamplingConfig: sampling,
+		activeContextConfig: contextConfig,
+		activePromptConfig: promptConfig
+	}
+	
+	socket.server.to("user_" + userId).emit("user", { user: userWithConfigs })
 }
 
 export async function setTheme(
@@ -203,7 +232,7 @@ export async function setTheme(
 export const usersCurrentUpdateDisplayName: Handler<Sockets.Users.UpdateDisplayName.Params, Sockets.Users.UpdateDisplayName.Response> = {
 	event: "users:current:updateDisplayName",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id
+		const userId = socket.user!.id
 
 		if (!userId) {
 			console.error("[usersCurrentUpdateDisplayName] No authenticated user found on socket")
@@ -250,7 +279,7 @@ export const usersCurrentUpdateDisplayName: Handler<Sockets.Users.UpdateDisplayN
 export const usersCurrentChangePassphrase: Handler<Sockets.Users.ChangePassphrase.Params, Sockets.Users.ChangePassphrase.Response> = {
 	event: "users:current:changePassphrase",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id
+		const userId = socket.user!.id
 
 		if (!userId) {
 			console.error("[usersCurrentChangePassphrase] No authenticated user found on socket")
@@ -333,6 +362,177 @@ export const usersCurrentLogout: Handler<Sockets.Users.Logout.Params, Sockets.Us
 	}
 }
 
+export const usersList: Handler<Sockets.Users.List.Params, Sockets.Users.List.Response> = {
+	event: "users:list",
+	handler: async (socket, params, emitToUser) => {
+		const currentUserId = socket.user!.id
+		
+		// Get current user to check admin status
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUserId)
+		})
+
+		if (!currentUser) {
+			throw new Error("User not found")
+		}
+
+		// Build base query
+		let whereCondition = (u: any, { eq, and, or, like }: any) => {
+			let conditions = [eq(u.isDeleted, false)]
+			
+			// Add search filter if provided
+			if (params.search) {
+				const searchPattern = `%${params.search.toLowerCase()}%`
+				conditions.push(
+					or(
+						like(u.username, searchPattern),
+						like(u.displayName, searchPattern)
+					)
+				)
+			}
+			
+			return conditions.length > 1 ? and(...conditions) : conditions[0]
+		}
+
+		const users = await db.query.users.findMany({
+			where: whereCondition,
+			orderBy: (u, { asc }) => [asc(u.username)]
+		})
+
+		const res: Sockets.Users.List.Response = { users }
+		emitToUser("users:list", res)
+		return res
+	}
+}
+
+export const usersCreate: Handler<Sockets.Users.Create.Params, Sockets.Users.Create.Response> = {
+	event: "users:create",
+	handler: async (socket, params, emitToUser) => {
+		const currentUserId = socket.user!.id
+		
+		// Get current user to check admin status
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUserId)
+		})
+
+		if (!currentUser || !currentUser.isAdmin) {
+			throw new Error("Admin privileges required")
+		}
+
+		// Check if username already exists
+		const existingUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.username, params.username)
+		})
+
+		if (existingUser) {
+			throw new Error("Username already exists")
+		}
+
+		const [newUser] = await db.insert(schema.users).values({
+			username: params.username,
+			displayName: params.displayName || null,
+			isAdmin: params.isAdmin || false
+		}).returning()
+
+		const res: Sockets.Users.Create.Response = { user: newUser }
+		emitToUser("users:create", res)
+		return res
+	}
+}
+
+export const usersUpdate: Handler<Sockets.Users.Update.Params, Sockets.Users.Update.Response> = {
+	event: "users:update",
+	handler: async (socket, params, emitToUser) => {
+		const currentUserId = socket.user!.id
+		
+		// Get current user to check admin status
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUserId)
+		})
+
+		if (!currentUser || !currentUser.isAdmin) {
+			throw new Error("Admin privileges required")
+		}
+
+		// Check if user exists
+		const targetUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, params.id)
+		})
+
+		if (!targetUser) {
+			throw new Error("User not found")
+		}
+
+		// If username is being changed, check if it already exists
+		if (params.username && params.username !== targetUser.username) {
+			const existingUser = await db.query.users.findFirst({
+				where: (u, { eq, and, ne }) => and(
+					eq(u.username, params.username),
+					ne(u.id, params.id)
+				)
+			})
+
+			if (existingUser) {
+				throw new Error("Username already exists")
+			}
+		}
+
+		// Build update data
+		const updateData: any = {}
+		if (params.username !== undefined) updateData.username = params.username
+		if (params.displayName !== undefined) updateData.displayName = params.displayName
+		if (params.isAdmin !== undefined) updateData.isAdmin = params.isAdmin
+
+		const [updatedUser] = await db.update(schema.users)
+			.set(updateData)
+			.where(eq(schema.users.id, params.id))
+			.returning()
+
+		const res: Sockets.Users.Update.Response = { user: updatedUser }
+		emitToUser("users:update", res)
+		return res
+	}
+}
+
+export const usersDelete: Handler<Sockets.Users.Delete.Params, Sockets.Users.Delete.Response> = {
+	event: "users:delete",
+	handler: async (socket, params, emitToUser) => {
+		const currentUserId = socket.user!.id
+		
+		// Get current user to check admin status
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUserId)
+		})
+
+		if (!currentUser || !currentUser.isAdmin) {
+			throw new Error("Admin privileges required")
+		}
+
+		// Check if user exists
+		const targetUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, params.id)
+		})
+
+		if (!targetUser) {
+			throw new Error("User not found")
+		}
+
+		// Prevent deleting yourself
+		if (params.id === currentUserId) {
+			throw new Error("Cannot delete your own account")
+		}
+
+		// Soft delete the user
+		await db.update(schema.users)
+			.set({ isDeleted: true })
+			.where(eq(schema.users.id, params.id))
+
+		const res: Sockets.Users.Delete.Response = { success: true }
+		emitToUser("users:delete", res)
+		return res
+	}
+}
+
 // Registration function for all user handlers
 export function registerUserHandlers(
 	socket: any,
@@ -347,4 +547,8 @@ export function registerUserHandlers(
 	register(socket, usersCurrentUpdateDisplayName, emitToUser)
 	register(socket, usersCurrentChangePassphrase, emitToUser)
 	register(socket, usersCurrentLogout, emitToUser)
+	register(socket, usersList, emitToUser)
+	register(socket, usersCreate, emitToUser)
+	register(socket, usersUpdate, emitToUser)
+	register(socket, usersDelete, emitToUser)
 }

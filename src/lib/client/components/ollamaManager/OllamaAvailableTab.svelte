@@ -66,9 +66,9 @@
 	function searchAvailableModels() {
 		isSearching = true
 		if (selectedSource === OllamaModelSearchSource.RECOMMENDED) {
-			socket.emit("ollamaRecommendedModels", {})
+			socket.emit("ollama:recommendedModels", {})
 		} else {
-			socket.emit("ollamaSearchAvailableModels", {
+			socket.emit("ollama:searchAvailableModels", {
 				search: searchString.trim(),
 				source: selectedSource
 			} as Sockets.OllamaSearchAvailableModels.Call)
@@ -99,11 +99,9 @@
 		currentlyDownloading.add(modelId)
 
 		// Emit the pull request to Ollama
-		socket.emit("ollamaPullModel", {
-			modelName: pullOption.pull
-		} as Sockets.OllamaPullModel.Call)
-
-		// Close modal and switch to downloads tab
+		socket.emit("ollama:pullModel", {
+			modelName: model.name
+		} as Sockets.OllamaPullModel.Call)		// Close modal and switch to downloads tab
 		closeHuggingFaceModal()
 		onDownloadStart?.(pullOption.pull)
 	}
@@ -140,11 +138,9 @@
 		currentlyDownloading.add(cleanedModelName)
 
 		// Emit the pull request to Ollama
-		socket.emit("ollamaPullModel", {
-			modelName: cleanedModelName
-		} as Sockets.OllamaPullModel.Call)
-
-		// Close modal and switch to downloads tab
+		socket.emit("ollama:pullModel", {
+			modelName: model
+		} as Sockets.OllamaPullModel.Call)		// Close modal and switch to downloads tab
 		closeOllamaManualPullModal()
 		onDownloadStart?.(cleanedModelName)
 	}
@@ -160,13 +156,13 @@
 	})
 
 	async function refreshInstalled() {
-		socket.emit("ollamaModelsList", {})
+		socket.emit("ollama:modelsList", {})
 	}
 
 	onMount(() => {
 		// Socket event listeners
 		socket.on(
-			"ollamaModelsList",
+			"ollama:modelsList",
 			(message: Sockets.OllamaModelsList.Response) => {
 				installedModels = message.models
 			}
@@ -199,12 +195,12 @@
 		)
 
 		socket.on(
-			"ollamaPullModel",
+			"ollama:pullModel",
 			(message: Sockets.OllamaPullModel.Response) => {
 				// Handle model pull completion/error only - no progress handling
 				console.log("Pull model response:", message)
 				if (message.success) {
-					socket.emit("ollamaModelsList", {})
+					socket.emit("ollama:modelsList", {})
 					toaster.success({ title: "Model downloaded successfully" })
 					closeHuggingFaceModal()
 				} else if (message.error) {
@@ -218,10 +214,10 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollamaModelsList")
+		socket.off("ollama:modelsList")
 		socket.off("ollamaSearchAvailableModels")
 		socket.off("ollamaRecommendedModels")
-		socket.off("ollamaPullModel")
+		socket.off("ollama:pullModel")
 		socket.off("ollamaCancelPull")
 	})
 </script>
@@ -367,7 +363,7 @@
 									model.pull
 								)
 								currentlyDownloading.add(model.pull)
-								socket.emit("ollamaPullModel", {
+								socket.emit("ollama:pullModel", {
 									modelName: model.pull
 								} as Sockets.OllamaPullModel.Call)
 								onDownloadStart?.(model.pull)

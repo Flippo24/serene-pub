@@ -172,7 +172,7 @@
 			const req: Sockets.CreateHistoryEntry.Call = {
 				historyEntry: data
 			}
-			socket.emit("createHistoryEntry", req)
+			socket.emit("lorebooks:createHistoryEntry", req)
 			newEntriesData = newEntriesData.filter(
 				(e) => e._uuid !== entry._uuid
 			)
@@ -181,7 +181,7 @@
 			const req: Sockets.UpdateHistoryEntry.Call = {
 				historyEntry: data
 			}
-			socket.emit("updateHistoryEntry", req)
+			socket.emit("lorebooks:updateHistoryEntry", req)
 			delete editEntriesData[entry.id]
 		}
 	}
@@ -218,7 +218,7 @@
 
 	function onClickIterateNextEntry() {
 		const req: Sockets.IterateNextHistoryEntry.Call = { lorebookId }
-		socket.emit("iterateNextHistoryEntry", req)
+		socket.emit("lorebooks:iterateNextHistoryEntry", req)
 	}
 
 	function previewContent({ entry }: { entry: SelectHistoryEntry }): string {
@@ -251,7 +251,7 @@
 
 	function onDeleteConfirm() {
 		showDeleteConfirmModal = false
-		socket.emit("deleteHistoryEntry", {
+		socket.emit("lorebooks:deleteHistoryEntry", {
 			id: deleteEntryId,
 			lorebookId
 		})
@@ -265,7 +265,7 @@
 
 	onMount(() => {
 		socket.on(
-			"historyEntryList",
+			"lorebooks:historyEntryList",
 			async (msg: Sockets.HistoryEntryList.Response) => {
 				if (
 					msg.historyEntryList.length &&
@@ -278,7 +278,7 @@
 		)
 
 		socket.on(
-			"createHistoryEntry",
+			"lorebooks:createHistoryEntry",
 			(msg: Sockets.CreateHistoryEntry.Response) => {
 				if (
 					msg.historyEntry &&
@@ -290,7 +290,7 @@
 		)
 
 		socket.on(
-			"updateHistoryEntry",
+			"lorebooks:updateHistoryEntry",
 			(msg: Sockets.UpdateHistoryEntry.Response) => {
 				if (
 					msg.historyEntry &&
@@ -301,7 +301,7 @@
 			}
 		)
 		socket.on(
-			"deleteHistoryEntry",
+			"lorebooks:deleteHistoryEntry",
 			(msg: Sockets.DeleteHistoryEntry.Response) => {
 				if (msg.id && historyEntryList.some((e) => e.id === msg.id)) {
 					toaster.success({ title: "History Entry deleted" })
@@ -309,7 +309,7 @@
 			}
 		)
 		socket.on(
-			"lorebookBindingList",
+			"lorebooks:bindingList",
 			async (msg: Sockets.LorebookBindingList.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					lorebookBindingList = [...msg.lorebookBindingList]
@@ -318,7 +318,7 @@
 			}
 		)
 		socket.on(
-			"iterateNextHistoryEntry",
+			"lorebooks:iterateNextHistoryEntry",
 			(msg: Sockets.IterateNextHistoryEntry.Response) => {
 				toaster.success({
 					title: "The story's date has moved forward"
@@ -326,22 +326,22 @@
 			}
 		)
 		const req: Sockets.HistoryEntryList.Call = { lorebookId: lorebookId }
-		socket.emit("historyEntryList", req)
+		socket.emit("lorebooks:historyEntryList", req)
 		const bindingReq: Sockets.LorebookBindingList.Call = {
 			lorebookId: lorebookId
 		}
-		socket.emit("lorebookBindingList", bindingReq)
+		socket.emit("lorebooks:bindingList", bindingReq)
 		isReady = true
 	})
 
 	onDestroy(() => {
 		hasUnsavedChanges = false
-		socket.off("historyEntryList")
-		socket.off("createHistoryEntry")
-		socket.off("updateHistoryEntry")
-		socket.off("deleteHistoryEntry")
-		socket.off("lorebookBindingList")
-		socket.off("iterateNextHistoryEntry")
+		socket.off("lorebooks:historyEntryList")
+		socket.off("lorebooks:createHistoryEntry")
+		socket.off("lorebooks:updateHistoryEntry")
+		socket.off("lorebooks:deleteHistoryEntry")
+		socket.off("lorebooks:bindingList")
+		socket.off("lorebooks:iterateNextHistoryEntry")
 	})
 
 	// --- Reactive sorted/filter logic for display and current date ---

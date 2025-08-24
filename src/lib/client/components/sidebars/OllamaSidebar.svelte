@@ -46,7 +46,7 @@
 
 	// Check connection to Ollama
 	function checkConnection() {
-		socket.emit("ollamaVersion", {})
+		socket.emit("ollama:version", {})
 	}
 
 	// Save base URL
@@ -57,7 +57,7 @@
 		}
 
 		isSavingBaseUrl = true
-		socket.emit("ollamaSetBaseUrl", {
+		socket.emit("ollama:setBaseUrl", {
 			baseUrl: baseUrlField.trim()
 		})
 	}

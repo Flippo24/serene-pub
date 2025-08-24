@@ -898,6 +898,43 @@ declare global {
 					success: boolean
 				}
 			}
+			namespace List {
+				interface Params {
+					search?: string
+				}
+				interface Response {
+					users: SelectUser[]
+				}
+			}
+			namespace Create {
+				interface Params {
+					username: string
+					displayName?: string
+					isAdmin?: boolean
+				}
+				interface Response {
+					user: SelectUser
+				}
+			}
+			namespace Update {
+				interface Params {
+					id: number
+					username?: string
+					displayName?: string
+					isAdmin?: boolean
+				}
+				interface Response {
+					user: SelectUser
+				}
+			}
+			namespace Delete {
+				interface Params {
+					id: number
+				}
+				interface Response {
+					success: boolean
+				}
+			}
 		}
 
 		// Ollama namespace

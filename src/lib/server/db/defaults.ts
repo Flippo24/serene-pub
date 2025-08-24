@@ -272,9 +272,6 @@ Example dialogue:
 			{
 				id: 1,
 				username: "admin",
-				activeSamplingConfigId: 1,
-				activeContextConfigId: 1,
-				activePromptConfigId: 1,
 				isAdmin: true
 			}
 		]

@@ -15,6 +15,7 @@
 	let { onclose = $bindable() }: Props = $props()
 
 	let userCtx: { user: SelectUser } = getContext("userCtx")
+	let userSettingsCtx: UserSettingsCtx = getContext("userSettingsCtx")
 
 	const socket = useTypedSocket()
 
@@ -33,6 +34,18 @@
 	let showDeleteModal = $state(false)
 	let confirmCloseSidebarResolve: ((v: boolean) => void) | null = null
 	let editingField: string | null = $state(null)
+
+	// Computed property for binding to the active sampling config ID
+	let activeConfigId = $derived.by({
+		get() {
+			return userSettingsCtx.settings?.activeSamplingConfigId || null
+		},
+		set(value: number | null) {
+			if (userSettingsCtx.settings) {
+				userSettingsCtx.settings.activeSamplingConfigId = value
+			}
+		}
+	})
 
 	// Zod validation schema
 	const samplingConfigSchema = z.object({
@@ -215,7 +228,7 @@
 
 	function confirmDelete() {
 		socket.emit("samplingConfigs:delete", {
-			id: userCtx.user.activeSamplingConfigId
+			id: userSettingsCtx.settings?.activeSamplingConfigId
 		})
 		showDeleteModal = false
 	}
@@ -269,7 +282,7 @@
 			(message: Sockets.SamplingConfigs.List.Response) => {
 				samplingConfigsList = message.samplingConfigsList
 				if (
-					!userCtx.user.activeSamplingConfigId &&
+					!userSettingsCtx.settings?.activeSamplingConfigId &&
 					samplingConfigsList.length > 0
 				) {
 					socket.emit("samplingConfigs:setUserActive", {
@@ -297,7 +310,7 @@
 			}
 		)
 
-		socket.emit("samplingConfigs:get", { id: userCtx.user.activeSamplingConfigId })
+		socket.emit("samplingConfigs:get", { id: userSettingsCtx.settings?.activeSamplingConfigId })
 		socket.emit("samplingConfigs:list", {})
 	})
 
@@ -385,7 +398,7 @@
 			<select
 				class="select select-sm bg-background border-muted rounded border"
 				onchange={handleSelectChange}
-				bind:value={userCtx.user.activeSamplingConfigId}
+				bind:value={activeConfigId}
 				disabled={unsavedChanges}
 			>
 				{#each samplingConfigsList.filter((w) => w.isImmutable) as w}

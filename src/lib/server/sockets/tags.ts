@@ -6,7 +6,9 @@ import type { Handler } from "$lib/shared/events"
 export const tagsList: Handler<Sockets.Tags.List.Params, Sockets.Tags.List.Response> = {
 	event: "tags:list",
 	handler: async (socket, params, emitToUser) => {
+		const userId = socket.user!.id
 		const tagsList = await db.query.tags.findMany({
+			where: (t, { eq }) => eq(t.userId, userId),
 			orderBy: (t, { asc }) => asc(t.name)
 		})
 		const res: Sockets.Tags.List.Response = { tagsList }
@@ -19,9 +21,13 @@ export const tagsCreate: Handler<Sockets.Tags.Create.Params, Sockets.Tags.Create
 	event: "tags:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
 			const [tag] = await db
 				.insert(schema.tags)
-				.values(params.tag)
+				.values({
+					...params.tag,
+					userId
+				})
 				.returning()
 
 			const res: Sockets.Tags.Create.Response = { tag }
@@ -44,6 +50,7 @@ export const tagsUpdate: Handler<Sockets.Tags.Update.Params, Sockets.Tags.Update
 	event: "tags:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
 			const [tag] = await db
 				.update(schema.tags)
 				.set({
@@ -51,7 +58,12 @@ export const tagsUpdate: Handler<Sockets.Tags.Update.Params, Sockets.Tags.Update
 					description: params.tag.description,
 					colorPreset: params.tag.colorPreset
 				})
-				.where(eq(schema.tags.id, params.tag.id))
+				.where(
+					and(
+						eq(schema.tags.id, params.tag.id),
+						eq(schema.tags.userId, userId)
+					)
+				)
 				.returning()
 
 			const res: Sockets.Tags.Update.Response = { tag }
@@ -74,7 +86,9 @@ export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete
 	event: "tags:delete",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			// First delete all character tag associations
+			const userId = socket.user!.id
+			
+			// First delete all character tag associations for this user's tags
 			await db
 				.delete(schema.characterTags)
 				.where(eq(schema.characterTags.tagId, params.id))
@@ -89,8 +103,15 @@ export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete
 				.delete(schema.lorebookTags)
 				.where(eq(schema.lorebookTags.tagId, params.id))
 
-			// Then delete the tag
-			await db.delete(schema.tags).where(eq(schema.tags.id, params.id))
+			// Then delete the tag (only if owned by user)
+			await db
+				.delete(schema.tags)
+				.where(
+					and(
+						eq(schema.tags.id, params.id),
+						eq(schema.tags.userId, userId)
+					)
+				)
 
 			const res: Sockets.Tags.Delete.Response = { success: "Tag deleted successfully" }
 			emitToUser("tags:delete", res)
@@ -111,52 +132,58 @@ export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete
 export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Sockets.Tags.GetRelatedData.Response> = {
 	event: "tags:getRelatedData",
 	handler: async (socket, params, emitToUser) => {
-		// Get the tag
+		const userId = socket.user!.id
+		
+		// Get the tag (only if owned by user)
 		const tag = await db.query.tags.findFirst({
-			where: eq(schema.tags.id, params.tagId)
+			where: (t, { and, eq }) => 
+				and(eq(t.id, params.tagId), eq(t.userId, userId))
 		})
 
 		if (!tag) {
 			throw new Error("Tag not found")
 		}
 
-		// Get related characters
+		// Get related characters (only from user's characters)
 		const characters = await db.query.characterTags.findMany({
-			where: eq(schema.characterTags.tagId, params.tagId),
+			where: (ct, { eq }) => eq(ct.tagId, params.tagId),
 			with: {
 				character: {
 					columns: {
 						id: true,
 						name: true,
 						avatar: true
-					}
+					},
+					where: (c, { eq }) => eq(c.userId, userId)
 				}
 			}
 		})
 
-		// Get related personas
+		// Get related personas (only from user's personas)
 		const personas = await db.query.personaTags.findMany({
-			where: eq(schema.personaTags.tagId, params.tagId),
+			where: (pt, { eq }) => eq(pt.tagId, params.tagId),
 			with: {
 				persona: {
 					columns: {
 						id: true,
 						name: true,
 						avatar: true
-					}
+					},
+					where: (p, { eq }) => eq(p.userId, userId)
 				}
 			}
 		})
 
-		// Get related lorebooks
+		// Get related lorebooks (only from user's lorebooks)
 		const lorebooks = await db.query.lorebookTags.findMany({
-			where: eq(schema.lorebookTags.tagId, params.tagId),
+			where: (lt, { eq }) => eq(lt.tagId, params.tagId),
 			with: {
 				lorebook: {
 					columns: {
 						id: true,
 						name: true
-					}
+					},
+					where: (l, { eq }) => eq(l.userId, userId)
 				}
 			}
 		})
@@ -164,9 +191,9 @@ export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Soc
 		const res: Sockets.Tags.GetRelatedData.Response = {
 			tagData: {
 				tag,
-				characters: characters.map(ct => ct.character),
-				personas: personas.map(pt => pt.persona),
-				lorebooks: lorebooks.map(lt => lt.lorebook)
+				characters: characters.map(ct => ct.character).filter(Boolean),
+				personas: personas.map(pt => pt.persona).filter(Boolean),
+				lorebooks: lorebooks.map(lt => lt.lorebook).filter(Boolean)
 			}
 		}
 		emitToUser("tags:getRelatedData", res)
@@ -178,6 +205,23 @@ export const tagsAddToCharacter: Handler<Sockets.Tags.AddToCharacter.Params, Soc
 	event: "tags:addToCharacter",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
+			
+			// Verify that the user owns both the tag and the character
+			const tag = await db.query.tags.findFirst({
+				where: (t, { and, eq }) => 
+					and(eq(t.id, params.tagId), eq(t.userId, userId))
+			})
+			
+			const character = await db.query.characters.findFirst({
+				where: (c, { and, eq }) => 
+					and(eq(c.id, params.characterId), eq(c.userId, userId))
+			})
+			
+			if (!tag || !character) {
+				throw new Error("Tag or character not found or not owned by user")
+			}
+			
 			await db
 				.insert(schema.characterTags)
 				.values({
@@ -203,6 +247,23 @@ export const tagsRemoveFromCharacter: Handler<Sockets.Tags.RemoveFromCharacter.P
 	event: "tags:removeFromCharacter",
 	handler: async (socket, params, emitToUser) => {
 		try {
+			const userId = socket.user!.id
+			
+			// Verify that the user owns both the tag and the character
+			const tag = await db.query.tags.findFirst({
+				where: (t, { and, eq }) => 
+					and(eq(t.id, params.tagId), eq(t.userId, userId))
+			})
+			
+			const character = await db.query.characters.findFirst({
+				where: (c, { and, eq }) => 
+					and(eq(c.id, params.characterId), eq(c.userId, userId))
+			})
+			
+			if (!tag || !character) {
+				throw new Error("Tag or character not found or not owned by user")
+			}
+			
 			await db
 				.delete(schema.characterTags)
 				.where(

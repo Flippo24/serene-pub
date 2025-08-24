@@ -21,6 +21,35 @@ export const users = pgTable("users", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
 	username: text("username").notNull(),
 	displayName: text("display_name"),
+	theme: text("theme").notNull().default("hamlindigo"), // Remove next
+	darkMode: boolean("dark_mode").notNull().default(true), // Remove next
+	isAdmin: boolean("is_admin").notNull().default(false),
+	isDeleted: boolean("is_deleted").notNull().default(false),
+	createdAt: date("created_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`),
+	updatedAt: date("updated_at")
+		.notNull()
+		.default(sql`(CURRENT_TIMESTAMP)`)
+		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
+})
+
+export const userRelations = relations(users, ({ many, one }) => ({
+	lorebooks: many(lorebooks),
+	characters: many(characters),
+	chats: many(chats),
+	chatGuests: many(chatGuests),
+	tags: many(tags),
+	personas: many(personas),
+	userSettings: one(userSettings),
+	passphrases: many(passphrases)
+}))
+
+export const userSettings = pgTable("user_settings", {
+	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
 	activeConnectionId: integer("active_connection_id").references(
 		() => connections.id,
 		{
@@ -45,51 +74,6 @@ export const users = pgTable("users", {
 			onDelete: "set null"
 		}
 	),
-	theme: text("theme").notNull().default("hamlindigo"), // Remove next
-	darkMode: boolean("dark_mode").notNull().default(true), // Remove next
-	isAdmin: boolean("is_admin").notNull().default(false),
-	isDeleted: boolean("is_deleted").notNull().default(false),
-	createdAt: date("created_at")
-		.notNull()
-		.default(sql`(CURRENT_TIMESTAMP)`),
-	updatedAt: date("updated_at")
-		.notNull()
-		.default(sql`(CURRENT_TIMESTAMP)`)
-		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
-})
-
-export const userRelations = relations(users, ({ many, one }) => ({
-	lorebooks: many(lorebooks),
-	characters: many(characters),
-	chats: many(chats),
-	chatGuests: many(chatGuests),
-	tags: many(tags),
-	activeSamplingConfig: one(samplingConfigs, {
-		fields: [users.activeSamplingConfigId],
-		references: [samplingConfigs.id]
-	}),
-	activeConnection: one(connections, {
-		fields: [users.activeConnectionId],
-		references: [connections.id]
-	}),
-	activeContextConfig: one(contextConfigs, {
-		fields: [users.activeContextConfigId],
-		references: [contextConfigs.id]
-	}),
-	activePromptConfig: one(promptConfigs, {
-		fields: [users.activePromptConfigId],
-		references: [promptConfigs.id]
-	}),
-	personas: many(personas),
-	userSettings: one(userSettings),
-	passphrases: many(passphrases)
-}))
-
-export const userSettings = pgTable("user_settings", {
-	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-	userId: integer("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
 	theme: text("theme").notNull().default("hamlindigo"),
 	darkMode: boolean("dark_mode").notNull().default(true),
 	showHomePageBanner: boolean("show_home_page_banner").default(true),
@@ -115,6 +99,22 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
 	user: one(users, {
 		fields: [userSettings.userId],
 		references: [users.id]
+	}),
+	activeConnection: one(connections, {
+		fields: [userSettings.activeConnectionId],
+		references: [connections.id]
+	}),
+	activeSamplingConfig: one(samplingConfigs, {
+		fields: [userSettings.activeSamplingConfigId],
+		references: [samplingConfigs.id]
+	}),
+	activeContextConfig: one(contextConfigs, {
+		fields: [userSettings.activeContextConfigId],
+		references: [contextConfigs.id]
+	}),
+	activePromptConfig: one(promptConfigs, {
+		fields: [userSettings.activePromptConfigId],
+		references: [promptConfigs.id]
 	})
 }))
 
@@ -275,7 +275,7 @@ export const lorebooks = pgTable(
 		updatedAt: date("updated_at")
 			.notNull()
 			.default(sql`(CURRENT_TIMESTAMP)`)
-			.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`)
+			.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
 	},
 	(table) => ({})
 )
@@ -881,6 +881,42 @@ export const chatGuestsRelations = relations(chatGuests, ({ one }) => ({
  */
 export const systemSettings = pgTable("system_settings", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+	defaultConnectionId: integer("default_connection_id").references(
+		() => connections.id,
+		{
+			onDelete: "set null"
+		}
+	),
+	lockConnection: boolean("lock_connection")
+		.notNull()
+		.default(false),
+	defaultSamplingConfigId: integer("default_sampling_id").references(
+		() => samplingConfigs.id,
+		{
+			onDelete: "set null"
+		}
+	),
+	lockSamplingConfig: boolean("lock_sampling_config")
+		.notNull()
+		.default(false),
+	defaultContextConfigId: integer("default_context_config_id").references(
+		() => contextConfigs.id,
+		{
+			onDelete: "set null"
+		}
+	),
+	lockContextConfig: boolean("lock_context_config")
+		.notNull()
+		.default(false),
+	defaultPromptConfigId: integer("default_prompt_config_id").references(
+		() => promptConfigs.id,
+		{
+			onDelete: "set null"
+		}
+	),
+	lockPromptConfig: boolean("lock_prompt_config")
+		.notNull()
+		.default(false),
 	ollamaManagerEnabled: boolean("ollama_manager_enabled")
 		.notNull()
 		.default(false),
@@ -891,3 +927,22 @@ export const systemSettings = pgTable("system_settings", {
 		.notNull()
 		.default(false),
 })
+
+export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
+	defaultConnection: one(connections, {
+		fields: [systemSettings.defaultConnectionId],
+		references: [connections.id]
+	}),
+	defaultSamplingConfig: one(samplingConfigs, {
+		fields: [systemSettings.defaultSamplingConfigId],
+		references: [samplingConfigs.id]
+	}),
+	defaultContextConfig: one(contextConfigs, {
+		fields: [systemSettings.defaultContextConfigId],
+		references: [contextConfigs.id]
+	}),
+	defaultPromptConfig: one(promptConfigs, {
+		fields: [systemSettings.defaultPromptConfigId],
+		references: [promptConfigs.id]
+	})
+}))

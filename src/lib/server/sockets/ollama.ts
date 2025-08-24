@@ -1,7 +1,6 @@
 import { db } from "$lib/server/db"
 import { and, eq } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
-import type { InsertConnection } from "$lib/server/db/schema"
 import { user as loadUser } from "./users"
 import { connectionsList } from "./connections"
 import { Ollama } from "ollama"
@@ -44,6 +43,12 @@ export const ollamaGetDownloadProgress: Handler<Sockets.Ollama.GetDownloadProgre
 export const ollamaSetBaseUrl: Handler<Sockets.Ollama.SetBaseUrl.Params, Sockets.Ollama.SetBaseUrl.Response> = {
 	event: "ollama:setBaseUrl",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage Ollama settings." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage Ollama settings.")
+		}
+		
 		try {
 			// This would typically update the active Ollama connection's baseUrl
 			// For now, we'll just validate the URL format
@@ -77,6 +82,12 @@ export const ollamaSetBaseUrl: Handler<Sockets.Ollama.SetBaseUrl.Params, Sockets
 export const ollamaModelsList: Handler<Sockets.Ollama.ModelsList.Params, Sockets.Ollama.ModelsList.Response> = {
 	event: "ollama:modelsList",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage Ollama models." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage Ollama models.")
+		}
+		
 		try {
 			const { ollamaManagerBaseUrl: baseUrl } =
 				(await db.query.systemSettings.findFirst())!
@@ -103,6 +114,12 @@ export const ollamaModelsList: Handler<Sockets.Ollama.ModelsList.Params, Sockets
 export const ollamaDeleteModelHandler: Handler<Sockets.Ollama.DeleteModel.Params, Sockets.Ollama.DeleteModel.Response> = {
 	event: "ollama:deleteModel",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can delete Ollama models." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can delete Ollama models.")
+		}
+		
 		try {
 			const { ollamaManagerBaseUrl: baseUrl } =
 				(await db.query.systemSettings.findFirst())!
@@ -137,7 +154,7 @@ export const ollamaDeleteModelHandler: Handler<Sockets.Ollama.DeleteModel.Params
 export const ollamaConnectModelHandler: Handler<Sockets.Ollama.ConnectModel.Params, Sockets.Ollama.ConnectModel.Response> = {
 	event: "ollama:connectModel",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 
 		try {
 			let existingConnection = await db.query.connections.findFirst({
@@ -164,12 +181,23 @@ export const ollamaConnectModelHandler: Handler<Sockets.Ollama.ConnectModel.Para
 				existingConnection = newConnection
 			}
 
+			// Find or create user settings
+			let userSettings = await db.query.userSettings.findFirst({
+				where: (us, { eq }) => eq(us.userId, userId)
+			})
+
+			if (!userSettings) {
+				await db.insert(schema.userSettings).values({
+					userId: userId
+				})
+			}
+
 			await db
-				.update(schema.users)
+				.update(schema.userSettings)
 				.set({
 					activeConnectionId: existingConnection.id
 				})
-				.where(eq(schema.users.id, userId))
+				.where(eq(schema.userSettings.userId, userId))
 
 			await loadUser(socket, {}, emitToUser)
 			await connectionsList.handler(socket, {}, emitToUser)
@@ -218,6 +246,12 @@ export const ollamaListRunningModelsHandler: Handler<Sockets.Ollama.ListRunningM
 export const ollamaPullModelHandler: Handler<Sockets.Ollama.PullModel.Params, Sockets.Ollama.PullModel.Response> = {
 	event: "ollama:pullModel",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can download Ollama models." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can download Ollama models.")
+		}
+		
 		try {
 			// Remove from cancelingPulls if it exists
 			if (cancelingPulls.includes(params.modelName)) {

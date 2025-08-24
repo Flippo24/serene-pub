@@ -15,10 +15,11 @@
 
 	const socket = useTypedSocket()
 	let userCtx: { user: SelectUser } = getContext("userCtx")
+	let userSettingsCtx: UserSettingsCtx = getContext("userSettingsCtx")
 	let configsList: Sockets.ContextConfigs.List.Response["contextConfigsList"] =
 		$state([])
 	let selectedConfigId: number | undefined = $state(
-		userCtx.user.activeContextConfigId || undefined
+		userSettingsCtx.settings?.activeContextConfigId || undefined
 	)
 	let contextConfig: Sockets.ContextConfigs.Get.Response["contextConfig"] = $state(
 		{} as Sockets.ContextConfigs.Get.Response["contextConfig"]
@@ -138,7 +139,7 @@
 	$effect(() => {
 		if (
 			!!selectedConfigId &&
-			selectedConfigId !== userCtx.user.activeContextConfigId
+			selectedConfigId !== userSettingsCtx.settings?.activeContextConfigId
 		) {
 			socket.emit("contextConfigs:setUserActive", {
 				id: selectedConfigId
@@ -153,7 +154,7 @@
 				configsList = msg.contextConfigsList
 				if (!selectedConfigId && configsList.length > 0) {
 					selectedConfigId =
-						userCtx.user.activeContextConfigId ?? configsList[0].id
+						userSettingsCtx.settings?.activeContextConfigId ?? configsList[0].id
 				}
 			}
 		)

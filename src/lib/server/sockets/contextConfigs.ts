@@ -7,6 +7,12 @@ import type { Handler } from "$lib/shared/events"
 export const contextConfigsListHandler: Handler<Sockets.ContextConfigs.List.Params, Sockets.ContextConfigs.List.Response> = {
 	event: "contextConfigs:list",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage context configurations.")
+		}
+		
 		const contextConfigsList = await db.query.contextConfigs.findMany({
 			columns: {
 				id: true,
@@ -24,6 +30,12 @@ export const contextConfigsListHandler: Handler<Sockets.ContextConfigs.List.Para
 export const contextConfigsGet: Handler<Sockets.ContextConfigs.Get.Params, Sockets.ContextConfigs.Get.Response> = {
 	event: "contextConfigs:get",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage context configurations.")
+		}
+		
 		const contextConfig = await db.query.contextConfigs.findFirst({
 			where: (c, { eq }) => eq(c.id, params.id)
 		})
@@ -40,6 +52,12 @@ export const contextConfigsGet: Handler<Sockets.ContextConfigs.Get.Params, Socke
 export const contextConfigsCreate: Handler<Sockets.ContextConfigs.Create.Params, Sockets.ContextConfigs.Create.Response> = {
 	event: "contextConfigs:create",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can create context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can create context configurations.")
+		}
+		
 		const [contextConfig] = await db
 			.insert(schema.contextConfigs)
 			.values(params.contextConfig)
@@ -54,6 +72,12 @@ export const contextConfigsCreate: Handler<Sockets.ContextConfigs.Create.Params,
 export const contextConfigsUpdate: Handler<Sockets.ContextConfigs.Update.Params, Sockets.ContextConfigs.Update.Response> = {
 	event: "contextConfigs:update",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can update context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can update context configurations.")
+		}
+		
 		const id = params.contextConfig.id!
 		const { id: _, ...updateData } = params.contextConfig
 		console.log("Updating context config with ID:", id, "Data:", updateData)
@@ -73,11 +97,17 @@ export const contextConfigsUpdate: Handler<Sockets.ContextConfigs.Update.Params,
 export const contextConfigsDelete: Handler<Sockets.ContextConfigs.Delete.Params, Sockets.ContextConfigs.Delete.Response> = {
 	event: "contextConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
-		let currentUser = await db.query.users.findFirst({
-			where: (u, { eq }) => eq(u.id, userId)
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can delete context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can delete context configurations.")
+		}
+		
+		// Check if this is the user's active context config and reset to default if so
+		const userSettings = await db.query.userSettings.findFirst({
+			where: (us, { eq }) => eq(us.userId, socket.user!.id)
 		})
-		if (currentUser?.activeContextConfigId === params.id) {
+		if (userSettings?.activeContextConfigId === params.id) {
 			await contextConfigsSetUserActive.handler(socket, { id: null }, emitToUser)
 		}
 		await db
@@ -93,17 +123,50 @@ export const contextConfigsDelete: Handler<Sockets.ContextConfigs.Delete.Params,
 export const contextConfigsSetUserActive: Handler<Sockets.ContextConfigs.SetUserActive.Params, Sockets.ContextConfigs.SetUserActive.Response> = {
 	event: "contextConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
-		const [updatedUser] = await db
-			.update(schema.users)
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can set active context configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can set active context configurations.")
+		}
+		
+		const userId = socket.user!.id
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, userId)
+		})
+		if (!currentUser) {
+			emitToUser("contextConfigs:setUserActive:error", { error: "User not found." })
+			throw new Error("User not found")
+		}
+
+		// Find or create user settings
+		let userSettings = await db.query.userSettings.findFirst({
+			where: (us, { eq }) => eq(us.userId, currentUser.id)
+		})
+
+		if (!userSettings) {
+			await db.insert(schema.userSettings).values({
+				userId: currentUser.id
+			})
+		}
+
+		await db
+			.update(schema.userSettings)
 			.set({
 				activeContextConfigId: params.id
 			})
-			.where(eq(schema.users.id, userId))
-			.returning()
+			.where(eq(schema.userSettings.userId, currentUser.id))
+		
 		// You may want to emit the user and contextConfig updates here as in the original
 		await loadUser(socket, {}, emitToUser)
-		const res: Sockets.ContextConfigs.SetUserActive.Response = { user: updatedUser }
+		
+		// Get the updated user to return in response
+		const updatedUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUser.id),
+			with: {
+				userSettings: true
+			}
+		})
+		const res: Sockets.ContextConfigs.SetUserActive.Response = { user: updatedUser! }
 		emitToUser("contextConfigs:setUserActive", res)
 		return res
 	}

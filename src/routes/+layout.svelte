@@ -7,6 +7,7 @@
 	import * as Icons from "@lucide/svelte"
 	import { Toaster } from "@skeletonlabs/skeleton-svelte"
 	import { toaster } from "$lib/client/utils/toaster"
+	import LoginForm from "$lib/client/components/LoginForm.svelte"
 
 	interface Props {
 		children?: Snippet
@@ -16,12 +17,26 @@
 
 	let socketsInitialized = $state(false)
 	let showUpdateBar = $state(true)
+	let showLogin = $state(false)
+
+	async function initializeSocketsIfAllowed() {
+		if (!browser) return
+		const { checkSystemSettings, checkAuthentication } = await import("$lib/client/utils/authFlow")
+		const systemSettings = await checkSystemSettings()
+		if (systemSettings.isAccountsEnabled) {
+			const isAuthenticated = await checkAuthentication()
+			if (!isAuthenticated) {
+				showLogin = true
+				return
+			}
+		}
+		const domain = page.url.hostname
+		await loadSocketsClient({ domain })
+		socketsInitialized = true
+	}
 
 	if (browser) {
-		const domain = page.url.hostname
-		loadSocketsClient({ domain }).then(() => {
-			socketsInitialized = true
-		})
+		initializeSocketsIfAllowed()
 	}
 </script>
 
@@ -31,6 +46,8 @@
 			{@render children?.()}
 		{/key}
 	</Layout>
+{:else if showLogin}
+	<LoginForm />
 {/if}
 {#if page.data?.isNewerReleaseAvailable && showUpdateBar}
 	<div

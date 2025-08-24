@@ -7,6 +7,12 @@ import type { Handler } from "$lib/shared/events"
 export const promptConfigsListHandler: Handler<Sockets.PromptConfigs.List.Params, Sockets.PromptConfigs.List.Response> = {
 	event: "promptConfigs:list",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage prompt configurations.")
+		}
+		
 		const promptConfigsList = await db.query.promptConfigs.findMany({
 			columns: {
 				id: true,
@@ -24,6 +30,12 @@ export const promptConfigsListHandler: Handler<Sockets.PromptConfigs.List.Params
 export const promptConfigsGet: Handler<Sockets.PromptConfigs.Get.Params, Sockets.PromptConfigs.Get.Response> = {
 	event: "promptConfigs:get",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage prompt configurations.")
+		}
+		
 		const promptConfig = await db.query.promptConfigs.findFirst({
 			where: (c, { eq }) => eq(c.id, params.id)
 		})
@@ -40,6 +52,12 @@ export const promptConfigsGet: Handler<Sockets.PromptConfigs.Get.Params, Sockets
 export const promptConfigsCreate: Handler<Sockets.PromptConfigs.Create.Params, Sockets.PromptConfigs.Create.Response> = {
 	event: "promptConfigs:create",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can create prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can create prompt configurations.")
+		}
+		
 		const [promptConfig] = await db
 			.insert(schema.promptConfigs)
 			.values(params.promptConfig)
@@ -54,6 +72,12 @@ export const promptConfigsCreate: Handler<Sockets.PromptConfigs.Create.Params, S
 export const promptConfigsUpdate: Handler<Sockets.PromptConfigs.Update.Params, Sockets.PromptConfigs.Update.Response> = {
 	event: "promptConfigs:update",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can update prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can update prompt configurations.")
+		}
+		
 		const id = params.promptConfig.id!
 		const { id: _, ...updateData } = params.promptConfig
 		const [promptConfig] = await db
@@ -71,6 +95,12 @@ export const promptConfigsUpdate: Handler<Sockets.PromptConfigs.Update.Params, S
 export const promptConfigsDelete: Handler<Sockets.PromptConfigs.Delete.Params, Sockets.PromptConfigs.Delete.Response> = {
 	event: "promptConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can delete prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can delete prompt configurations.")
+		}
+		
 		await db
 			.delete(schema.promptConfigs)
 			.where(eq(schema.promptConfigs.id, params.id))
@@ -84,21 +114,52 @@ export const promptConfigsDelete: Handler<Sockets.PromptConfigs.Delete.Params, S
 export const promptConfigsSetUserActive: Handler<Sockets.PromptConfigs.SetUserActive.Params, Sockets.PromptConfigs.SetUserActive.Response> = {
 	event: "promptConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
-		const [updatedUser] = await db
-			.update(schema.users)
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can set active prompt configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can set active prompt configurations.")
+		}
+		
+		const userId = socket.user!.id
+		const currentUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, userId)
+		})
+		if (!currentUser) {
+			emitToUser("promptConfigs:setUserActive:error", { error: "User not found." })
+			throw new Error("User not found")
+		}
+
+		// Find or create user settings
+		let userSettings = await db.query.userSettings.findFirst({
+			where: (us, { eq }) => eq(us.userId, currentUser.id)
+		})
+
+		if (!userSettings) {
+			await db.insert(schema.userSettings).values({
+				userId: currentUser.id
+			})
+		}
+
+		await db
+			.update(schema.userSettings)
 			.set({
 				activePromptConfigId: params.id
 			})
-			.where(eq(schema.users.id, userId))
-			.returning()
+			.where(eq(schema.userSettings.userId, currentUser.id))
 		
 		await loadUser(socket, {}, emitToUser) // Emit updated user info
 		if (params.id) {
 			await promptConfigsGet.handler(socket, { id: params.id }, emitToUser)
 		}
 		
-		const res: Sockets.PromptConfigs.SetUserActive.Response = { user: updatedUser }
+		// Get the updated user to return in response
+		const updatedUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUser.id),
+			with: {
+				userSettings: true
+			}
+		})
+		const res: Sockets.PromptConfigs.SetUserActive.Response = { user: updatedUser! }
 		emitToUser("promptConfigs:setUserActive", res)
 		return res
 	}

@@ -8,10 +8,13 @@ export const userSettingsGet: Handler<Sockets.UserSettings.Get.Params, Sockets.U
 	event: "userSettings:get",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			let settings = await db.query.userSettings.findFirst({
-				where: eq(schema.userSettings.userId, userId),
+				where: (t, { eq }) => eq(t.userId, userId),
 				columns: {
 					id: false, // We don't need the ID in the response
 					userId: false // We don't need the userId in the response
@@ -32,7 +35,7 @@ export const userSettingsGet: Handler<Sockets.UserSettings.Get.Params, Sockets.U
 
 				// Fetch the newly created settings
 				settings = await db.query.userSettings.findFirst({
-					where: eq(schema.userSettings.userId, userId),
+					where: (t, { eq }) => eq(t.userId, userId),
 					columns: {
 						id: false,
 						userId: false
@@ -71,7 +74,10 @@ export const userSettingsUpdateShowHomePageBanner: Handler<Sockets.UserSettings.
 	event: "userSettings:updateShowHomePageBanner",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)
@@ -101,7 +107,10 @@ export const userSettingsUpdateEasyPersonaCreation: Handler<Sockets.UserSettings
 	event: "userSettings:updateEasyPersonaCreation",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)
@@ -131,7 +140,10 @@ export const userSettingsUpdateEasyCharacterCreation: Handler<Sockets.UserSettin
 	event: "userSettings:updateEasyCharacterCreation",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)
@@ -161,7 +173,10 @@ export const userSettingsUpdateShowAllCharacterFields: Handler<Sockets.UserSetti
 	event: "userSettings:updateShowAllCharacterFields",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)
@@ -191,7 +206,10 @@ export const userSettingsUpdateTheme: Handler<Sockets.UserSettings.UpdateTheme.P
 	event: "userSettings:updateTheme",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)
@@ -219,7 +237,10 @@ export const userSettingsUpdateDarkMode: Handler<Sockets.UserSettings.UpdateDark
 	event: "userSettings:updateDarkMode",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
-			const userId = socket.user?.id || 1 // Fallback to user 1
+			const userId = socket.user!.id
+			if (!userId) {
+				throw new Error("User not authenticated")
+			}
 
 			await db
 				.update(schema.userSettings)

@@ -14,14 +14,15 @@
 	import ChatsSidebar from "./sidebars/ChatsSidebar.svelte"
 	import PromptsSidebar from "./sidebars/PromptsSidebar.svelte"
 	import TagsSidebar from "./sidebars/TagsSidebar.svelte"
+	import UsersSidebar from "./sidebars/UsersSidebar.svelte"
 	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { KeyboardNavigationManager } from "$lib/client/utils/keyboardNavigation"
 	import SettingsSidebar from "$lib/client/components/sidebars/SettingsSidebar.svelte"
+	import ConnectionTimeoutModal from "$lib/client/components/ConnectionTimeoutModal.svelte"
 	import type { Snippet } from "svelte"
 	import { Theme } from "$lib/client/consts/Theme"
 	import OllamaIcon from "./icons/OllamaIcon.svelte"
-	import LoginForm from "./LoginForm.svelte"
 
 	interface Props {
 		children?: Snippet
@@ -83,9 +84,6 @@
 		systemSettingsCtx?.settings?.isAccountsEnabled
 	)
 	let hasUser = $derived(!!userCtx.user)
-	let shouldShowLogin = $derived(
-		isAccountsEnabled && !hasUser && isSettingsLoaded
-	)
 	let shouldShowApp = $derived(
 		isSettingsLoaded && hasUser
 	)
@@ -95,12 +93,17 @@
 		if (!isSettingsLoaded) return
 
 		// Start with base navigation items
-		const baseLeftNav = {
+		const baseLeftNav: any = {
 			sampling: {
 				icon: Icons.SlidersHorizontal,
 				title: "Sampling"
 			},
 			connections: { icon: Icons.Cable, title: "Connections" }
+		}
+
+		// Add Users sidebar if accounts are enabled
+		if (systemSettingsCtx?.settings?.isAccountsEnabled) {
+			baseLeftNav.users = { icon: Icons.Users, title: "Users" }
 		}
 
 		// Add Ollama Manager if enabled
@@ -245,12 +248,47 @@
 		}
 	})
 
-	onMount(() => {
+	onMount(async () => {
 		setContext("panelsCtx", panelsCtx as PanelsCtx)
 		setContext("userCtx", userCtx)
 		setContext("systemSettingsCtx", systemSettingsCtx)
 		setContext("userSettingsCtx", userSettingsCtx)
 
+		// Check system settings first before connecting to sockets
+		try {
+			const { checkSystemSettings, checkAuthentication } = await import("$lib/client/utils/authFlow")
+			
+			// Phase 1: Check if accounts are enabled
+			const systemSettings = await checkSystemSettings()
+			
+			// If accounts are enabled, verify authentication
+			if (systemSettings.isAccountsEnabled) {
+				const isAuthenticated = await checkAuthentication()
+				if (!isAuthenticated) {
+					// User is not authenticated, redirect to login
+					console.log("Authentication required but user not authenticated")
+					toaster.error({
+						title: "Authentication Required",
+						description: "Please login to continue using the application."
+					})
+					// Note: Actual redirect to login page would be handled by the app's routing
+					return
+				}
+			}
+			
+			// User is authenticated or accounts are disabled, proceed with socket connection
+			initializeSocketConnection()
+			
+		} catch (error) {
+			console.error("Failed to check authentication flow:", error)
+			toaster.error({
+				title: "Connection Error",
+				description: "Failed to verify authentication. Please refresh the page."
+			})
+		}
+	})
+	
+	function initializeSocketConnection() {
 		socket.on("systemSettings:get", (message) => {
 			console.log("Received systemSettings:get", message)
 			systemSettingsCtx.settings = {
@@ -355,7 +393,7 @@
 			}
 		})
 		keyboardNavManager.addGlobalListener()
-	})
+	}
 
 	// Effect to handle user authentication flow after system settings are loaded
 	$effect(() => {
@@ -388,11 +426,7 @@
 		socket.off("success")
 	})
 </script>
-
-{#if shouldShowLogin}
-	<!-- Show login form when accounts are enabled but no user is authenticated -->
-	<LoginForm />
-{:else if shouldShowApp}
+{#if shouldShowApp}
 	<!-- Show normal app when accounts are disabled OR when accounts are enabled and user is authenticated -->
 	<div
 		class="bg-surface-100-900 relative h-full max-h-[100dvh] w-full justify-between"
@@ -448,6 +482,10 @@
 								/>
 							{:else if panelsCtx.leftPanel === "connections"}
 								<ConnectionsSidebar
+									bind:onclose={panelsCtx.onLeftPanelClose}
+								/>
+							{:else if panelsCtx.leftPanel === "users"}
+								<UsersSidebar
 									bind:onclose={panelsCtx.onLeftPanelClose}
 								/>
 							{:else if panelsCtx.leftPanel === "ollama"}
@@ -586,6 +624,10 @@
 						<ConnectionsSidebar
 							bind:onclose={panelsCtx.onMobilePanelClose}
 						/>
+					{:else if panelsCtx.mobilePanel === "users"}
+						<UsersSidebar
+							bind:onclose={panelsCtx.onMobilePanelClose}
+						/>
 					{:else if panelsCtx.mobilePanel === "ollama"}
 						<OllamaSidebar
 							bind:onclose={panelsCtx.onMobilePanelClose}
@@ -668,6 +710,9 @@
 		{/if}
 	</div>
 {/if}
+
+<!-- Connection Timeout Modal -->
+<ConnectionTimeoutModal />
 
 <style lang="postcss">
 	@reference "tailwindcss";

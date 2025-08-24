@@ -4,8 +4,6 @@
 	import { toaster } from "$lib/client/utils/toaster"
 	import { useTypedSocket, refreshAuthAfterLogin } from "$lib/client/sockets/loadSockets.client"
 
-	const socket = useTypedSocket()
-
 	// Login form schema
 	const loginSchema = z.object({
 		username: z.string().min(1, "Username is required").max(50, "Username must be 50 characters or less"),

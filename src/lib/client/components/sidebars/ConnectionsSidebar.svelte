@@ -21,6 +21,7 @@
 
 	let { onclose = $bindable() }: Props = $props()
 	let userCtx: UserCtx = getContext("userCtx")
+	let userSettingsCtx: UserSettingsCtx = getContext("userSettingsCtx")
 	let systemSettingsCtx: SystemSettingsCtx = getContext("systemSettingsCtx")
 	let panelsCtx: PanelsCtx = getContext("panelsCtx")
 
@@ -248,6 +249,18 @@
 	// Screen reader announcements
 	let announcements = $state("")
 
+	// Computed property for binding to the active connection ID
+	let activeConnectionId = $derived.by({
+		get() {
+			return userSettingsCtx.settings?.activeConnectionId || null
+		},
+		set(value: number | null) {
+			if (userSettingsCtx.settings) {
+				userSettingsCtx.settings.activeConnectionId = value
+			}
+		}
+	})
+
 	function announce(message: string) {
 		announcements = message
 		// Clear after screen reader has time to read
@@ -425,8 +438,8 @@
 			}
 		)
 		socket.emit("connections:list", {})
-		if (userCtx.user?.activeConnectionId) {
-			socket.emit("connections:get", { id: userCtx.user.activeConnectionId })
+		if (userSettingsCtx.settings?.activeConnectionId) {
+			socket.emit("connections:get", { id: userSettingsCtx.settings.activeConnectionId })
 		}
 		onclose = handleOnClose
 
@@ -522,7 +535,7 @@
 			id="connection-select"
 			class="select bg-background border-muted rounded border"
 			onchange={handleSelectChange}
-			bind:value={userCtx!.user!.activeConnectionId}
+			bind:value={activeConnectionId}
 			disabled={unsavedChanges}
 			aria-label="Select active AI connection"
 			aria-describedby="connection-help"

@@ -6,7 +6,7 @@ import { CharacterBook } from "@lenml/char-card-reader"
 import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for lorebook creation/update
-async function processLorebookTags(lorebookId: number, tagNames: string[]) {
+async function processLorebookTags(lorebookId: number, tagNames: string[], userId: number) {
 	if (!tagNames || tagNames.length === 0) return
 
 	// First, remove all existing tags for this lorebook
@@ -20,9 +20,10 @@ async function processLorebookTags(lorebookId: number, tagNames: string[]) {
 	for (const tagName of tagNames) {
 		if (!tagName.trim()) continue
 
-		// Check if tag exists
+		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: eq(schema.tags.name, tagName.trim())
+			where: (t, { and, eq }) => 
+				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -30,7 +31,8 @@ async function processLorebookTags(lorebookId: number, tagNames: string[]) {
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim()
+					name: tagName.trim(),
+					userId
 					// description and colorPreset will use database defaults
 				})
 				.returning()
@@ -58,7 +60,7 @@ export const lorebooksListHandler: Handler<Sockets.Lorebooks.List.Params, Socket
 	event: "lorebooks:list",
 	async handler(socket, params, emitToUser) {
 		// Fetch all lorebooks for the user
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		const userId = socket.user!.id
 		if (!userId) return { lorebookList: [] }
 		const books = await db.query.lorebooks.findMany({
 			where: (l, { eq }) => eq(l.userId, userId),
@@ -108,7 +110,7 @@ export async function lorebookList(
 	emitToUser: (event: string, data: any) => void
 ) {
 	// Fetch all lorebooks for the user
-	const userId = 1 // TODO: Replace with actual user ID from socket data
+	const userId = socket.user!.id
 	if (!userId) return socket.emit("lorebookList", { lorebookList: [] })
 	const books = await db.query.lorebooks.findMany({
 		where: (l, { eq }) => eq(l.userId, userId),
@@ -157,7 +159,7 @@ export async function lorebook(
 	message: Sockets.Lorebook.Call,
 	emitToUser: (event: string, data: any) => void
 ) {
-	const userId = 1 // TODO: Replace with actual user ID from socket data
+	const userId = socket.user!.id
 	if (!userId) return socket.emit("lorebookGet", { lorebook: null })
 	const book = await db.query.lorebooks.findFirst({
 		where: (l, { and, eq }) =>
@@ -195,7 +197,7 @@ export const lorebooksCreateHandler: Handler<Sockets.Lorebooks.Create.Params, So
 	event: "lorebooks:create",
 	async handler(socket, params, emitToUser) {
 		try {
-			const userId = 1 // TODO: Replace with actual user ID from socket data
+			const userId = socket.user!.id
 			const tags = params.tags || []
 
 			const [newBook] = await db
@@ -208,7 +210,7 @@ export const lorebooksCreateHandler: Handler<Sockets.Lorebooks.Create.Params, So
 
 			// Process tags after lorebook creation
 			if (tags.length > 0) {
-				await processLorebookTags(newBook.id, tags)
+				await processLorebookTags(newBook.id, tags, userId)
 			}
 
 			return { lorebook: newBook }
@@ -223,7 +225,7 @@ export const lorebooksGetHandler: Handler<Sockets.Lorebooks.Get.Params, Sockets.
 	event: "lorebooks:get",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const userId = 1 // TODO: Replace with actual user ID from socket data
+			const userId = socket.user!.id
 			
 			const book = await db.query.lorebooks.findFirst({
 				where: (l, { and, eq }) =>
@@ -283,7 +285,7 @@ export const lorebooksUpdateHandler: Handler<Sockets.Lorebooks.Update.Params, So
 	event: "lorebooks:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const userId = 1 // TODO: Replace with actual user ID from socket data
+			const userId = socket.user!.id
 			
 			// Update the lorebook
 			const [updated] = await db
@@ -321,7 +323,7 @@ export const lorebooksDeleteHandler: Handler<Sockets.Lorebooks.Delete.Params, So
 	event: "lorebooks:delete",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const userId = 1 // TODO: Replace with actual user ID from socket data
+			const userId = socket.user!.id
 			
 			// Delete the lorebook
 			await db
@@ -356,7 +358,7 @@ export async function createLorebook(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 		const tags = message.tags || []
 
 		const [newBook] = await db
@@ -369,7 +371,7 @@ export async function createLorebook(
 
 		// Process tags after lorebook creation
 		if (tags.length > 0) {
-			await processLorebookTags(newBook.id, tags)
+			await processLorebookTags(newBook.id, tags, userId)
 		}
 
 		const res: Sockets.Lorebooks.Create.Response = { lorebook: newBook }
@@ -387,7 +389,7 @@ export async function updateLorebook(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 		const tags = message.lorebook.tags || []
 
 		// Only update fields that exist in the lorebooks table
@@ -416,7 +418,7 @@ export async function updateLorebook(
 		}
 
 		// Process tags after lorebook update
-		await processLorebookTags(updatedBook.id, tags)
+		await processLorebookTags(updatedBook.id, tags, userId)
 
 		// Fetch the complete updated lorebook with all related data
 		const completeBook = await db.query.lorebooks.findFirst({
@@ -461,7 +463,7 @@ export async function deleteLorebook(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -498,7 +500,7 @@ export async function createLorebookBinding(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		if (
 			!!message.lorebookBinding.characterId &&
@@ -569,7 +571,7 @@ export async function lorebookBindingList(
 	message: Sockets.LorebookBindingList.Call,
 	emitToUser: (event: string, data: any) => void
 ) {
-	const userId = 1 // TODO: Replace with actual user ID from socket data
+	const userId = socket.user!.id
 	if (!userId) return socket.emit("error", { error: "User not found." })
 
 	const book = await db.query.lorebooks.findFirst({
@@ -606,7 +608,7 @@ export async function updateLorebookBinding(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Make sure characterId or personaId is provided, but not both
 		if (
@@ -672,7 +674,7 @@ export async function worldLoreEntryList(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 		if (!userId) return socket.emit("error", { error: "User not found." })
 
 		const book = await db.query.lorebooks.findFirst({
@@ -707,7 +709,7 @@ export async function createWorldLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const data: InsertWorldLoreEntry = message.worldLoreEntry
 		data.name = data.name.trim()
@@ -865,7 +867,7 @@ export async function updateWorldLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const lorebook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -936,7 +938,7 @@ export async function deleteWorldLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (e, { eq }) =>
@@ -983,7 +985,7 @@ export async function updateWorldLoreEntryPositions(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const lorebook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1037,7 +1039,7 @@ export async function characterLoreEntryList(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 		if (!userId) return socket.emit("error", { error: "User not found." })
 
 		const book = await db.query.lorebooks.findFirst({
@@ -1074,7 +1076,7 @@ export async function createCharacterLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const data: InsertCharacterLoreEntry = message.characterLoreEntry
 		data.name = data.name.trim()
@@ -1150,7 +1152,7 @@ export async function updateCharacterLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const existingBook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1229,7 +1231,7 @@ export async function deleteCharacterLoreEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (e, { eq }) =>
@@ -1279,7 +1281,7 @@ export async function updateCharacterLoreEntryPositions(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const lorebook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1333,7 +1335,7 @@ export async function historyEntryList(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 		if (!userId) return socket.emit("error", { error: "User not found." })
 
 		const book = await db.query.lorebooks.findFirst({
@@ -1368,7 +1370,7 @@ export async function createHistoryEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const existingBook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1431,7 +1433,7 @@ export async function updateHistoryEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const existingBook = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1506,7 +1508,7 @@ export async function deleteHistoryEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (e, { and, eq }) =>
@@ -1554,7 +1556,7 @@ export async function iterateNextHistoryEntry(
 	emitToUser: (event: string, data: any) => void
 ) {
 	try {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (e, { and, eq }) =>
@@ -1657,7 +1659,7 @@ export async function lorebookImport(
 			return socket.emit("error", { error: "No lorebook data provided." })
 		}
 
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// If message.characterId is provided, ensure it exists
 		if (charId) {
@@ -1770,8 +1772,8 @@ export const lorebookBindingListHandler: Handler<
 > = {
 	event: "lorebooks:bindingList",
 	handler: async (socket, params) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1807,8 +1809,8 @@ export const createLorebookBindingHandler: Handler<
 > = {
 	event: "lorebooks:createBinding",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1847,8 +1849,8 @@ export const updateLorebookBindingHandler: Handler<
 > = {
 	event: "lorebooks:updateBinding",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		// Check if binding exists and user owns the lorebook
 		const existingBinding = await db.query.lorebookBindings.findFirst({
@@ -1897,8 +1899,7 @@ export const worldLoreEntryListHandler: Handler<
 > = {
 	event: "worldLoreEntries:list",
 	handler: async (socket, params) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -1929,7 +1930,7 @@ export const createWorldLoreEntryHandler: Handler<
 > = {
 	event: "worldLoreEntries:create",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const data: InsertWorldLoreEntry = { ...params.worldLoreEntry }
 		data.name = data.name.trim()
@@ -2010,7 +2011,7 @@ export const updateWorldLoreEntryHandler: Handler<
 > = {
 	event: "worldLoreEntries:update",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Check if entry exists and user owns the lorebook
 		const existingEntry = await db.query.worldLoreEntries.findFirst({
@@ -2068,7 +2069,7 @@ export const deleteWorldLoreEntryHandler: Handler<
 > = {
 	event: "worldLoreEntries:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Check if entry exists and user owns the lorebook
 		const existingEntry = await db.query.worldLoreEntries.findFirst({
@@ -2120,7 +2121,7 @@ export const updateWorldLoreEntryPositionsHandler: Handler<
 > = {
 	event: "worldLoreEntries:updatePositions",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Verify all entries belong to user's lorebooks
 		const entryIds = params.updates.map(u => u.id)
@@ -2180,8 +2181,8 @@ export const characterLoreEntryListHandler: Handler<
 > = {
 	event: "characterLoreEntries:list",
 	handler: async (socket, params) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -2212,7 +2213,7 @@ export const createCharacterLoreEntryHandler: Handler<
 > = {
 	event: "characterLoreEntries:create",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		const data: InsertCharacterLoreEntry = { ...params.characterLoreEntry }
 		data.name = data.name.trim()
@@ -2293,7 +2294,7 @@ export const updateCharacterLoreEntryHandler: Handler<
 > = {
 	event: "characterLoreEntries:update",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Check if entry exists and user owns the lorebook
 		const existingEntry = await db.query.characterLoreEntries.findFirst({
@@ -2351,7 +2352,7 @@ export const deleteCharacterLoreEntryHandler: Handler<
 > = {
 	event: "characterLoreEntries:delete",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Check if entry exists and user owns the lorebook
 		const existingEntry = await db.query.characterLoreEntries.findFirst({
@@ -2403,7 +2404,7 @@ export const updateCharacterLoreEntryPositionsHandler: Handler<
 > = {
 	event: "characterLoreEntries:updatePositions",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
+		const userId = socket.user!.id
 
 		// Verify all entries belong to user's lorebooks
 		const entryIds = params.updates.map(u => u.id)
@@ -2463,10 +2464,10 @@ export const historyEntryListHandler: Handler<
 	Sockets.HistoryEntries.List.Params,
 	Sockets.HistoryEntries.List.Response
 > = {
-	event: "historyEntryList",
+	event: "lorebooks:historyEntryList",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const book = await db.query.lorebooks.findFirst({
 			where: (l, { and, eq }) =>
@@ -2495,10 +2496,10 @@ export const createHistoryEntryHandler: Handler<
 	Sockets.HistoryEntries.Create.Params,
 	Sockets.HistoryEntries.Create.Response
 > = {
-	event: "createHistoryEntry",
+	event: "lorebooks:createHistoryEntry",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const data: InsertHistoryEntry = { ...params.historyEntry }
 
@@ -2558,10 +2559,10 @@ export const updateHistoryEntryHandler: Handler<
 	Sockets.HistoryEntries.Update.Params,
 	Sockets.HistoryEntries.Update.Response
 > = {
-	event: "updateHistoryEntry",
+	event: "lorebooks:updateHistoryEntry",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const existingEntry = await db.query.historyEntries.findFirst({
 			where: (he, { eq }) => eq(he.id, params.historyEntry.id),
@@ -2618,10 +2619,10 @@ export const deleteHistoryEntryHandler: Handler<
 	Sockets.HistoryEntries.Delete.Params,
 	Sockets.HistoryEntries.Delete.Response
 > = {
-	event: "deleteHistoryEntry",
+	event: "lorebooks:deleteHistoryEntry",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const existingEntry = await db.query.historyEntries.findFirst({
 			where: (he, { eq }) => eq(he.id, params.id),
@@ -2669,10 +2670,10 @@ export const iterateNextHistoryEntryHandler: Handler<
 	Sockets.HistoryEntries.IterateNext.Params,
 	Sockets.HistoryEntries.IterateNext.Response
 > = {
-	event: "iterateNextHistoryEntry",
+	event: "lorebooks:iterateNextHistoryEntry",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		const existingEntry = await db.query.historyEntries.findFirst({
 			where: (he, { eq }) => eq(he.id, params.id),
@@ -2758,8 +2759,8 @@ export const lorebookImportHandler: Handler<
 > = {
 	event: "lorebookImport",
 	handler: async (socket, params, emitToUser) => {
-		const userId = 1 // TODO: Replace with actual user ID from socket data
-		if (!userId) throw new Error("User not found.")
+		const userId = socket.user!.id
+		
 
 		console.log("Importing lorebook data:", params.lorebookJson)
 		let card = CharacterBook.from_json(params.lorebookJson)

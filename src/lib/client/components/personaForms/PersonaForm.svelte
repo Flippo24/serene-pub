@@ -200,7 +200,7 @@
 		const avatarFile = newPersona._avatarFile
 		delete newPersona._avatarFile
 		delete newPersona._avatar
-		socket.emit("createPersona", {
+		socket.emit("personas:create", {
 			persona: newPersona,
 			avatarFile
 		})
@@ -211,7 +211,7 @@
 		const avatarFile = updatedPersona._avatarFile
 		delete updatedPersona._avatarFile
 		delete updatedPersona._avatar
-		socket.emit("updatePersona", {
+		socket.emit("personas:update", {
 			persona: updatedPersona,
 			avatarFile
 		})
@@ -281,7 +281,7 @@
 		// Add keyboard event listener
 		document.addEventListener("keydown", handleKeydown)
 
-		socket.on("createPersona", (res: Sockets.CreatePersona.Response) => {
+		socket.on("personas:create", (res: Sockets.CreatePersona.Response) => {
 			if (res.persona) {
 				validationErrors = {} // Clear any validation errors on success
 				toaster.success({
@@ -292,7 +292,7 @@
 			}
 		})
 
-		socket.on("updatePersona", (res: Sockets.UpdatePersona.Response) => {
+		socket.on("personas:update", (res: Sockets.UpdatePersona.Response) => {
 			if (res.persona) {
 				validationErrors = {} // Clear any validation errors on success
 				toaster.success({

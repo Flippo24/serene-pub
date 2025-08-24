@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid"
 import { activeAdapters, chatMessage } from "../sockets/chats"
 import { getConnectionAdapter } from "./getConnectionAdapter"
 import { TokenCounters } from "$lib/server/utils/TokenCounterManager"
+import { getUserConfigurations } from "./getUserConfigurations"
 
 export async function generateResponse({
 	socket,
@@ -42,8 +43,16 @@ export async function generateResponse({
 	const chat = await db.query.chats.findFirst({
 		where: (c, { eq }) => eq(c.id, chatId),
 		with: {
-			chatCharacters: { with: { character: true } },
-			chatPersonas: { with: { persona: true } },
+			chatCharacters: { 
+				with: { 
+					character: true 
+				} 
+			},
+			chatPersonas: { 
+				with: { 
+					persona: true 
+				} 
+			},
 			chatMessages: {
 				where: (cm, { ne }) => ne(cm.id, generatingMessage.id),
 				orderBy: (cm, { asc }) => asc(cm.id)
@@ -52,17 +61,10 @@ export async function generateResponse({
 		}
 	})
 
-	const user = await db.query.users.findFirst({
-		where: (u, { eq }) => eq(u.id, userId),
-		with: {
-			activeConnection: true,
-			activeSamplingConfig: true,
-			activeContextConfig: true,
-			activePromptConfig: true
-		}
-	})
+	// Get user and their configurations with fallbacks
+	const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
 
-	const { Adapter } = getConnectionAdapter(user!.activeConnection!.type)
+	const { Adapter } = getConnectionAdapter(connection.type)
 
 	const tokenCounter = new TokenCounters("estimate")
 	const tokenLimit = 4096
@@ -70,10 +72,10 @@ export async function generateResponse({
 
 	const adapter = new Adapter({
 		chat,
-		connection: user!.activeConnection!,
-		sampling: user!.activeSamplingConfig!,
-		contextConfig: user!.activeContextConfig!,
-		promptConfig: user!.activePromptConfig!,
+		connection: connection,
+		sampling: sampling,
+		contextConfig: contextConfig,
+		promptConfig: promptConfig,
 		currentCharacterId: generatingMessage.characterId!,
 		tokenCounter,
 		tokenLimit,
@@ -82,7 +84,7 @@ export async function generateResponse({
 	// Store adapter in global map
 	activeAdapters.set(adapterId, adapter)
 
-	const currentCharacter = chat?.chatCharacters.find(
+	const currentCharacter = chat?.chatCharacters?.find(
 		(cc) => cc.character?.id === adapter.currentCharacterId
 	)
 

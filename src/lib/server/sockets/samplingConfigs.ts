@@ -9,6 +9,12 @@ import type { Handler } from "$lib/shared/events"
 export const samplingHandler: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
 	event: "sampling",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+		}
+		
 		const sampling = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id),
 			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
@@ -49,7 +55,7 @@ export async function createSamplingConfig(
 	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await samplingConfigsCreate.handler(socket, { samplingConfig: message.sampling }, emitToUser)
+	await samplingConfigsCreate.handler(socket, { sampling: message.sampling }, emitToUser)
 }
 
 export async function deleteSamplingConfig(
@@ -65,12 +71,18 @@ export async function updateSamplingConfig(
 	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await samplingConfigsUpdate.handler(socket, { samplingConfig: message.sampling }, emitToUser)
+	await samplingConfigsUpdate.handler(socket, { sampling: message.sampling }, emitToUser)
 }
 
 export const samplingConfigsGet: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
 	event: "samplingConfigs:get",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+		}
+		
 		const sampling = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id),
 			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
@@ -84,6 +96,12 @@ export const samplingConfigsGet: Handler<Sockets.SamplingConfigs.Get.Params, Soc
 export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Params, Sockets.SamplingConfigs.List.Response> = {
 	event: "samplingConfigs:list",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+		}
+		
 		const samplingConfigsList = await db.query.samplingConfigs.findMany({
 			columns: {
 				id: true,
@@ -100,7 +118,13 @@ export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Pa
 export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUserActive.Params, Sockets.SamplingConfigs.SetUserActive.Response> = {
 	event: "samplingConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
-		const userId = socket.user?.id || 1 // Fallback for backwards compatibility
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can set active sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can set active sampling configurations.")
+		}
+		
+		const userId = socket.user!.id
 		const currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, userId)
 		})
@@ -108,17 +132,38 @@ export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUs
 			emitToUser("samplingConfigs:setUserActive:error", { error: "User not found." })
 			throw new Error("User not found")
 		}
-		const [updatedUser] = await db
-			.update(schema.users)
+
+		// Find or create user settings
+		let userSettings = await db.query.userSettings.findFirst({
+			where: (us, { eq }) => eq(us.userId, currentUser.id)
+		})
+
+		if (!userSettings) {
+			await db.insert(schema.userSettings).values({
+				userId: currentUser.id
+			})
+		}
+
+		await db
+			.update(schema.userSettings)
 			.set({
 				activeSamplingConfigId: params.id
 			})
-			.where(eq(schema.users.id, currentUser.id))
-			.returning()
+			.where(eq(schema.userSettings.userId, currentUser.id))
 		
 		await user(socket, {}, emitToUser)
-		await samplingConfigsGet.handler(socket, { id: params.id }, emitToUser)
-		const res: Sockets.SamplingConfigs.SetUserActive.Response = { user: updatedUser }
+		if (params.id) {
+			await samplingConfigsGet.handler(socket, { id: params.id }, emitToUser)
+		}
+		
+		// Get the updated user to return in response
+		const updatedUser = await db.query.users.findFirst({
+			where: (u, { eq }) => eq(u.id, currentUser.id),
+			with: {
+				userSettings: true
+			}
+		})
+		const res: Sockets.SamplingConfigs.SetUserActive.Response = { user: updatedUser! }
 		emitToUser("samplingConfigs:setUserActive", res)
 		return res
 	}
@@ -127,9 +172,15 @@ export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUs
 export const samplingConfigsCreate: Handler<Sockets.SamplingConfigs.Create.Params, Sockets.SamplingConfigs.Create.Response> = {
 	event: "samplingConfigs:create",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can create sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can create sampling configurations.")
+		}
+		
 		const [sampling] = await db
 			.insert(schema.samplingConfigs)
-			.values(params.samplingConfig)
+			.values(params.sampling)
 			.returning()
 		
 		await samplingConfigsSetUserActive.handler(socket, { id: sampling.id }, emitToUser)
@@ -144,6 +195,12 @@ export const samplingConfigsCreate: Handler<Sockets.SamplingConfigs.Create.Param
 export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Params, Sockets.SamplingConfigs.Delete.Response> = {
 	event: "samplingConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can delete sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can delete sampling configurations.")
+		}
+		
 		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id)
 		})
@@ -153,10 +210,11 @@ export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Param
 			})
 			throw new Error("Cannot delete immutable samplingConfigs")
 		}
-		const currentUser = await db.query.users.findFirst({
-			where: (u, { eq }) => eq(u.id, 1)
+		// Check if this is the user's active sampling config and reset to default if so
+		const userSettings = await db.query.userSettings.findFirst({
+			where: (us, { eq }) => eq(us.userId, socket.user!.id)
 		})
-		if (currentUser!.activeSamplingConfigId === params.id) {
+		if (userSettings?.activeSamplingConfigId === params.id) {
 			await samplingConfigsSetUserActive.handler(socket, { id: 1 }, emitToUser)
 		}
 		await db
@@ -173,8 +231,14 @@ export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Param
 export const samplingConfigsUpdate: Handler<Sockets.SamplingConfigs.Update.Params, Sockets.SamplingConfigs.Update.Response> = {
 	event: "samplingConfigs:update",
 	handler: async (socket, params, emitToUser) => {
-		const id = params.samplingConfig.id!
-		const { id: _, ...updateData } = params.samplingConfig // Remove id from sampling object to avoid conflicts
+		if (!socket.user!.isAdmin) {
+			const res = { error: "Access denied. Only admin users can update sampling configurations." }
+			emitToUser("error", res)
+			throw new Error("Access denied. Only admin users can update sampling configurations.")
+		}
+		
+		const id = params.sampling.id!
+		const { id: _, ...updateData } = params.sampling // Remove id from sampling object to avoid conflicts
 		
 		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, id)

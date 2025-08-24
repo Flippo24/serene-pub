@@ -152,7 +152,7 @@
 			const req: Sockets.CreateCharacterLoreEntry.Call = {
 				characterLoreEntry: { ...entry, lorebookId, _uuid: undefined }
 			}
-			socket.emit("createCharacterLoreEntry", req)
+			socket.emit("lorebooks:createCharacterLoreEntry", req)
 			newEntriesData = newEntriesData.filter(
 				(e) => e._uuid !== entry._uuid
 			)
@@ -161,7 +161,7 @@
 			const req: Sockets.UpdateCharacterLoreEntry.Call = {
 				characterLoreEntry: { ...entry, lorebookId }
 			}
-			socket.emit("updateCharacterLoreEntry", req)
+			socket.emit("lorebooks:updateCharacterLoreEntry", req)
 			delete editEntriesData[entry.id]
 		}
 		// tick().then(() => {
@@ -253,7 +253,7 @@
 			lorebookId,
 			positions: positionMap
 		}
-		socket.emit("updateCharacterLoreEntryPositions", req)
+		socket.emit("lorebooks:updateCharacterLoreEntryPositions", req)
 	}
 
 	function getBindingLabel(bindingId: number): string {
@@ -278,7 +278,7 @@
 
 	function onDeleteConfirm() {
 		showDeleteConfirmModal = false
-		socket.emit("deleteCharacterLoreEntry", {
+		socket.emit("lorebooks:deleteCharacterLoreEntry", {
 			id: deleteEntryId,
 			lorebookId
 		})
@@ -292,7 +292,7 @@
 
 	onMount(() => {
 		socket.on(
-			"characterLoreEntryList",
+			"lorebooks:characterLoreEntryList",
 			async (msg: Sockets.CharacterLoreEntryList.Response) => {
 				if (
 					msg.characterLoreEntryList.length &&
@@ -305,7 +305,7 @@
 		)
 
 		socket.on(
-			"createCharacterLoreEntry",
+			"lorebooks:createCharacterLoreEntry",
 			(msg: Sockets.CreateCharacterLoreEntry.Response) => {
 				if (
 					msg.characterLoreEntry &&
@@ -317,7 +317,7 @@
 		)
 
 		socket.on(
-			"updateCharacterLoreEntry",
+			"lorebooks:updateCharacterLoreEntry",
 			(msg: Sockets.UpdateCharacterLoreEntry.Response) => {
 				if (
 					msg.characterLoreEntry &&
@@ -328,7 +328,7 @@
 			}
 		)
 		socket.on(
-			"deleteCharacterLoreEntry",
+			"lorebooks:deleteCharacterLoreEntry",
 			(msg: Sockets.DeleteCharacterLoreEntry.Response) => {
 				if (
 					msg.id &&
@@ -342,7 +342,7 @@
 			}
 		)
 		socket.on(
-			"lorebookBindingList",
+			"lorebooks:bindingList",
 			async (msg: Sockets.LorebookBindingList.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					lorebookBindingList = [...msg.lorebookBindingList]
@@ -351,7 +351,7 @@
 			}
 		)
 		socket.on(
-			"updateCharacterLoreEntryPositions",
+			"lorebooks:updateCharacterLoreEntryPositions",
 			(msg: Sockets.UpdateCharacterLoreEntryPositions.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					toaster.success({ title: "Entries reordered" })
@@ -361,22 +361,22 @@
 		const req: Sockets.CharacterLoreEntryList.Call = {
 			lorebookId: lorebookId
 		}
-		socket.emit("characterLoreEntryList", req)
+		socket.emit("lorebooks:characterLoreEntryList", req)
 		const bindingReq: Sockets.LorebookBindingList.Call = {
 			lorebookId: lorebookId
 		}
-		socket.emit("lorebookBindingList", bindingReq)
+		socket.emit("lorebooks:bindingList", bindingReq)
 		isReady = true
 	})
 
 	onDestroy(() => {
 		hasUnsavedChanges = false
-		socket.off("characterLoreEntryList")
-		socket.off("createCharacterLoreEntry")
-		socket.off("updateCharacterLoreEntry")
-		socket.off("deleteCharacterLoreEntry")
-		socket.off("lorebookBindingList")
-		socket.off("updateCharacterLoreEntryPositions")
+		socket.off("lorebooks:characterLoreEntryList")
+		socket.off("lorebooks:createCharacterLoreEntry")
+		socket.off("lorebooks:updateCharacterLoreEntry")
+		socket.off("lorebooks:deleteCharacterLoreEntry")
+		socket.off("lorebooks:bindingList")
+		socket.off("lorebooks:updateCharacterLoreEntryPositions")
 	})
 </script>
 

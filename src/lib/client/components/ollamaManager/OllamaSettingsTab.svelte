@@ -40,12 +40,12 @@
 
 	// Settings functions
 	function checkOllamaVersion() {
-		socket.emit("ollamaVersion", {})
+		socket.emit("ollama:version", {})
 	}
 
 	function checkForUpdates() {
 		isCheckingUpdates = true
-		socket.emit("ollamaIsUpdateAvailable", {})
+		socket.emit("ollama:isUpdateAvailable", {})
 	}
 
 	function saveBaseUrl() {
@@ -55,7 +55,7 @@
 		}
 
 		isSavingBaseUrl = true
-		socket.emit("ollamaSetBaseUrl", { baseUrl: baseUrlField.trim() })
+		socket.emit("ollama:setBaseUrl", { baseUrl: baseUrlField.trim() })
 	}
 
 	function handleSaveBaseUrl() {
@@ -74,7 +74,7 @@
 
 	function handleDeleteModalConfirm() {
 		if (modelToDelete) {
-			socket.emit("ollamaDeleteModel", { modelName: modelToDelete.name })
+			socket.emit("ollama:deleteModel", { modelName: modelToDelete.name })
 		}
 		showDeleteModal = false
 		modelToDelete = null

@@ -1,6 +1,4 @@
 import { db } from "$lib/server/db"
-import * as schema from "$lib/server/db/schema"
-import { eq } from "drizzle-orm"
 import { tokens } from "$lib/server/auth"
 import { authenticate } from "$lib/server/providers/users/authenticate"
 import type { Socket } from "socket.io"
@@ -33,7 +31,7 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 			
 			// Fetch user 1 when accounts are disabled
 			const fallbackUser = await db.query.users.findFirst({
-				where: eq(schema.users.id, 1),
+				where: (u, { eq }) => eq(u.id, 1),
 				columns: {
 					id: true,
 					username: true,
@@ -46,27 +44,26 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 				socket.join(`user_${fallbackUser.id}`)
 			}
 			
-			console.log("Accounts disabled, using fallback user 1")
+			console.log("Accounts disabled, using default user")
 			return next()
 		}
 
-		// B) Accounts enabled: Try to authenticate, but fall back gracefully
+		// B) Accounts enabled: Require authentication, reject if not provided
 		const token = socket.handshake.auth?.token
 
 		if (!token) {
-			console.log("No token provided, but accounts are enabled - allowing limited access")
-			socket.isAuthenticated = false
-			// Allow connection but without user context - handlers will need to check auth individually
-			return next()
+			console.log("No token provided, accounts are enabled - rejecting connection")
+			socket.disconnect()
+			return next(new Error("Authentication required"))
 		}
 
 		// Decrypt the PASETO token to get the payload
 		const payload = await tokens.decryptLocalToken({ token })
 		
 		if (!payload.id) {
-			console.log("Invalid token payload - allowing limited access")
-			socket.isAuthenticated = false
-			return next()
+			console.log("Invalid token payload - rejecting connection")
+			socket.disconnect()
+			return next(new Error("Invalid authentication token"))
 		}
 
 		// Get user agent for validation (simplified for sockets)
@@ -95,9 +92,9 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 		})
 
 		if (!authResult || !authResult.user) {
-			console.log("Authentication failed - allowing limited access")
-			socket.isAuthenticated = false
-			return next()
+			console.log("Authentication failed - rejecting connection")
+			socket.disconnect()
+			return next(new Error("Authentication failed"))
 		}
 
 		// Attach user to socket
@@ -114,11 +111,10 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 		next()
 	} catch (error: any) {
 		console.error("Socket authentication error:", error)
-		socket.isAuthenticated = false
 		
-		// Allow connection to continue but without authentication
-		console.log("Auth error - allowing limited access")
-		return next()
+		// Reject connection on authentication errors when accounts are enabled
+		socket.disconnect()
+		return next(new Error("Authentication error"))
 	}
 }
 
@@ -137,7 +133,7 @@ export function requireAuth<T extends AuthenticatedSocket>(
 			// Accounts disabled - always allow with fallback user
 			if (!socket.user) {
 				const fallbackUser = await db.query.users.findFirst({
-					where: eq(schema.users.id, 1),
+					where: (u, { eq }) => eq(u.id, 1),
 					columns: {
 						id: true,
 						username: true,
