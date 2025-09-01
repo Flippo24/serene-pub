@@ -21,12 +21,10 @@
 	let selectedConfigId: number | undefined = $state(
 		userSettingsCtx.settings?.activeContextConfigId || undefined
 	)
-	let contextConfig: Sockets.ContextConfigs.Get.Response["contextConfig"] = $state(
-		{} as Sockets.ContextConfigs.Get.Response["contextConfig"]
-	)
-	let originalData: Sockets.ContextConfigs.Get.Response["contextConfig"] = $state(
-		{} as Sockets.ContextConfigs.Get.Response["contextConfig"]
-	)
+	let contextConfig: Sockets.ContextConfigs.Get.Response["contextConfig"] =
+		$state({} as Sockets.ContextConfigs.Get.Response["contextConfig"])
+	let originalData: Sockets.ContextConfigs.Get.Response["contextConfig"] =
+		$state({} as Sockets.ContextConfigs.Get.Response["contextConfig"])
 	let unsavedChanges = $derived(
 		JSON.stringify(contextConfig) !== JSON.stringify(originalData)
 	)
@@ -102,7 +100,9 @@
 			isImmutable: false
 		}
 		delete newContextConfig.id
-		socket.emit("contextConfigs:create", { contextConfig: newContextConfig })
+		socket.emit("contextConfigs:create", {
+			contextConfig: newContextConfig
+		})
 		showNewNameModal = false
 	}
 
@@ -154,15 +154,19 @@
 				configsList = msg.contextConfigsList
 				if (!selectedConfigId && configsList.length > 0) {
 					selectedConfigId =
-						userSettingsCtx.settings?.activeContextConfigId ?? configsList[0].id
+						userSettingsCtx.settings?.activeContextConfigId ??
+						configsList[0].id
 				}
 			}
 		)
 
-		socket.on("contextConfigs:get", (msg: Sockets.ContextConfigs.Get.Response) => {
-			contextConfig = { ...msg.contextConfig }
-			originalData = { ...msg.contextConfig }
-		})
+		socket.on(
+			"contextConfigs:get",
+			(msg: Sockets.ContextConfigs.Get.Response) => {
+				contextConfig = { ...msg.contextConfig }
+				originalData = { ...msg.contextConfig }
+			}
+		)
 
 		socket.on(
 			"contextConfigs:create",

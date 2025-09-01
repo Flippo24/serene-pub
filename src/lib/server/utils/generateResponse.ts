@@ -43,15 +43,15 @@ export async function generateResponse({
 	const chat = await db.query.chats.findFirst({
 		where: (c, { eq }) => eq(c.id, chatId),
 		with: {
-			chatCharacters: { 
-				with: { 
-					character: true 
-				} 
+			chatCharacters: {
+				with: {
+					character: true
+				}
 			},
-			chatPersonas: { 
-				with: { 
-					persona: true 
-				} 
+			chatPersonas: {
+				with: {
+					persona: true
+				}
 			},
 			chatMessages: {
 				where: (cm, { ne }) => ne(cm.id, generatingMessage.id),
@@ -62,7 +62,8 @@ export async function generateResponse({
 	})
 
 	// Get user and their configurations with fallbacks
-	const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
+	const { connection, sampling, contextConfig, promptConfig } =
+		await getUserConfigurations(userId)
 
 	const { Adapter } = getConnectionAdapter(connection.type)
 

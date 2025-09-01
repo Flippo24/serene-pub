@@ -192,7 +192,11 @@ export class PromptBuilder {
 	contextBuildCharacterExampleDialogues(
 		character: SelectCharacter
 	): string | undefined {
-		if (!character?.exampleDialogues || !Array.isArray(character.exampleDialogues)) return undefined
+		if (
+			!character?.exampleDialogues ||
+			!Array.isArray(character.exampleDialogues)
+		)
+			return undefined
 		const validDialogues = character.exampleDialogues.filter(Boolean)
 		if (validDialogues.length === 0) return undefined
 		// Select 1 random example dialogue
@@ -217,7 +221,10 @@ export class PromptBuilder {
 		return persona.name
 	}
 
-	compileCharacterData(character: SelectCharacter, visibility?: string): {
+	compileCharacterData(
+		character: SelectCharacter,
+		visibility?: string
+	): {
 		name: string
 		nickname?: string
 		description: string
@@ -236,7 +243,7 @@ export class PromptBuilder {
 		// For minimal visibility, only include name/nickname and description
 		if (visibility === ChatCharacterVisibility.MINIMAL) {
 			char.description = this.contextBuildCharacterDescription(character)
-		} 
+		}
 		// For visible (default) or undefined, include all character data
 		else {
 			char.description = this.contextBuildCharacterDescription(character)
@@ -313,13 +320,13 @@ export class PromptBuilder {
 		const entries: SelectCharacterLoreEntry[] =
 			chatWithLorebook.lorebook?.characterLoreEntries || []
 		let filtered: SelectCharacterLoreEntry[] = []
-		
+
 		if (priority === 4) {
 			filtered = entries.filter((e) => e.constant === true)
 		} else if ([3, 2, 1].includes(priority)) {
 			filtered = entries.filter((e) => e.priority === priority)
 		}
-		
+
 		filtered = filtered.filter((e) => {
 			if (!e.lorebookBindingId) return false
 			const lorebook =
@@ -329,26 +336,29 @@ export class PromptBuilder {
 				(b: SelectLorebookBinding) => b.id === e.lorebookBindingId
 			)
 			if (!binding) return false
-			
+
 			if (binding.characterId) {
 				const chatCharacter = chat.chatCharacters?.find(
 					(cc) => cc.character.id === binding.characterId
 				)
-				
+
 				if (!chatCharacter) return false
-				
+
 				// Always include lore for the current character
 				if (binding.characterId === currentCharacterId) {
 					return true
 				}
-				
+
 				// For other characters, check their visibility setting
 				// Hidden or minimal characters don't get lore included
-				if (chatCharacter.visibility === ChatCharacterVisibility.HIDDEN ||
-					chatCharacter.visibility === ChatCharacterVisibility.MINIMAL) {
+				if (
+					chatCharacter.visibility ===
+						ChatCharacterVisibility.HIDDEN ||
+					chatCharacter.visibility === ChatCharacterVisibility.MINIMAL
+				) {
 					return false
 				}
-				
+
 				return true
 			} else if (binding.personaId) {
 				return chat.chatPersonas?.some(
@@ -357,7 +367,7 @@ export class PromptBuilder {
 			}
 			return false
 		})
-		
+
 		filtered.sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 		for (const entry of filtered) {
 			yield entry
@@ -368,28 +378,36 @@ export class PromptBuilder {
 		const chatCharacters = this.chat.chatCharacters as
 			| (SelectChatCharacter & { character: SelectCharacter })[]
 			| undefined
-		
+
 		// Build assistant characters with visibility filtering
 		this.assistantCharacters = (chatCharacters || [])
 			.filter((cc) => {
 				// Always include the current character
-				const isCurrentCharacter = cc.character.id === this.currentCharacterId
+				const isCurrentCharacter =
+					cc.character.id === this.currentCharacterId
 				// Filter out hidden characters unless they're the current character
-				return isCurrentCharacter || cc.visibility !== ChatCharacterVisibility.HIDDEN
+				return (
+					isCurrentCharacter ||
+					cc.visibility !== ChatCharacterVisibility.HIDDEN
+				)
 			})
 			.map((cc) => {
 				// Always show the current character with full visibility
-				const isCurrentCharacter = cc.character.id === this.currentCharacterId
-				const visibility = isCurrentCharacter ? ChatCharacterVisibility.VISIBLE : cc.visibility
-				
+				const isCurrentCharacter =
+					cc.character.id === this.currentCharacterId
+				const visibility = isCurrentCharacter
+					? ChatCharacterVisibility.VISIBLE
+					: cc.visibility
+
 				return this.compileCharacterData(cc.character, visibility)
 			})
-		
+
 		this.userCharacters = (this.chat.chatPersonas || []).map((cp) =>
 			this.compilePersonaData(cp.persona)
 		)
 		this.instructions = this.contextBuildSystemPrompt()
-		this.exampleDialogue = this.contextBuildCharacterExampleDialogues(currentCharacter)
+		this.exampleDialogue =
+			this.contextBuildCharacterExampleDialogues(currentCharacter)
 		this.postHistoryInstructions =
 			this.contextBuildPostHistoryInstructions(currentCharacter)
 	}
@@ -503,7 +521,10 @@ export class PromptBuilder {
 		let infillEngine: ContentInfillEngine
 
 		// Create a bound version of the character lore iterator with current character ID
-		const boundCharacterLoreIterator = (params: { chat: BasePromptChat; priority: number }) =>
+		const boundCharacterLoreIterator = (params: {
+			chat: BasePromptChat
+			priority: number
+		}) =>
 			this.characterLoreEntryIteratorWithVisibility({
 				...params,
 				currentCharacterId: this.currentCharacterId
@@ -581,15 +602,19 @@ export class PromptBuilder {
 	private buildSources(scenarioSource: null | "character" | "chat") {
 		const chatCharactersArr = this.chat.chatCharacters || []
 		const chatPersonasArr = this.chat.chatPersonas || []
-		
+
 		// Filter characters based on visibility settings (same logic as buildContextData)
 		const visibleChatCharacters = chatCharactersArr.filter((cc: any) => {
 			// Always include the current character
-			const isCurrentCharacter = cc.character.id === this.currentCharacterId
+			const isCurrentCharacter =
+				cc.character.id === this.currentCharacterId
 			// Filter out hidden characters unless they're the current character
-			return isCurrentCharacter || cc.visibility !== ChatCharacterVisibility.HIDDEN
+			return (
+				isCurrentCharacter ||
+				cc.visibility !== ChatCharacterVisibility.HIDDEN
+			)
 		})
-		
+
 		return {
 			characters: visibleChatCharacters.map((cc: any) => {
 				const c = cc.character
@@ -600,7 +625,9 @@ export class PromptBuilder {
 					description: Boolean(c.description),
 					personality: Boolean(c.personality),
 					exampleDialogue: Boolean(
-						c.exampleDialogues && Array.isArray(c.exampleDialogues) && c.exampleDialogues.length > 0
+						c.exampleDialogues &&
+							Array.isArray(c.exampleDialogues) &&
+							c.exampleDialogues.length > 0
 					),
 					postHistoryInstructions: Boolean(c.postHistoryInstructions)
 				}

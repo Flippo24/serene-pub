@@ -31,7 +31,7 @@ export const users = pgTable("users", {
 	updatedAt: date("updated_at")
 		.notNull()
 		.default(sql`(CURRENT_TIMESTAMP)`)
-		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
+		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`)
 })
 
 export const userRelations = relations(users, ({ many, one }) => ({
@@ -118,7 +118,9 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
 	})
 }))
 
-export const passphrases: PgTableWithColumns<any> & { usePermissions?: boolean } = pgTable(
+export const passphrases: PgTableWithColumns<any> & {
+	usePermissions?: boolean
+} = pgTable(
 	"passphrases",
 	{
 		id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
@@ -131,9 +133,7 @@ export const passphrases: PgTableWithColumns<any> & { usePermissions?: boolean }
 		createdAt: timestamp("created_at").notNull().defaultNow(),
 		invalidatedAt: timestamp("invalidated_at")
 	},
-	(t) => [
-		uniqueIndex("unique_user_passphrases").on(t.userId)
-	]
+	(t) => [uniqueIndex("unique_user_passphrases").on(t.userId)]
 )
 
 export const passphrasesRelations = relations(passphrases, ({ one }) => ({
@@ -143,22 +143,19 @@ export const passphrasesRelations = relations(passphrases, ({ one }) => ({
 	})
 }))
 
-export const userTokens = pgTable(
-		"user_tokens",
-	{
-		id: uuid("id")
-			.primaryKey()
-			.default(sql`(gen_random_uuid ())`),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "set null" }),
-		token: text("token").notNull(),
-		createdAt: timestamp("created_at").notNull().defaultNow(),
-		expiresAt: timestamp("expires_at").notNull(),
-		browser: varchar("browser", { length: 256 }).notNull(),
-		os: varchar("os", { length: 256 }).notNull()
-	}
-)
+export const userTokens = pgTable("user_tokens", {
+	id: uuid("id")
+		.primaryKey()
+		.default(sql`(gen_random_uuid ())`),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "set null" }),
+	token: text("token").notNull(),
+	createdAt: timestamp("created_at").notNull().defaultNow(),
+	expiresAt: timestamp("expires_at").notNull(),
+	browser: varchar("browser", { length: 256 }).notNull(),
+	os: varchar("os", { length: 256 }).notNull()
+})
 
 export const usersTokenRelations = relations(userTokens, ({ many, one }) => ({
 	user: one(users, {
@@ -166,7 +163,6 @@ export const usersTokenRelations = relations(userTokens, ({ many, one }) => ({
 		references: [users.id]
 	})
 }))
-
 
 export const samplingConfigs = pgTable("sampling_configs", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
@@ -216,7 +212,83 @@ export const samplingConfigs = pgTable("sampling_configs", {
 		.default(false), // Allow for context window expansion
 
 	seed: integer("seed").default(-1), // -1 for random, can be used for deterministic sampling
-	seedEnabled: boolean("seed_enabled").notNull().default(false)
+	seedEnabled: boolean("seed_enabled").notNull().default(false),
+	// Min-P sampling
+	minP: real("min_p").default(0.05),
+	minPEnabled: boolean("min_p_enabled").notNull().default(false),
+	// Typical-P sampling
+	typicalP: real("typical_p").default(1.0),
+	typicalPEnabled: boolean("typical_p_enabled").notNull().default(false),
+	// Mirostat sampling
+	mirostat: integer("mirostat").default(0), // 0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0
+	mirostatEnabled: boolean("mirostat_enabled").notNull().default(false),
+	mirostatTau: real("mirostat_tau").default(5.0),
+	mirostatTauEnabled: boolean("mirostat_tau_enabled")
+		.notNull()
+		.default(false),
+	mirostatEta: real("mirostat_eta").default(0.1),
+	mirostatEtaEnabled: boolean("mirostat_eta_enabled")
+		.notNull()
+		.default(false),
+	// XTC sampling
+	xtcProbability: real("xtc_probability").default(0.0),
+	xtcProbabilityEnabled: boolean("xtc_probability_enabled")
+		.notNull()
+		.default(false),
+	xtcThreshold: real("xtc_threshold").default(0.1),
+	xtcThresholdEnabled: boolean("xtc_threshold_enabled")
+		.notNull()
+		.default(false),
+	// DRY sampling
+	dryMultiplier: real("dry_multiplier").default(0.0),
+	dryMultiplierEnabled: boolean("dry_multiplier_enabled")
+		.notNull()
+		.default(false),
+	dryBase: real("dry_base").default(1.75),
+	dryBaseEnabled: boolean("dry_base_enabled").notNull().default(false),
+	dryAllowedLength: integer("dry_allowed_length").default(2),
+	dryAllowedLengthEnabled: boolean("dry_allowed_length_enabled")
+		.notNull()
+		.default(false),
+	dryPenaltyLastN: integer("dry_penalty_last_n").default(-1),
+	dryPenaltyLastNEnabled: boolean("dry_penalty_last_n_enabled")
+		.notNull()
+		.default(false),
+	drySequenceBreakers: json("dry_sequence_breakers")
+		.default(["\\n", ":", '"', "*"])
+		.$type<string[]>(),
+	drySequenceBreakersEnabled: boolean("dry_sequence_breakers_enabled")
+		.notNull()
+		.default(false),
+	// Dynamic temperature
+	dynatempRange: real("dynatemp_range").default(0.0),
+	dynatempRangeEnabled: boolean("dynatemp_range_enabled")
+		.notNull()
+		.default(false),
+	dynatempExponent: real("dynatemp_exponent").default(1.0),
+	dynatempExponentEnabled: boolean("dynatemp_exponent_enabled")
+		.notNull()
+		.default(false),
+	// Additional Ollama-specific
+	tfsZ: real("tfs_z").default(1.0),
+	tfsZEnabled: boolean("tfs_z_enabled").notNull().default(false),
+	repeatLastN: integer("repeat_last_n").default(64),
+	repeatLastNEnabled: boolean("repeat_last_n_enabled")
+		.notNull()
+		.default(false),
+	penalizeNewline: boolean("penalize_newline").default(false),
+	penalizeNewlineEnabled: boolean("penalize_newline_enabled")
+		.notNull()
+		.default(false),
+	// OpenAI-specific
+	logitBias: json("logit_bias").default({}).$type<Record<string, number>>(),
+	logitBiasEnabled: boolean("logit_bias_enabled").notNull().default(false),
+	// Stop sequences
+	stop: json("stop").default([]).$type<string[]>(),
+	stopEnabled: boolean("stop_enabled").notNull().default(false),
+	// Max tokens (alternative to responseTokens for OpenAI compatibility)
+	maxTokens: integer("max_tokens").default(-1),
+	maxTokensEnabled: boolean("max_tokens_enabled").notNull().default(false)
 })
 
 export const samplingRelations = relations(samplingConfigs, () => ({}))
@@ -275,7 +347,7 @@ export const lorebooks = pgTable(
 		updatedAt: date("updated_at")
 			.notNull()
 			.default(sql`(CURRENT_TIMESTAMP)`)
-			.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
+			.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`)
 	},
 	(table) => ({})
 )
@@ -801,7 +873,9 @@ export const chatCharacters = pgTable(
 		position: integer("position").default(0), // Position in the chat
 		isActive: boolean("is_active").notNull().default(true), // 1 if active in chat, 0 if not
 		// Character visibility optimization setting
-		visibility: text("visibility").notNull().default(ChatCharacterVisibility.VISIBLE) // Controls how much character info is shown when not responding
+		visibility: text("visibility")
+			.notNull()
+			.default(ChatCharacterVisibility.VISIBLE) // Controls how much character info is shown when not responding
 	},
 	(table) => ({
 		pk: uniqueIndex("chat_characters_pk").on(
@@ -887,9 +961,7 @@ export const systemSettings = pgTable("system_settings", {
 			onDelete: "set null"
 		}
 	),
-	lockConnection: boolean("lock_connection")
-		.notNull()
-		.default(false),
+	lockConnection: boolean("lock_connection").notNull().default(false),
 	defaultSamplingConfigId: integer("default_sampling_id").references(
 		() => samplingConfigs.id,
 		{
@@ -905,27 +977,21 @@ export const systemSettings = pgTable("system_settings", {
 			onDelete: "set null"
 		}
 	),
-	lockContextConfig: boolean("lock_context_config")
-		.notNull()
-		.default(false),
+	lockContextConfig: boolean("lock_context_config").notNull().default(false),
 	defaultPromptConfigId: integer("default_prompt_config_id").references(
 		() => promptConfigs.id,
 		{
 			onDelete: "set null"
 		}
 	),
-	lockPromptConfig: boolean("lock_prompt_config")
-		.notNull()
-		.default(false),
+	lockPromptConfig: boolean("lock_prompt_config").notNull().default(false),
 	ollamaManagerEnabled: boolean("ollama_manager_enabled")
 		.notNull()
 		.default(false),
 	ollamaManagerBaseUrl: text("ollama_base_url")
 		.notNull()
 		.default("http://localhost:11434/"),
-	isAccountsEnabled: boolean("is_accounts_enabled")
-		.notNull()
-		.default(false),
+	isAccountsEnabled: boolean("is_accounts_enabled").notNull().default(false)
 })
 
 export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({

@@ -3,7 +3,10 @@ import { eq, and } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import type { Handler } from "$lib/shared/events"
 
-export const tagsList: Handler<Sockets.Tags.List.Params, Sockets.Tags.List.Response> = {
+export const tagsList: Handler<
+	Sockets.Tags.List.Params,
+	Sockets.Tags.List.Response
+> = {
 	event: "tags:list",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -17,7 +20,10 @@ export const tagsList: Handler<Sockets.Tags.List.Params, Sockets.Tags.List.Respo
 	}
 }
 
-export const tagsCreate: Handler<Sockets.Tags.Create.Params, Sockets.Tags.Create.Response> = {
+export const tagsCreate: Handler<
+	Sockets.Tags.Create.Params,
+	Sockets.Tags.Create.Response
+> = {
 	event: "tags:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -46,7 +52,10 @@ export const tagsCreate: Handler<Sockets.Tags.Create.Params, Sockets.Tags.Create
 	}
 }
 
-export const tagsUpdate: Handler<Sockets.Tags.Update.Params, Sockets.Tags.Update.Response> = {
+export const tagsUpdate: Handler<
+	Sockets.Tags.Update.Params,
+	Sockets.Tags.Update.Response
+> = {
 	event: "tags:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -82,12 +91,15 @@ export const tagsUpdate: Handler<Sockets.Tags.Update.Params, Sockets.Tags.Update
 	}
 }
 
-export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete.Response> = {
+export const tagsDelete: Handler<
+	Sockets.Tags.Delete.Params,
+	Sockets.Tags.Delete.Response
+> = {
 	event: "tags:delete",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// First delete all character tag associations for this user's tags
 			await db
 				.delete(schema.characterTags)
@@ -113,7 +125,9 @@ export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete
 					)
 				)
 
-			const res: Sockets.Tags.Delete.Response = { success: "Tag deleted successfully" }
+			const res: Sockets.Tags.Delete.Response = {
+				success: "Tag deleted successfully"
+			}
 			emitToUser("tags:delete", res)
 
 			// Also emit updated tags list
@@ -129,14 +143,17 @@ export const tagsDelete: Handler<Sockets.Tags.Delete.Params, Sockets.Tags.Delete
 	}
 }
 
-export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Sockets.Tags.GetRelatedData.Response> = {
+export const tagsGetRelatedData: Handler<
+	Sockets.Tags.GetRelatedData.Params,
+	Sockets.Tags.GetRelatedData.Response
+> = {
 	event: "tags:getRelatedData",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
-		
+
 		// Get the tag (only if owned by user)
 		const tag = await db.query.tags.findFirst({
-			where: (t, { and, eq }) => 
+			where: (t, { and, eq }) =>
 				and(eq(t.id, params.tagId), eq(t.userId, userId))
 		})
 
@@ -191,9 +208,11 @@ export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Soc
 		const res: Sockets.Tags.GetRelatedData.Response = {
 			tagData: {
 				tag,
-				characters: characters.map(ct => ct.character).filter(Boolean),
-				personas: personas.map(pt => pt.persona).filter(Boolean),
-				lorebooks: lorebooks.map(lt => lt.lorebook).filter(Boolean)
+				characters: characters
+					.map((ct) => ct.character)
+					.filter(Boolean),
+				personas: personas.map((pt) => pt.persona).filter(Boolean),
+				lorebooks: lorebooks.map((lt) => lt.lorebook).filter(Boolean)
 			}
 		}
 		emitToUser("tags:getRelatedData", res)
@@ -201,27 +220,32 @@ export const tagsGetRelatedData: Handler<Sockets.Tags.GetRelatedData.Params, Soc
 	}
 }
 
-export const tagsAddToCharacter: Handler<Sockets.Tags.AddToCharacter.Params, Sockets.Tags.AddToCharacter.Response> = {
+export const tagsAddToCharacter: Handler<
+	Sockets.Tags.AddToCharacter.Params,
+	Sockets.Tags.AddToCharacter.Response
+> = {
 	event: "tags:addToCharacter",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Verify that the user owns both the tag and the character
 			const tag = await db.query.tags.findFirst({
-				where: (t, { and, eq }) => 
+				where: (t, { and, eq }) =>
 					and(eq(t.id, params.tagId), eq(t.userId, userId))
 			})
-			
+
 			const character = await db.query.characters.findFirst({
-				where: (c, { and, eq }) => 
+				where: (c, { and, eq }) =>
 					and(eq(c.id, params.characterId), eq(c.userId, userId))
 			})
-			
+
 			if (!tag || !character) {
-				throw new Error("Tag or character not found or not owned by user")
+				throw new Error(
+					"Tag or character not found or not owned by user"
+				)
 			}
-			
+
 			await db
 				.insert(schema.characterTags)
 				.values({
@@ -243,37 +267,47 @@ export const tagsAddToCharacter: Handler<Sockets.Tags.AddToCharacter.Params, Soc
 	}
 }
 
-export const tagsRemoveFromCharacter: Handler<Sockets.Tags.RemoveFromCharacter.Params, Sockets.Tags.RemoveFromCharacter.Response> = {
+export const tagsRemoveFromCharacter: Handler<
+	Sockets.Tags.RemoveFromCharacter.Params,
+	Sockets.Tags.RemoveFromCharacter.Response
+> = {
 	event: "tags:removeFromCharacter",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Verify that the user owns both the tag and the character
 			const tag = await db.query.tags.findFirst({
-				where: (t, { and, eq }) => 
+				where: (t, { and, eq }) =>
 					and(eq(t.id, params.tagId), eq(t.userId, userId))
 			})
-			
+
 			const character = await db.query.characters.findFirst({
-				where: (c, { and, eq }) => 
+				where: (c, { and, eq }) =>
 					and(eq(c.id, params.characterId), eq(c.userId, userId))
 			})
-			
+
 			if (!tag || !character) {
-				throw new Error("Tag or character not found or not owned by user")
+				throw new Error(
+					"Tag or character not found or not owned by user"
+				)
 			}
-			
+
 			await db
 				.delete(schema.characterTags)
 				.where(
 					and(
-						eq(schema.characterTags.characterId, params.characterId),
+						eq(
+							schema.characterTags.characterId,
+							params.characterId
+						),
 						eq(schema.characterTags.tagId, params.tagId)
 					)
 				)
 
-			const res: Sockets.Tags.RemoveFromCharacter.Response = { success: true }
+			const res: Sockets.Tags.RemoveFromCharacter.Response = {
+				success: true
+			}
 			emitToUser("tags:removeFromCharacter", res)
 			return res
 		} catch (error) {
@@ -290,7 +324,11 @@ export const tagsRemoveFromCharacter: Handler<Sockets.Tags.RemoveFromCharacter.P
 export function registerTagHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, tagsList, emitToUser)
 	register(socket, tagsCreate, emitToUser)

@@ -4,15 +4,22 @@ import { eq } from "drizzle-orm"
 import { user as loadUser } from "./users"
 import type { Handler } from "$lib/shared/events"
 
-export const promptConfigsListHandler: Handler<Sockets.PromptConfigs.List.Params, Sockets.PromptConfigs.List.Response> = {
+export const promptConfigsListHandler: Handler<
+	Sockets.PromptConfigs.List.Params,
+	Sockets.PromptConfigs.List.Response
+> = {
 	event: "promptConfigs:list",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can manage prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can manage prompt configurations."
+			)
 		}
-		
+
 		const promptConfigsList = await db.query.promptConfigs.findMany({
 			columns: {
 				id: true,
@@ -27,20 +34,29 @@ export const promptConfigsListHandler: Handler<Sockets.PromptConfigs.List.Params
 	}
 }
 
-export const promptConfigsGet: Handler<Sockets.PromptConfigs.Get.Params, Sockets.PromptConfigs.Get.Response> = {
+export const promptConfigsGet: Handler<
+	Sockets.PromptConfigs.Get.Params,
+	Sockets.PromptConfigs.Get.Response
+> = {
 	event: "promptConfigs:get",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can manage prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can manage prompt configurations."
+			)
 		}
-		
+
 		const promptConfig = await db.query.promptConfigs.findFirst({
 			where: (c, { eq }) => eq(c.id, params.id)
 		})
 		if (!promptConfig) {
-			emitToUser("promptConfigs:get:error", { error: "Prompt config not found" })
+			emitToUser("promptConfigs:get:error", {
+				error: "Prompt config not found"
+			})
 			throw new Error("Prompt config not found")
 		}
 		const res: Sockets.PromptConfigs.Get.Response = { promptConfig }
@@ -49,15 +65,22 @@ export const promptConfigsGet: Handler<Sockets.PromptConfigs.Get.Params, Sockets
 	}
 }
 
-export const promptConfigsCreate: Handler<Sockets.PromptConfigs.Create.Params, Sockets.PromptConfigs.Create.Response> = {
+export const promptConfigsCreate: Handler<
+	Sockets.PromptConfigs.Create.Params,
+	Sockets.PromptConfigs.Create.Response
+> = {
 	event: "promptConfigs:create",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can create prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can create prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can create prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can create prompt configurations."
+			)
 		}
-		
+
 		const [promptConfig] = await db
 			.insert(schema.promptConfigs)
 			.values(params.promptConfig)
@@ -69,15 +92,22 @@ export const promptConfigsCreate: Handler<Sockets.PromptConfigs.Create.Params, S
 	}
 }
 
-export const promptConfigsUpdate: Handler<Sockets.PromptConfigs.Update.Params, Sockets.PromptConfigs.Update.Response> = {
+export const promptConfigsUpdate: Handler<
+	Sockets.PromptConfigs.Update.Params,
+	Sockets.PromptConfigs.Update.Response
+> = {
 	event: "promptConfigs:update",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can update prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can update prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can update prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can update prompt configurations."
+			)
 		}
-		
+
 		const id = params.promptConfig.id!
 		const { id: _, ...updateData } = params.promptConfig
 		const [promptConfig] = await db
@@ -92,40 +122,58 @@ export const promptConfigsUpdate: Handler<Sockets.PromptConfigs.Update.Params, S
 	}
 }
 
-export const promptConfigsDelete: Handler<Sockets.PromptConfigs.Delete.Params, Sockets.PromptConfigs.Delete.Response> = {
+export const promptConfigsDelete: Handler<
+	Sockets.PromptConfigs.Delete.Params,
+	Sockets.PromptConfigs.Delete.Response
+> = {
 	event: "promptConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can delete prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can delete prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can delete prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can delete prompt configurations."
+			)
 		}
-		
+
 		await db
 			.delete(schema.promptConfigs)
 			.where(eq(schema.promptConfigs.id, params.id))
 		await promptConfigsListHandler.handler(socket, {}, emitToUser)
-		const res: Sockets.PromptConfigs.Delete.Response = { success: "Prompt config deleted successfully" }
+		const res: Sockets.PromptConfigs.Delete.Response = {
+			success: "Prompt config deleted successfully"
+		}
 		emitToUser("promptConfigs:delete", res)
 		return res
 	}
 }
 
-export const promptConfigsSetUserActive: Handler<Sockets.PromptConfigs.SetUserActive.Params, Sockets.PromptConfigs.SetUserActive.Response> = {
+export const promptConfigsSetUserActive: Handler<
+	Sockets.PromptConfigs.SetUserActive.Params,
+	Sockets.PromptConfigs.SetUserActive.Response
+> = {
 	event: "promptConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can set active prompt configurations." }
+			const res = {
+				error: "Access denied. Only admin users can set active prompt configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can set active prompt configurations.")
+			throw new Error(
+				"Access denied. Only admin users can set active prompt configurations."
+			)
 		}
-		
+
 		const userId = socket.user!.id
 		const currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, userId)
 		})
 		if (!currentUser) {
-			emitToUser("promptConfigs:setUserActive:error", { error: "User not found." })
+			emitToUser("promptConfigs:setUserActive:error", {
+				error: "User not found."
+			})
 			throw new Error("User not found")
 		}
 
@@ -146,12 +194,16 @@ export const promptConfigsSetUserActive: Handler<Sockets.PromptConfigs.SetUserAc
 				activePromptConfigId: params.id
 			})
 			.where(eq(schema.userSettings.userId, currentUser.id))
-		
+
 		await loadUser(socket, {}, emitToUser) // Emit updated user info
 		if (params.id) {
-			await promptConfigsGet.handler(socket, { id: params.id }, emitToUser)
+			await promptConfigsGet.handler(
+				socket,
+				{ id: params.id },
+				emitToUser
+			)
 		}
-		
+
 		// Get the updated user to return in response
 		const updatedUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, currentUser.id),
@@ -159,7 +211,9 @@ export const promptConfigsSetUserActive: Handler<Sockets.PromptConfigs.SetUserAc
 				userSettings: true
 			}
 		})
-		const res: Sockets.PromptConfigs.SetUserActive.Response = { user: updatedUser! }
+		const res: Sockets.PromptConfigs.SetUserActive.Response = {
+			user: updatedUser!
+		}
 		emitToUser("promptConfigs:setUserActive", res)
 		return res
 	}
@@ -187,7 +241,11 @@ export async function createPromptConfig(
 	message: { promptConfig: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await promptConfigsCreate.handler(socket, { promptConfig: message.promptConfig }, emitToUser)
+	await promptConfigsCreate.handler(
+		socket,
+		{ promptConfig: message.promptConfig },
+		emitToUser
+	)
 }
 
 export async function updatePromptConfig(
@@ -195,7 +253,11 @@ export async function updatePromptConfig(
 	message: { promptConfig: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await promptConfigsUpdate.handler(socket, { promptConfig: message.promptConfig }, emitToUser)
+	await promptConfigsUpdate.handler(
+		socket,
+		{ promptConfig: message.promptConfig },
+		emitToUser
+	)
 }
 
 export async function deletePromptConfig(
@@ -211,14 +273,22 @@ export async function setUserActivePromptConfig(
 	message: { id: number | null },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await promptConfigsSetUserActive.handler(socket, { id: message.id }, emitToUser)
+	await promptConfigsSetUserActive.handler(
+		socket,
+		{ id: message.id },
+		emitToUser
+	)
 }
 
 // Registration function for all prompt config handlers
 export function registerPromptConfigHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, promptConfigsListHandler, emitToUser)
 	register(socket, promptConfigsGet, emitToUser)

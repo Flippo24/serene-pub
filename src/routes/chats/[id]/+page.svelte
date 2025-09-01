@@ -115,15 +115,15 @@
 	function handleSend() {
 		if (!newMessage.trim()) return
 		// TODO: Implement send message socket call
-		const msg: Sockets.SendPersonaMessage.Call = {
+		const msg: Sockets.ChatMessages.SendPersonaMessage.Params = {
 			chatId,
 			personaId: chat?.chatPersonas?.[0]?.personaId,
 			content: newMessage
 		}
-		socket.emit("sendPersonaMessage", msg)
+		socket.emit("chatMessages:sendPersonaMessage", msg)
 		newMessage = ""
 		// Refresh response order after sending message
-		socket.emit("getChatResponseOrder", { chatId })
+		socket.emit("chats:getResponseOrder", { chatId })
 	}
 
 	function getMessageCharacter(
@@ -155,7 +155,7 @@
 	}
 
 	function onDeleteMessageConfirm() {
-		socket.emit("deleteChatMessage", {
+		socket.emit("chatMessages:delete", {
 			id: deleteChatMessage?.id
 		})
 		deleteChatMessage = undefined
@@ -176,10 +176,10 @@
 		if (event) event.preventDefault()
 		if (!editChatMessage || !editChatMessage.content.trim()) return
 
-		const updatedMessage: Sockets.UpdateChatMessage.Call = {
-			chatMessage: editChatMessage
+		const updatedMessage: Sockets.ChatMessages.Update.Params = {
+			...editChatMessage
 		}
-		socket.emit("updateChatMessage", updatedMessage)
+		socket.emit("chatMessages:update", updatedMessage)
 		editChatMessage = undefined
 	}
 
@@ -199,7 +199,7 @@
 			loadingOlderMessages = false
 			socket.emit("chats:get", { id: chatId, limit: 25, offset: 0 })
 			// console.log('Debug - Emitting getChatResponseOrder for chatId:', chatId)
-			socket.emit("getChatResponseOrder", { chatId })
+			socket.emit("chats:getResponseOrder", { chatId })
 		}
 	})
 
@@ -219,7 +219,7 @@
 		}
 		if (promptTokenCountTimeout) clearTimeout(promptTokenCountTimeout)
 		promptTokenCountTimeout = setTimeout(() => {
-			socket.emit("promptTokenCount", {
+			socket.emit("chats:promptTokenCount", {
 				chatId,
 				content: newMessage,
 				personaId: chat?.chatPersonas?.[0]?.personaId || undefined,
@@ -309,7 +309,7 @@
 	function handleHideMessage(e: Event, msg: SelectChatMessage) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		socket.emit("updateChatMessage", {
+		socket.emit("chatMessages:update", {
 			chatMessage: { ...msg, isHidden: !msg.isHidden }
 		})
 	}
@@ -321,12 +321,12 @@
 	function handleRegenerateMessage(e: Event, msg: SelectChatMessage) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		socket.emit("regenerateChatMessage", { id: msg.id })
+		socket.emit("chatMessages:regenerate", { id: msg.id })
 	}
 	function handleAbortMessage(e: Event, msg: SelectChatMessage) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		socket.emit("abortChatMessage", { id: msg.id })
+		socket.emit("chatMessages:cancel", { id: msg.id, chatId })
 	}
 	function handleSendButton(e: Event) {
 		e.stopPropagation()
@@ -335,12 +335,13 @@
 	function handleAbortLastMessage(e: Event) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		if (lastMessage) socket.emit("abortChatMessage", { id: lastMessage.id })
+		if (lastMessage)
+			socket.emit("chatMessages:cancel", { id: lastMessage.id, chatId })
 	}
 	function handleTriggerContinueConversation(e: Event) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		socket.emit("triggerGenerateMessage", { chatId })
+		socket.emit("chats:triggerGenerateMessage", { chatId })
 	}
 	function handleTriggerCharacterMessage(e: Event) {
 		e.stopPropagation()
@@ -351,14 +352,14 @@
 		e.stopPropagation()
 		openMobileMsgControls = undefined
 		if (lastMessage && !lastMessage.isGenerating) {
-			socket.emit("regenerateChatMessage", { id: lastMessage.id })
+			socket.emit("chatMessages:regenerate", { id: lastMessage.id })
 		}
 	}
 
 	function onSelectTriggerCharacterMessage(characterId: number) {
 		showTriggerCharacterMessageModal = false
 		openMobileMsgControls = undefined
-		socket.emit("triggerGenerateMessage", {
+		socket.emit("chats:triggerGenerateMessage", {
 			chatId,
 			characterId,
 			once: true
@@ -367,7 +368,7 @@
 
 	function handleContinueWithNextCharacter() {
 		if (!nextCharacter) return
-		socket.emit("triggerGenerateMessage", {
+		socket.emit("chats:triggerGenerateMessage", {
 			chatId,
 			characterId: nextCharacter.id,
 			once: true
@@ -389,17 +390,15 @@
 	}
 
 	function swipeRight(msg: SelectChatMessage): void {
-		const req: Sockets.ChatMessageSwipeRight.Call = {
-			chatId: chatId,
-			chatMessageId: msg.id
+		const req: Sockets.ChatMessages.SwipeRight.Params = {
+			id: msg.id
 		}
 		socket.emit("chatMessages:swipeRight", req)
 	}
 
 	function swipeLeft(msg: SelectChatMessage): void {
-		const req: Sockets.ChatMessageSwipeLeft.Call = {
-			chatId: chatId,
-			chatMessageId: msg.id
+		const req: Sockets.ChatMessages.SwipeLeft.Params = {
+			id: msg.id
 		}
 		socket.emit("chatMessages:swipeLeft", req)
 	}
@@ -547,14 +546,14 @@
 					}
 				}
 				// Refresh response order when messages change
-				socket.emit("getChatResponseOrder", { chatId })
+				socket.emit("chats:getResponseOrder", { chatId })
 				// Auto-scroll is handled by the $effect
 			}
 		})
 
 		socket.on(
 			"characters:update",
-			(msg: Sockets.UpdateCharacter.Response) => {
+			(msg: Sockets.Characters.Update.Response) => {
 				const charId = msg.character?.id
 				if (!charId || !chat) return
 
@@ -573,34 +572,37 @@
 			}
 		)
 
-		socket.on("updatePersona", (msg: Sockets.UpdatePersona.Response) => {
-			const personaId = msg.persona?.id
-			if (!personaId || !chat) return
+		socket.on(
+			"personas:update",
+			(msg: Sockets.Personas.Update.Response) => {
+				const personaId = msg.persona?.id
+				if (!personaId || !chat) return
 
-			// Update chat personas if the persona is in the chat
-			const chatPersonaIndex = chat.chatPersonas.findIndex(
-				(p: SelectChatPersona) => p.personaId === personaId
-			)
-			if (chatPersonaIndex !== -1) {
-				const updatedChatPersonas = [...chat.chatPersonas]
-				updatedChatPersonas[chatPersonaIndex] = {
-					...updatedChatPersonas[chatPersonaIndex],
-					persona: msg.persona
+				// Update chat personas if the persona is in the chat
+				const chatPersonaIndex = chat.chatPersonas.findIndex(
+					(p: SelectChatPersona) => p.personaId === personaId
+				)
+				if (chatPersonaIndex !== -1) {
+					const updatedChatPersonas = [...chat.chatPersonas]
+					updatedChatPersonas[chatPersonaIndex] = {
+						...updatedChatPersonas[chatPersonaIndex],
+						persona: msg.persona
+					}
+					chat = { ...chat, chatPersonas: updatedChatPersonas }
 				}
-				chat = { ...chat, chatPersonas: updatedChatPersonas }
 			}
-		})
+		)
 
 		socket.on(
-			"promptTokenCount",
+			"chats:promptTokenCount",
 			(msg: Sockets.PromptTokenCount.Response) => {
 				draftCompiledPrompt = msg
 			}
 		)
 
 		socket.on(
-			"deleteChatMessage",
-			(msg: Sockets.DeleteChatMessage.Response) => {
+			"chatMessages:delete",
+			(msg: Sockets.ChatMessages.Delete.Response) => {
 				if (chat) {
 					// Check if we're deleting the last message
 					const wasLastMessage = lastSeenMessageId === msg.id
@@ -637,7 +639,7 @@
 
 		socket.on(
 			"getChatResponseOrder",
-			(msg: Sockets.GetChatResponseOrder.Response) => {
+			(msg: Sockets.Chats.GetResponseOrder.Response) => {
 				if (msg.chatId === chatId) {
 					chatResponseOrder = msg
 				}

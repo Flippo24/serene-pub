@@ -18,7 +18,10 @@ export interface AuthenticatedSocket extends Socket {
  * Authentication middleware for Socket.IO using PASETO tokens
  * Extracts userToken from client handshake and validates it
  */
-export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: Error) => void) {
+export async function authMiddleware(
+	socket: AuthenticatedSocket,
+	next: (err?: Error) => void
+) {
 	try {
 		// Check if accounts are enabled in system settings
 		const systemSettings = await db.query.systemSettings.findFirst()
@@ -27,11 +30,12 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 
 		// A) Accounts not enabled: Always grab user 1
 		if (!isAccountsEnabled) {
-			socket.isAuthenticated = true  // Set to true when accounts are disabled
-			
-			// Fetch user 1 when accounts are disabled
+			socket.isAuthenticated = true // Set to true when accounts are disabled
+
+			// Fetch the first admin user when accounts are disabled
 			const fallbackUser = await db.query.users.findFirst({
-				where: (u, { eq }) => eq(u.id, 1),
+				where: (u, { eq }) => eq(u.isAdmin, true),
+				orderBy: (u, { asc }) => [asc(u.id)],
 				columns: {
 					id: true,
 					username: true,
@@ -43,7 +47,7 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 				socket.user = fallbackUser
 				socket.join(`user_${fallbackUser.id}`)
 			}
-			
+
 			console.log("Accounts disabled, using default user")
 			return next()
 		}
@@ -52,14 +56,16 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 		const token = socket.handshake.auth?.token
 
 		if (!token) {
-			console.log("No token provided, accounts are enabled - rejecting connection")
+			console.log(
+				"No token provided, accounts are enabled - rejecting connection"
+			)
 			socket.disconnect()
 			return next(new Error("Authentication required"))
 		}
 
 		// Decrypt the PASETO token to get the payload
 		const payload = await tokens.decryptLocalToken({ token })
-		
+
 		if (!payload.id) {
 			console.log("Invalid token payload - rejecting connection")
 			socket.disconnect()
@@ -67,16 +73,24 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 		}
 
 		// Get user agent for validation (simplified for sockets)
-		const userAgentString = socket.handshake.headers['user-agent'] || ''
-		
+		const userAgentString = socket.handshake.headers["user-agent"] || ""
+
 		// Parse user agent manually for basic browser/os detection
-		const browser = userAgentString.includes('Chrome') ? 'Chrome' : 
-						userAgentString.includes('Firefox') ? 'Firefox' :
-						userAgentString.includes('Safari') ? 'Safari' : 'Unknown'
-		
-		const os = userAgentString.includes('Windows') ? 'Windows' :
-				   userAgentString.includes('Macintosh') ? 'macOS' :
-				   userAgentString.includes('Linux') ? 'Linux' : 'Unknown'
+		const browser = userAgentString.includes("Chrome")
+			? "Chrome"
+			: userAgentString.includes("Firefox")
+				? "Firefox"
+				: userAgentString.includes("Safari")
+					? "Safari"
+					: "Unknown"
+
+		const os = userAgentString.includes("Windows")
+			? "Windows"
+			: userAgentString.includes("Macintosh")
+				? "macOS"
+				: userAgentString.includes("Linux")
+					? "Linux"
+					: "Unknown"
 
 		const userAgent = {
 			browser: { name: browser },
@@ -111,7 +125,7 @@ export async function authMiddleware(socket: AuthenticatedSocket, next: (err?: E
 		next()
 	} catch (error: any) {
 		console.error("Socket authentication error:", error)
-		
+
 		// Reject connection on authentication errors when accounts are enabled
 		socket.disconnect()
 		return next(new Error("Authentication error"))
@@ -128,12 +142,13 @@ export function requireAuth<T extends AuthenticatedSocket>(
 		// Check if accounts are disabled - if so, allow all requests
 		const systemSettings = await db.query.systemSettings.findFirst()
 		const isAccountsEnabled = systemSettings?.isAccountsEnabled ?? false
-		
+
 		if (!isAccountsEnabled) {
 			// Accounts disabled - always allow with fallback user
 			if (!socket.user) {
 				const fallbackUser = await db.query.users.findFirst({
-					where: (u, { eq }) => eq(u.id, 1),
+					where: (u, { eq }) => eq(u.isAdmin, true),
+					orderBy: (u, { asc }) => [asc(u.id)],
 					columns: {
 						id: true,
 						username: true,

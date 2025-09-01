@@ -99,7 +99,8 @@
 					title="Token Count"
 					class="text-xs"
 					class:text-error-500={contextExceeded}
-					aria-label="Token count: {compiledPrompt.meta.tokenCounts.total} of {compiledPrompt.meta.tokenCounts.limit}"
+					aria-label="Token count: {compiledPrompt.meta.tokenCounts
+						.total} of {compiledPrompt.meta.tokenCounts.limit}"
 					aria-live="polite"
 				>
 					{compiledPrompt.meta.tokenCounts.total} / {compiledPrompt
@@ -126,13 +127,15 @@
 						autocomplete="off"
 						spellcheck="true"
 						onkeydown={handleKeyDown}
-						aria-describedby={contextExceeded ? "token-warning" : undefined}
+						aria-describedby={contextExceeded
+							? "token-warning"
+							: undefined}
 						aria-invalid={contextExceeded}
 					></textarea>
 					{#if contextExceeded}
-						<div 
-							id="token-warning" 
-							class="text-error-500 text-xs mt-1"
+						<div
+							id="token-warning"
+							class="text-error-500 mt-1 text-xs"
 							role="alert"
 						>
 							Token limit exceeded. Message may be truncated.

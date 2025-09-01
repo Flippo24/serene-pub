@@ -5,7 +5,9 @@
 
 	interface Props {
 		character: Sockets.Characters.List.Response["characterList"][0]
-		onclick?: (character: Sockets.Characters.List.Response["characterList"][0]) => void
+		onclick?: (
+			character: Sockets.Characters.List.Response["characterList"][0]
+		) => void
 		onEdit?: (id: number) => void
 		onDelete?: (id: number) => void
 		showControls?: boolean
@@ -43,7 +45,9 @@
 	onclick={handleClick}
 	{contentTitle}
 	itemType="Character"
-	classes={character.isFavorite ? "border border-primary-500 " + classes : classes}
+	classes={character.isFavorite
+		? "border border-primary-500 " + classes
+		: classes}
 >
 	{#snippet content()}
 		<Avatar
@@ -56,14 +60,14 @@
 		</Avatar>
 		<div class="relative flex min-w-0 flex-1 gap-2">
 			<div class="relative min-w-0 flex-1">
-				<div 
+				<div
 					class="truncate text-left font-semibold"
 					id="character-name-{character.id}"
 				>
 					{character.nickname || character.name}
 				</div>
 				{#if character.description}
-					<div 
+					<div
 						class="text-muted-foreground line-clamp-2 text-left text-xs"
 						id="character-desc-{character.id}"
 					>
@@ -75,7 +79,11 @@
 	{/snippet}
 	{#snippet controls()}
 		{#if showControls && (onEdit || onDelete)}
-			<div class="flex flex-col gap-4" role="group" aria-labelledby="character-name-{character.id}">
+			<div
+				class="flex flex-col gap-4"
+				role="group"
+				aria-labelledby="character-name-{character.id}"
+			>
 				{#if onEdit}
 					<button
 						class="btn btn-sm text-primary-500 p-2"
@@ -92,7 +100,8 @@
 						class="btn btn-sm text-error-500 p-2"
 						onclick={handleDeleteClick}
 						title="Delete Character"
-						aria-label="Delete {character.nickname || character.name}"
+						aria-label="Delete {character.nickname ||
+							character.name}"
 						type="button"
 					>
 						<Icons.Trash2 size={16} aria-hidden="true" />

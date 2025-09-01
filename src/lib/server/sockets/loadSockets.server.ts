@@ -25,12 +25,12 @@ export async function loadSocketsServer() {
 	})
 
 	// Add authentication middleware
-	if ('use' in io && typeof io.use === 'function') {
+	if ("use" in io && typeof io.use === "function") {
 		io.use(authMiddleware as any)
 	}
 
 	if (typeof (io as any).to !== "function") {
-		(io as any).to = () => ({ emit: () => {} })
+		;(io as any).to = () => ({ emit: () => {} })
 	}
 
 	connectSockets(io as any)

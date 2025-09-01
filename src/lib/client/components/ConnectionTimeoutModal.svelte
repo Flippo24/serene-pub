@@ -1,7 +1,10 @@
 <!-- Connection timeout and reconnection UI component -->
 <script lang="ts">
 	import { onDestroy, onMount } from "svelte"
-	import { connectionTimeout, type ConnectionTimeoutService } from "$lib/client/services/connectionTimeout"
+	import {
+		connectionTimeout,
+		type ConnectionTimeoutService
+	} from "$lib/client/services/connectionTimeout"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { refreshAuthAfterLogin } from "$lib/client/sockets/loadSockets.client"
 	import * as Icons from "@lucide/svelte"
@@ -27,7 +30,8 @@
 				showModal = true
 				toaster.warning({
 					title: "Connection Timed Out",
-					description: "Your session has expired due to inactivity. You can reconnect in 30 seconds."
+					description:
+						"Your session has expired due to inactivity. You can reconnect in 30 seconds."
 				})
 			},
 			// On reconnect available callback
@@ -65,32 +69,32 @@
 
 		try {
 			isReconnecting = true
-			
+
 			if (onReconnect) {
 				await onReconnect()
 			} else {
 				// Default reconnection behavior - refresh auth and reload
 				await refreshAuthAfterLogin()
 			}
-			
+
 			// Reset timeout state
 			connectionTimeout.reset()
 			connectionTimeout.startTimeout()
-			
+
 			showModal = false
 			canReconnect = false
 			reconnectCountdown = 0
-			
+
 			toaster.success({
 				title: "Reconnected",
 				description: "Successfully reconnected to the application."
 			})
-			
 		} catch (error) {
 			console.error("Reconnection failed:", error)
 			toaster.error({
 				title: "Reconnection Failed",
-				description: "Failed to reconnect. Please refresh the page manually."
+				description:
+					"Failed to reconnect. Please refresh the page manually."
 			})
 		} finally {
 			isReconnecting = false
@@ -109,16 +113,23 @@
 
 	// Listen for user activity
 	onMount(() => {
-		const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click']
-		
+		const events = [
+			"mousedown",
+			"mousemove",
+			"keypress",
+			"scroll",
+			"touchstart",
+			"click"
+		]
+
 		const activityHandler = () => updateActivity()
-		
-		events.forEach(event => {
+
+		events.forEach((event) => {
 			document.addEventListener(event, activityHandler, true)
 		})
 
 		return () => {
-			events.forEach(event => {
+			events.forEach((event) => {
 				document.removeEventListener(event, activityHandler, true)
 			})
 		}
@@ -127,28 +138,41 @@
 
 <!-- Connection Timeout Modal -->
 {#if showModal || isVisible}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-		<div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+	>
+		<div
+			class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
+		>
 			<div class="text-center">
 				<!-- Icon -->
-				<div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/20">
-					<Icons.WifiOff class="h-8 w-8 text-orange-600 dark:text-orange-400" />
+				<div
+					class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/20"
+				>
+					<Icons.WifiOff
+						class="h-8 w-8 text-orange-600 dark:text-orange-400"
+					/>
 				</div>
 
 				<!-- Title -->
-				<h3 class="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
+				<h3
+					class="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100"
+				>
 					Connection Timed Out
 				</h3>
 
 				<!-- Description -->
 				<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-					Your session has expired due to inactivity. You can reconnect to continue using the application.
+					Your session has expired due to inactivity. You can
+					reconnect to continue using the application.
 				</p>
 
 				<!-- Countdown or Ready State -->
 				<div class="mt-4">
 					{#if canReconnect}
-						<p class="text-sm font-medium text-green-600 dark:text-green-400">
+						<p
+							class="text-sm font-medium text-green-600 dark:text-green-400"
+						>
 							Ready to reconnect
 						</p>
 					{:else if reconnectCountdown > 0}
@@ -164,7 +188,7 @@
 					<button
 						onclick={handleReconnect}
 						disabled={!canReconnect || isReconnecting}
-						class="flex-1 rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-offset-gray-800"
+						class="flex-1 rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-offset-gray-800"
 					>
 						{#if isReconnecting}
 							<Icons.Loader2 class="mr-2 h-4 w-4 animate-spin" />
@@ -178,7 +202,7 @@
 					<!-- Refresh Page Button -->
 					<button
 						onclick={handleRefreshPage}
-						class="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:ring-offset-gray-800"
+						class="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:ring-offset-gray-800"
 					>
 						<Icons.RefreshCw class="mr-2 h-4 w-4" />
 						Refresh Page

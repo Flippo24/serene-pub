@@ -61,38 +61,41 @@
 	})
 
 	// Filtered list
-	let filteredCharacters: any[] =
-		$derived.by(() => {
-			let list = [...characterList]
-			// Sort favorites first
-			list.sort((a, b) => {
-				if (a.isFavorite && !b.isFavorite) return -1
-				if (!a.isFavorite && b.isFavorite) return 1
-				return 0
-			})
-			if (!search) return list
-			
-			const searchLower = search.toLowerCase()
-			return list.filter(
-				(c: any) => {
-					// Search by name
-					if (c.name!.toLowerCase().includes(searchLower)) return true
-					
-					// Search by description
-					if (c.description && c.description.toLowerCase().includes(searchLower)) return true
-					
-					// Search by tags
-					if (c.characterTags) {
-						const tagMatch = c.characterTags.some((ct: any) => 
-							ct.tag && ct.tag.name.toLowerCase().includes(searchLower)
-						)
-						if (tagMatch) return true
-					}
-					
-					return false
-				}
-			)
+	let filteredCharacters: any[] = $derived.by(() => {
+		let list = [...characterList]
+		// Sort favorites first
+		list.sort((a, b) => {
+			if (a.isFavorite && !b.isFavorite) return -1
+			if (!a.isFavorite && b.isFavorite) return 1
+			return 0
 		})
+		if (!search) return list
+
+		const searchLower = search.toLowerCase()
+		return list.filter((c: any) => {
+			// Search by name
+			if (c.name!.toLowerCase().includes(searchLower)) return true
+
+			// Search by description
+			if (
+				c.description &&
+				c.description.toLowerCase().includes(searchLower)
+			)
+				return true
+
+			// Search by tags
+			if (c.characterTags) {
+				const tagMatch = c.characterTags.some(
+					(ct: any) =>
+						ct.tag &&
+						ct.tag.name.toLowerCase().includes(searchLower)
+				)
+				if (tagMatch) return true
+			}
+
+			return false
+		})
+	})
 
 	function handleCreateClick() {
 		// Clear tutorial flag when user interacts with the highlighted button
@@ -216,21 +219,17 @@
 		socket.on("characters:list", (msg) => {
 			characterList = msg.characterList
 		})
-		socket.on(
-			"characters:importCard",
-			(msg) => {
-				importingLorebook = msg.book || null
-				toaster.success({
-					title: `Character Imported`,
-					description: `Character ${msg.character.nickname || msg.character.name} imported successfully.`
-				})
-				if (!!importingLorebook) {
-					importingLorebookCharacter =
-						importingLorebook.character || null
-					showLorebookImportConfirmationModal = true
-				}
+		socket.on("characters:importCard", (msg) => {
+			importingLorebook = msg.book || null
+			toaster.success({
+				title: `Character Imported`,
+				description: `Character ${msg.character.nickname || msg.character.name} imported successfully.`
+			})
+			if (!!importingLorebook) {
+				importingLorebookCharacter = importingLorebook.character || null
+				showLorebookImportConfirmationModal = true
 			}
-		)
+		})
 		socket.on("lorebooks:import", (msg) => {
 			toaster.success({
 				title: `Lorebook Imported`,
@@ -249,7 +248,11 @@
 	})
 </script>
 
-<div class="text-foreground h-full p-4" role="region" aria-label="Characters management">
+<div
+	class="text-foreground h-full p-4"
+	role="region"
+	aria-label="Characters management"
+>
 	{#if isCreating}
 		<section aria-label="Create new character">
 			<CharacterForm
@@ -270,7 +273,11 @@
 			</section>
 		{/key}
 	{:else}
-		<div class="mb-2 flex gap-2" role="toolbar" aria-label="Character actions">
+		<div
+			class="mb-2 flex gap-2"
+			role="toolbar"
+			aria-label="Character actions"
+		>
 			<button
 				class="btn btn-sm preset-filled-primary-500 {panelsCtx.digest
 					.tutorial
@@ -315,14 +322,20 @@
 				aria-label="Search characters by name, description, or tags"
 			/>
 		</div>
-		<div class="flex flex-col gap-2" role="list" aria-label="Characters list">
+		<div
+			class="flex flex-col gap-2"
+			role="list"
+			aria-label="Characters list"
+		>
 			{#if filteredCharacters.length === 0}
 				<div
 					class="text-muted-foreground relative w-100 py-8 text-center"
 					role="status"
 					aria-live="polite"
 				>
-					{search ? `No characters found matching "${search}".` : "No characters found."}
+					{search
+						? `No characters found matching "${search}".`
+						: "No characters found."}
 				</div>
 			{:else}
 				{#each filteredCharacters as c}
@@ -351,12 +364,18 @@
 	>
 		{#snippet content()}
 			<div class="p-6">
-				<h2 id="delete-modal-title" class="mb-2 text-lg font-bold">Delete Character?</h2>
+				<h2 id="delete-modal-title" class="mb-2 text-lg font-bold">
+					Delete Character?
+				</h2>
 				<p id="delete-modal-description" class="mb-4">
 					Are you sure you want to delete this character? This action
 					cannot be undone.
 				</p>
-				<div class="flex justify-end gap-2" role="group" aria-label="Delete confirmation actions">
+				<div
+					class="flex justify-end gap-2"
+					role="group"
+					aria-label="Delete confirmation actions"
+				>
 					<button
 						class="btn preset-filled-surface-500"
 						onclick={cancelDelete}

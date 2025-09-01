@@ -1,28 +1,58 @@
 import { db } from "$lib/server/db"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import { handlePersonaAvatarUpload } from "../utils"
 import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for persona creation/update
-async function processPersonaTags(personaId: number, tagNames: string[], userId: number) {
-	if (!tagNames || tagNames.length === 0) return
+async function processPersonaTags(
+	personaId: number,
+	tagNames: string[],
+	userId: number
+) {
+	// Get existing tags for this persona that belong to the user
+	const existingPersonaTags = await db.query.personaTags.findMany({
+		where: eq(schema.personaTags.personaId, personaId),
+		with: {
+			tag: true
+		}
+	})
 
-	// First, remove all existing tags for this persona
-	await db
-		.delete(schema.personaTags)
-		.where(eq(schema.personaTags.personaId, personaId))
-
-	// Process each tag name
-	const tagIds: number[] = []
-
-	for (const tagName of tagNames) {
-		if (!tagName.trim()) continue
-
+	// Filter to only tags that belong to this user
+	const userPersonaTags = existingPersonaTags.filter(pt => pt.tag.userId === userId)
+	const existingTagNames = userPersonaTags.map(pt => pt.tag.name)
+	
+	// Normalize tag names for comparison
+	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
+	
+	// Find tags to remove (exist in DB but not in new list)
+	const tagsToRemove = userPersonaTags.filter(pt => 
+		!normalizedNewTags.includes(pt.tag.name)
+	)
+	
+	// Find tags to add (exist in new list but not in DB)
+	const tagsToAdd = normalizedNewTags.filter(tagName => 
+		!existingTagNames.includes(tagName)
+	)
+	
+	// Remove tags that are no longer in the list
+	if (tagsToRemove.length > 0) {
+		const tagIdsToRemove = tagsToRemove.map(pt => pt.tagId)
+		await db.delete(schema.personaTags)
+			.where(
+				and(
+					eq(schema.personaTags.personaId, personaId),
+					inArray(schema.personaTags.tagId, tagIdsToRemove)
+				)
+			)
+	}
+	
+	// Add new tags
+	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: (t, { and, eq }) => 
-				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
+			where: (t, { and, eq }) =>
+				and(eq(t.name, tagName), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -30,32 +60,28 @@ async function processPersonaTags(personaId: number, tagNames: string[], userId:
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim(),
+					name: tagName,
 					userId
-					// description and colorPreset will use database defaults
 				})
 				.returning()
 			existingTag = newTag
 		}
 
-		tagIds.push(existingTag.id)
-	}
-
-	// Link all tags to the persona
-	if (tagIds.length > 0) {
-		const personaTagsData = tagIds.map((tagId) => ({
-			personaId,
-			tagId
-		}))
-
+		// Link tag to persona
 		await db
 			.insert(schema.personaTags)
-			.values(personaTagsData)
-			.onConflictDoNothing() // In case of race conditions
+			.values({
+				personaId,
+				tagId: existingTag.id
+			})
+			.onConflictDoNothing()
 	}
 }
 
-export const personasList: Handler<Sockets.Personas.List.Params, Sockets.Personas.List.Response> = {
+export const personasList: Handler<
+	Sockets.Personas.List.Params,
+	Sockets.Personas.List.Response
+> = {
 	event: "personas:list",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -83,12 +109,15 @@ export const personasList: Handler<Sockets.Personas.List.Params, Sockets.Persona
 	}
 }
 
-export const personasGet: Handler<Sockets.Personas.Get.Params, Sockets.Personas.Get.Response> = {
+export const personasGet: Handler<
+	Sockets.Personas.Get.Params,
+	Sockets.Personas.Get.Response
+> = {
 	event: "personas:get",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
 		const persona = await db.query.personas.findFirst({
-			where: (p, { and, eq }) => 
+			where: (p, { and, eq }) =>
 				and(eq(p.id, params.id), eq(p.userId, userId)),
 			with: {
 				personaTags: {
@@ -107,7 +136,9 @@ export const personasGet: Handler<Sockets.Personas.Get.Params, Sockets.Personas.
 			// @ts-ignore - Remove the junction table data
 			delete personaWithTags.personaTags
 
-			const res: Sockets.Personas.Get.Response = { persona: personaWithTags }
+			const res: Sockets.Personas.Get.Response = {
+				persona: personaWithTags
+			}
 			emitToUser("personas:get", res)
 			return res
 		} else {
@@ -118,7 +149,10 @@ export const personasGet: Handler<Sockets.Personas.Get.Params, Sockets.Personas.
 	}
 }
 
-export const personasCreate: Handler<Sockets.Personas.Create.Params, Sockets.Personas.Create.Response> = {
+export const personasCreate: Handler<
+	Sockets.Personas.Create.Params,
+	Sockets.Personas.Create.Response
+> = {
 	event: "personas:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -153,13 +187,18 @@ export const personasCreate: Handler<Sockets.Personas.Create.Params, Sockets.Per
 			return res
 		} catch (e: any) {
 			console.error("Error creating persona:", e)
-			emitToUser("personas:create:error", { error: e.message || String(e) })
+			emitToUser("personas:create:error", {
+				error: e.message || String(e)
+			})
 			throw e
 		}
 	}
 }
 
-export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Personas.Update.Response> = {
+export const personasUpdate: Handler<
+	Sockets.Personas.Update.Params,
+	Sockets.Personas.Update.Response
+> = {
 	event: "personas:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -210,7 +249,10 @@ export const personasUpdate: Handler<Sockets.Personas.Update.Params, Sockets.Per
 	}
 }
 
-export const personasDelete: Handler<Sockets.Personas.Delete.Params, Sockets.Personas.Delete.Response> = {
+export const personasDelete: Handler<
+	Sockets.Personas.Delete.Params,
+	Sockets.Personas.Delete.Response
+> = {
 	event: "personas:delete",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -226,7 +268,9 @@ export const personasDelete: Handler<Sockets.Personas.Delete.Params, Sockets.Per
 				)
 			)
 		await personasList.handler(socket, {}, emitToUser)
-		const res: Sockets.Personas.Delete.Response = { success: "Persona deleted successfully" }
+		const res: Sockets.Personas.Delete.Response = {
+			success: "Persona deleted successfully"
+		}
 		emitToUser("personas:delete", res)
 		return res
 	}
@@ -236,7 +280,11 @@ export const personasDelete: Handler<Sockets.Personas.Delete.Params, Sockets.Per
 export function registerPersonaHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, personasList, emitToUser)
 	register(socket, personasGet, emitToUser)

@@ -11,14 +11,19 @@
 	const socket = useTypedSocket()
 
 	// Passphrase validation schema
-	const passphraseSchema = z.string()
+	const passphraseSchema = z
+		.string()
 		.min(6, "Passphrase must be at least 6 characters long")
 		.regex(/[a-z]/, "Passphrase must contain at least one lowercase letter")
 		.regex(/[A-Z]/, "Passphrase must contain at least one uppercase letter")
-		.regex(/[^a-zA-Z0-9]/, "Passphrase must contain at least one special character")
+		.regex(
+			/[^a-zA-Z0-9]/,
+			"Passphrase must contain at least one special character"
+		)
 
 	// Display name validation schema
-	const displayNameSchema = z.string()
+	const displayNameSchema = z
+		.string()
 		.min(3, "Display name must be at least 3 characters long")
 		.max(50, "Display name must not exceed 50 characters")
 		.trim()
@@ -27,7 +32,9 @@
 	let selectedTheme: string = $state("")
 	let userSettingsCtx: UserSettingsCtx = $state(getContext("userSettingsCtx"))
 	let userCtx: UserCtx = $state(getContext("userCtx"))
-	let systemSettingsCtx: SystemSettingsCtx = $state(getContext("systemSettingsCtx"))
+	let systemSettingsCtx: SystemSettingsCtx = $state(
+		getContext("systemSettingsCtx")
+	)
 
 	// Profile modal state
 	let showChangePasswordModal = $state(false)
@@ -39,7 +46,7 @@
 	let displayName = $state("")
 	let displayNameError = $state("")
 
-	// Change password form data  
+	// Change password form data
 	let currentPassword = $state("")
 	let newPassword = $state("")
 	let confirmPassword = $state("")
@@ -67,19 +74,27 @@
 	}
 
 	async function onShowAllCharacterFieldsClick(event: { checked: boolean }) {
-		socket?.emit("userSettings:updateShowAllCharacterFields", { enabled: event.checked })
+		socket?.emit("userSettings:updateShowAllCharacterFields", {
+			enabled: event.checked
+		})
 	}
 
 	async function onEasyCharacterCreationClick(event: { checked: boolean }) {
-		socket?.emit("userSettings:updateEasyCharacterCreation", { enabled: event.checked })
+		socket?.emit("userSettings:updateEasyCharacterCreation", {
+			enabled: event.checked
+		})
 	}
 
 	async function onEasyPersonaCreationClick(event: { checked: boolean }) {
-		socket?.emit("userSettings:updateEasyPersonaCreation", { enabled: event.checked })
+		socket?.emit("userSettings:updateEasyPersonaCreation", {
+			enabled: event.checked
+		})
 	}
 
 	async function onShowHomePageBannerClick(event: { checked: boolean }) {
-		socket?.emit("userSettings:updateShowHomePageBanner", { enabled: event.checked })
+		socket?.emit("userSettings:updateShowHomePageBanner", {
+			enabled: event.checked
+		})
 	}
 
 	// Profile functions
@@ -93,7 +108,8 @@
 			displayNameSchema.parse(displayName.trim())
 		} catch (error) {
 			if (error instanceof z.ZodError) {
-				displayNameError = error.errors[0]?.message || "Invalid display name"
+				displayNameError =
+					error.errors[0]?.message || "Invalid display name"
 				return
 			}
 		}
@@ -101,7 +117,9 @@
 		displayNameError = ""
 		isUpdatingDisplayName = true
 
-		socket?.emit("users:current:updateDisplayName", { displayName: displayName.trim() })
+		socket?.emit("users:current:updateDisplayName", {
+			displayName: displayName.trim()
+		})
 	}
 
 	function openChangePasswordModal() {
@@ -142,7 +160,8 @@
 			passphraseSchema.parse(newPassword)
 		} catch (error) {
 			if (error instanceof z.ZodError) {
-				passwordError = error.errors[0]?.message || "Invalid new passphrase"
+				passwordError =
+					error.errors[0]?.message || "Invalid new passphrase"
 				return
 			}
 		}
@@ -163,14 +182,14 @@
 			socket?.emit("users:current:logout", {})
 
 			// Then call the API to clear the cookie
-			const response = await fetch('/api/logout', {
-				method: 'POST',
-				credentials: 'include'
+			const response = await fetch("/api/logout", {
+				method: "POST",
+				credentials: "include"
 			})
 
 			if (response.ok) {
 				// Redirect to home page
-				window.location.href = '/'
+				window.location.href = "/"
 			} else {
 				toaster.error({
 					title: "Logout failed",
@@ -192,7 +211,7 @@
 	socket.on("userSettings:updateDarkMode", (message) => {
 		if (message.success) {
 			toaster.success({
-				title: `${message.enabled ? 'Dark' : 'Light'} mode enabled`
+				title: `${message.enabled ? "Dark" : "Light"} mode enabled`
 			})
 		} else {
 			toaster.error({ title: "Failed to update dark mode setting" })
@@ -212,40 +231,48 @@
 	socket.on("userSettings:updateShowAllCharacterFields", (message) => {
 		if (message.success) {
 			toaster.success({
-				title: `Character fields display ${message.enabled ? 'expanded' : 'simplified'}`
+				title: `Character fields display ${message.enabled ? "expanded" : "simplified"}`
 			})
 		} else {
-			toaster.error({ title: "Failed to update character fields setting" })
+			toaster.error({
+				title: "Failed to update character fields setting"
+			})
 		}
 	})
 
 	socket.on("userSettings:updateEasyCharacterCreation", (message) => {
 		if (message.success) {
 			toaster.success({
-				title: `Easy character creation ${message.enabled ? 'enabled' : 'disabled'}`
+				title: `Easy character creation ${message.enabled ? "enabled" : "disabled"}`
 			})
 		} else {
-			toaster.error({ title: "Failed to update easy character creation setting" })
+			toaster.error({
+				title: "Failed to update easy character creation setting"
+			})
 		}
 	})
 
 	socket.on("userSettings:updateEasyPersonaCreation", (message) => {
 		if (message.success) {
 			toaster.success({
-				title: `Easy persona creation ${message.enabled ? 'enabled' : 'disabled'}`
+				title: `Easy persona creation ${message.enabled ? "enabled" : "disabled"}`
 			})
 		} else {
-			toaster.error({ title: "Failed to update easy persona creation setting" })
+			toaster.error({
+				title: "Failed to update easy persona creation setting"
+			})
 		}
 	})
 
 	socket.on("userSettings:updateShowHomePageBanner", (message) => {
 		if (message.success) {
 			toaster.success({
-				title: `Home page banner ${message.enabled ? 'shown' : 'hidden'}`
+				title: `Home page banner ${message.enabled ? "shown" : "hidden"}`
 			})
 		} else {
-			toaster.error({ title: "Failed to update home page banner setting" })
+			toaster.error({
+				title: "Failed to update home page banner setting"
+			})
 		}
 	})
 
@@ -268,7 +295,8 @@
 		if (message.success) {
 			toaster.success({
 				title: "Passphrase changed successfully",
-				description: message.message || "Your passphrase has been updated"
+				description:
+					message.message || "Your passphrase has been updated"
 			})
 			closeChangePasswordModal()
 		} else {
@@ -355,7 +383,8 @@
 	<div class="flex gap-2">
 		<Switch
 			name="easy-character-creation"
-			checked={userSettingsCtx.settings?.enableEasyCharacterCreation ?? true}
+			checked={userSettingsCtx.settings?.enableEasyCharacterCreation ??
+				true}
 			onCheckedChange={onEasyCharacterCreationClick}
 		></Switch>
 		<label for="easy-character-creation" class="font-semibold">
@@ -366,7 +395,8 @@
 	<div class="flex gap-2">
 		<Switch
 			name="easy-persona-creation"
-			checked={userSettingsCtx.settings?.enableEasyPersonaCreation ?? true}
+			checked={userSettingsCtx.settings?.enableEasyPersonaCreation ??
+				true}
 			onCheckedChange={onEasyPersonaCreationClick}
 		></Switch>
 		<label for="easy-persona-creation" class="font-semibold">
@@ -387,12 +417,14 @@
 
 	<!-- User Profile Section - Only show when accounts are enabled -->
 	{#if systemSettingsCtx.settings?.isAccountsEnabled && userCtx.user}
-		<div class="border-t pt-4 mt-4">
-			<h3 class="text-lg font-semibold mb-4">User Profile</h3>
-			
+		<div class="mt-4 border-t pt-4">
+			<h3 class="mb-4 text-lg font-semibold">User Profile</h3>
+
 			<!-- Display Name -->
-			<div class="flex flex-col gap-2 mb-4">
-				<label for="display-name" class="font-semibold">Display Name</label>
+			<div class="mb-4 flex flex-col gap-2">
+				<label for="display-name" class="font-semibold">
+					Display Name
+				</label>
 				<div class="flex gap-2">
 					<input
 						id="display-name"
@@ -404,9 +436,11 @@
 					/>
 					<button
 						type="button"
-						class="btn btn-sm variant-filled-primary"
+						class="btn preset-filled-primary-500"
 						onclick={updateDisplayName}
-						disabled={isUpdatingDisplayName || !displayName.trim() || displayName === userCtx.user?.displayName}
+						disabled={isUpdatingDisplayName ||
+							!displayName.trim() ||
+							displayName === userCtx.user?.displayName}
 					>
 						{#if isUpdatingDisplayName}
 							<Icons.Loader2 size={16} class="animate-spin" />
@@ -425,7 +459,7 @@
 			<div class="flex flex-col gap-2">
 				<button
 					type="button"
-					class="btn btn-sm variant-filled-secondary w-full"
+					class="btn preset-filled-secondary-500 mx-auto w-fit"
 					onclick={openChangePasswordModal}
 				>
 					<Icons.Key size={16} />
@@ -434,7 +468,7 @@
 
 				<button
 					type="button"
-					class="btn btn-sm variant-filled-error w-full"
+					class="btn preset-filled-error-500 mx-auto w-fit"
 					onclick={logout}
 					disabled={isLoggingOut}
 				>
@@ -454,24 +488,23 @@
 <!-- Change Password Modal -->
 <Modal
 	open={showChangePasswordModal}
-	onOpenChange={(e) => showChangePasswordModal = e.open}
+	onOpenChange={(e) => (showChangePasswordModal = e.open)}
 	contentBase="card bg-surface-100-900 p-6 space-y-6 shadow-xl max-w-lg"
 	backdropClasses="backdrop-blur-sm"
 >
 	{#snippet content()}
-		<header class="flex justify-between items-center">
+		<header class="flex items-center justify-between">
 			<h2 class="text-xl font-bold">Change Passphrase</h2>
-			<button
-				class="btn-ghost"
-				onclick={closeChangePasswordModal}
-			>
+			<button class="btn-ghost" onclick={closeChangePasswordModal}>
 				<Icons.X class="h-5 w-5" />
 			</button>
 		</header>
-		
+
 		<article class="space-y-4">
 			<div>
-				<label for="current-password" class="font-semibold">Current Passphrase</label>
+				<label for="current-password" class="font-semibold">
+					Current Passphrase
+				</label>
 				<input
 					id="current-password"
 					type="password"
@@ -483,7 +516,9 @@
 			</div>
 
 			<div>
-				<label for="new-password" class="font-semibold">New Passphrase</label>
+				<label for="new-password" class="font-semibold">
+					New Passphrase
+				</label>
 				<input
 					id="new-password"
 					type="password"
@@ -492,13 +527,16 @@
 					placeholder="Enter new passphrase"
 					disabled={isChangingPassword}
 				/>
-				<p class="text-sm text-muted-foreground mt-1">
-					Must be at least 6 characters with uppercase, lowercase, and special character
+				<p class="text-muted-foreground mt-1 text-sm">
+					Must be at least 6 characters with uppercase, lowercase, and
+					special character
 				</p>
 			</div>
 
 			<div>
-				<label for="confirm-password" class="font-semibold">Confirm New Passphrase</label>
+				<label for="confirm-password" class="font-semibold">
+					Confirm New Passphrase
+				</label>
 				<input
 					id="confirm-password"
 					type="password"
@@ -513,7 +551,7 @@
 				<p class="text-error-500 text-sm">{passwordError}</p>
 			{/if}
 
-			<footer class="flex gap-2 justify-end">
+			<footer class="flex justify-end gap-2">
 				<button
 					type="button"
 					class="btn btn-sm variant-ghost"
@@ -526,7 +564,10 @@
 					type="button"
 					class="btn btn-sm variant-filled-primary"
 					onclick={changePassword}
-					disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+					disabled={isChangingPassword ||
+						!currentPassword ||
+						!newPassword ||
+						!confirmPassword}
 				>
 					{#if isChangingPassword}
 						<Icons.Loader2 size={16} class="animate-spin" />

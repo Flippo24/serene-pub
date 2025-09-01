@@ -193,31 +193,31 @@ type SocketEventMap = {
 	}
 
 	// Legacy events (should be migrated) - temporarily using any types
-	"chatMessage": {
+	chatMessage: {
 		params: Sockets.ChatMessage.Call
 		response: Sockets.ChatMessage.Response
 	}
-	"lorebookBindingList": {
+	lorebookBindingList: {
 		params: any
 		response: any
 	}
-	"historyEntryList": {
+	historyEntryList: {
 		params: any
 		response: any
 	}
-	"worldLoreEntryList": {
+	worldLoreEntryList: {
 		params: any
 		response: any
 	}
-	"characterLoreEntryList": {
+	characterLoreEntryList: {
 		params: any
 		response: any
 	}
-	"ollamaModelsList": {
+	ollamaModelsList: {
 		params: any
 		response: any
 	}
-	"ollamaListRunningModels": {
+	ollamaListRunningModels: {
 		params: any
 		response: any
 	}
@@ -419,11 +419,11 @@ type SocketEventMap = {
 	}
 
 	// Global error/success events
-	"error": {
+	error: {
 		params: never
 		response: Sockets.Error.Response
 	}
-	"success": {
+	success: {
 		params: never
 		response: Sockets.Success.Response
 	}
@@ -472,9 +472,11 @@ export interface TypedSocket {
 // Create a typed socket wrapper
 export function createTypedSocket(): TypedSocket {
 	const socket = skio.get() as any
-	
+
 	if (!socket) {
-		throw new Error("Socket not available - ensure socket client is loaded first")
+		throw new Error(
+			"Socket not available - ensure socket client is loaded first"
+		)
 	}
 
 	return {
@@ -487,14 +489,18 @@ export function createTypedSocket(): TypedSocket {
 
 		on: (<K extends keyof SocketEventMap>(
 			event: K | "**:error",
-			listener: ((data: SocketEventMap[K]["response"]) => void) | ((data: { error?: string; description?: string }) => void)
+			listener:
+				| ((data: SocketEventMap[K]["response"]) => void)
+				| ((data: { error?: string; description?: string }) => void)
 		) => {
 			socket.on(event as string, listener)
 		}) as any,
 
 		off: (<K extends keyof SocketEventMap>(
 			event: K | "**:error",
-			listener?: ((data: SocketEventMap[K]["response"]) => void) | ((data: { error?: string; description?: string }) => void)
+			listener?:
+				| ((data: SocketEventMap[K]["response"]) => void)
+				| ((data: { error?: string; description?: string }) => void)
 		) => {
 			if (socket.off) {
 				socket.off(event as string, listener)

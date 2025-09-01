@@ -71,27 +71,36 @@ export function getNextCharacterTurn(
 				return cc.character.id
 			}
 		}
-		
+
 		// If all have replied in the normal flow, select the character with the oldest most recent reply
 		// (furthest removed from their latest response)
-		
+
 		// Find the most recent message for each character in the pool
-		let oldestRecentCharacter: { id: number; lastMessageIndex: number } | null = null
-		
+		let oldestRecentCharacter: {
+			id: number
+			lastMessageIndex: number
+		} | null = null
+
 		for (const cc of activeCharacters) {
 			// Find the most recent message from this character in the pool
 			let lastMessageIndex = -1
 			for (let i = pool.length - 1; i >= 0; i--) {
 				const msg = pool[i]
-				if (msg.role === "assistant" && msg.characterId === cc.character.id) {
+				if (
+					msg.role === "assistant" &&
+					msg.characterId === cc.character.id
+				) {
 					lastMessageIndex = i
 					break // Found the most recent message from this character
 				}
 			}
-			
+
 			// If this character has a message in the pool, compare their most recent message
 			if (lastMessageIndex >= 0) {
-				if (!oldestRecentCharacter || lastMessageIndex < oldestRecentCharacter.lastMessageIndex) {
+				if (
+					!oldestRecentCharacter ||
+					lastMessageIndex < oldestRecentCharacter.lastMessageIndex
+				) {
 					oldestRecentCharacter = {
 						id: cc.character.id,
 						lastMessageIndex: lastMessageIndex
@@ -99,11 +108,11 @@ export function getNextCharacterTurn(
 				}
 			}
 		}
-		
+
 		if (oldestRecentCharacter) {
 			return oldestRecentCharacter.id
 		}
-		
+
 		// Fallback: if for some reason no character is found with a recent reply, return null
 		return null
 	}

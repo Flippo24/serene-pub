@@ -9,7 +9,13 @@ const dev = process.env.NODE_ENV === "development"
 const secure = !dev
 const sameSite = dev ? "lax" : "strict"
 
-export function setUserTokenCookie({ event, token }: { event: RequestEvent; token: string }) {
+export function setUserTokenCookie({
+	event,
+	token
+}: {
+	event: RequestEvent
+	token: string
+}) {
 	event.cookies.set("userToken", token, {
 		path: "/",
 		httpOnly: true,

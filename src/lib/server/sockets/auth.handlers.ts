@@ -16,12 +16,13 @@ async function handleLogin(
 ) {
 	try {
 		// Get client IP for rate limiting
-		const clientIP = socket.handshake.address || socket.conn.remoteAddress || 'unknown'
-		
+		const clientIP =
+			socket.handshake.address || socket.conn.remoteAddress || "unknown"
+
 		// Check rate limiting first
 		if (loginRateLimit.isRateLimited(clientIP)) {
 			const timeUntilReset = loginRateLimit.getTimeUntilReset(clientIP)
-			socket.emit("auth:login:error", { 
+			socket.emit("auth:login:error", {
 				error: "Too many failed attempts",
 				description: `Please wait ${timeUntilReset} seconds before trying again`,
 				rateLimited: true,
@@ -44,8 +45,8 @@ async function handleLogin(
 			// Record failed attempt
 			loginRateLimit.recordFailedAttempt(clientIP)
 			const remaining = loginRateLimit.getRemainingAttempts(clientIP)
-			
-			socket.emit("auth:login:error", { 
+
+			socket.emit("auth:login:error", {
 				error: "Invalid credentials",
 				remainingAttempts: remaining
 			})
@@ -58,8 +59,8 @@ async function handleLogin(
 			// Record failed attempt
 			loginRateLimit.recordFailedAttempt(clientIP)
 			const remaining = loginRateLimit.getRemainingAttempts(clientIP)
-			
-			socket.emit("auth:login:error", { 
+
+			socket.emit("auth:login:error", {
 				error: "Passphrase is required",
 				remainingAttempts: remaining
 			})
@@ -93,16 +94,16 @@ async function handleLogin(
 			user: socket.user,
 			token // Client will need to store this in a cookie
 		})
-
 	} catch (error) {
 		console.error("Login error:", error)
-		
+
 		// Record failed attempt for server errors too
-		const clientIP = socket.handshake.address || socket.conn.remoteAddress || 'unknown'
+		const clientIP =
+			socket.handshake.address || socket.conn.remoteAddress || "unknown"
 		loginRateLimit.recordFailedAttempt(clientIP)
 		const remaining = loginRateLimit.getRemainingAttempts(clientIP)
-		
-		socket.emit("auth:login:error", { 
+
+		socket.emit("auth:login:error", {
 			error: "Authentication failed",
 			remainingAttempts: remaining
 		})
@@ -117,7 +118,7 @@ async function handleLogout(socket: AuthenticatedSocket) {
 		if (socket.user) {
 			socket.leave(`user_${socket.user.id}`)
 		}
-		
+
 		socket.user = undefined
 		socket.isAuthenticated = false
 
@@ -134,7 +135,11 @@ async function handleLogout(socket: AuthenticatedSocket) {
 export function registerAuthHandlers(
 	socket: AuthenticatedSocket,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: AuthenticatedSocket, handler: any, emitToUser: any) => void
+	register: (
+		socket: AuthenticatedSocket,
+		handler: any,
+		emitToUser: any
+	) => void
 ) {
 	// Direct socket event handlers (not using the register pattern for auth)
 	socket.on("auth:login", async (params) => {

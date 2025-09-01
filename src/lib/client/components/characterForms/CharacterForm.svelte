@@ -71,9 +71,7 @@
 	let systemSettingsCtx: SystemSettingsCtx = $state(
 		getContext("systemSettingsCtx")
 	)
-	let userSettingsCtx: UserSettingsCtx = $state(
-		getContext("userSettingsCtx")
-	)
+	let userSettingsCtx: UserSettingsCtx = $state(getContext("userSettingsCtx"))
 
 	let editCharacterData: EditCharacterData = $state({
 		id: undefined,
@@ -140,7 +138,9 @@
 	let validationErrors: ValidationErrors = $state({})
 	let newLangKey = $state("")
 	let newLangNote = $state("")
-	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state([])
+	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state(
+		[]
+	)
 	let formContainer: HTMLDivElement
 	let validationTimeout: NodeJS.Timeout
 
@@ -319,7 +319,9 @@
 	}
 
 	async function onShowAllCharacterFieldsClick(event: { checked: boolean }) {
-		socket?.emit("userSettings:updateShowAllCharacterFields", { enabled: event.checked })
+		socket?.emit("userSettings:updateShowAllCharacterFields", {
+			enabled: event.checked
+		})
 	}
 
 	// Helper for editing arrays
@@ -401,12 +403,15 @@
 				closeForm()
 			}
 		})
-		socket.on("lorebooks:list", (message: Sockets.Lorebooks.List.Response) => {
-			lorebookList =
-				message.lorebookList.sort((a, b) =>
-					a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-				) || []
-		})
+		socket.on(
+			"lorebooks:list",
+			(message: Sockets.Lorebooks.List.Response) => {
+				lorebookList =
+					message.lorebookList.sort((a, b) =>
+						a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+					) || []
+			}
+		)
 
 		socket.on("tags:list", (message: any) => {
 			availableTags = message.tagsList || []
@@ -415,53 +420,58 @@
 		socket.on("userSettings:updateShowAllCharacterFields", (message) => {
 			if (message.success) {
 				toaster.success({
-					title: `Character fields display ${message.enabled ? 'expanded' : 'simplified'}`
+					title: `Character fields display ${message.enabled ? "expanded" : "simplified"}`
 				})
 			} else {
-				toaster.error({ title: "Failed to update character fields setting" })
+				toaster.error({
+					title: "Failed to update character fields setting"
+				})
 			}
 		})
 		if (characterId) {
-			socket.once("characters:get", (message: Sockets.Characters.Get.Response) => {
-				character = message.character
-				const characterData = { ...message.character }
+			socket.once(
+				"characters:get",
+				(message: Sockets.Characters.Get.Response) => {
+					character = message.character
+					const characterData = { ...message.character }
 
-				// Handle migration from old string format to new array format
-				if (typeof characterData.exampleDialogues === "string") {
-					characterData.exampleDialogues = (
-						characterData.exampleDialogues as string
-					)
-						.split("<START>")
-						.map((d: string) => d.trim())
-						.filter((d: string) => d !== "")
-				} else if (!Array.isArray(characterData.exampleDialogues)) {
-					characterData.exampleDialogues = []
-				}
+					// Handle migration from old string format to new array format
+					if (typeof characterData.exampleDialogues === "string") {
+						characterData.exampleDialogues = (
+							characterData.exampleDialogues as string
+						)
+							.split("<START>")
+							.map((d: string) => d.trim())
+							.filter((d: string) => d !== "")
+					} else if (!Array.isArray(characterData.exampleDialogues)) {
+						characterData.exampleDialogues = []
+					}
 
-				editCharacterData = {
-					...editCharacterData,
-					...characterData,
-					avatar: characterData.avatar ?? "",
-					nickname: characterData.nickname ?? "",
-					personality: characterData.personality ?? "",
-					scenario: characterData.scenario ?? "",
-					firstMessage: characterData.firstMessage ?? "",
-					creatorNotes: characterData.creatorNotes ?? "",
-					creatorNotesMultilingual:
-						characterData.creatorNotesMultilingual ?? {},
-					groupOnlyGreetings: Array.isArray(
-						characterData.groupOnlyGreetings
-					)
-						? characterData.groupOnlyGreetings
-						: [],
-					postHistoryInstructions:
-						characterData.postHistoryInstructions ?? "",
-					characterVersion:
-						characterData.characterVersion ?? undefined,
-					tags: characterData.tags ?? []
+					editCharacterData = {
+						...editCharacterData,
+						...characterData,
+						avatar: characterData.avatar ?? "",
+						nickname: characterData.nickname ?? "",
+						personality: characterData.personality ?? "",
+						scenario: characterData.scenario ?? "",
+						firstMessage: characterData.firstMessage ?? "",
+						creatorNotes: characterData.creatorNotes ?? "",
+						creatorNotesMultilingual:
+							characterData.creatorNotesMultilingual ?? {},
+						groupOnlyGreetings: Array.isArray(
+							characterData.groupOnlyGreetings
+						)
+							? characterData.groupOnlyGreetings
+							: [],
+						postHistoryInstructions:
+							characterData.postHistoryInstructions ?? "",
+						characterVersion:
+							characterData.characterVersion ?? undefined,
+						tags: characterData.tags ?? []
+					}
+					originalCharacterData = { ...editCharacterData }
 				}
-				originalCharacterData = { ...editCharacterData }
-			})
+			)
 			socket.emit("characters:get", { id: characterId })
 		}
 		socket.emit("lorebooks:list", {})
@@ -1265,7 +1275,8 @@
 		<fieldset class="mt-2 flex items-center gap-2">
 			<Switch
 				name="show-all-character-fields"
-				checked={userSettingsCtx.settings?.showAllCharacterFields ?? false}
+				checked={userSettingsCtx.settings?.showAllCharacterFields ??
+					false}
 				onCheckedChange={onShowAllCharacterFieldsClick}
 				aria-describedby="show-all-fields-description"
 			/>

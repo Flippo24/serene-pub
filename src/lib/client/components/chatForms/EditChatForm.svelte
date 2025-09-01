@@ -46,9 +46,13 @@
 
 	let chat: Sockets.Chat.Response["chat"] | undefined = $state()
 	let isCreating = $state(!chat)
-	let characters: Sockets.Characters.List.Response["characterList"] = $state([])
+	let characters: Sockets.Characters.List.Response["characterList"] = $state(
+		[]
+	)
 	let personas: Sockets.Personas.List.Response["personaList"] = $state([])
-	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state([])
+	let lorebookList: Sockets.Lorebooks.List.Response["lorebookList"] = $state(
+		[]
+	)
 
 	// Data structure to hold chat and selected characters/personas
 	let data:
@@ -322,9 +326,12 @@
 				originalData = undefined
 			}
 		})
-		socket.on("characters:list", (msg: Sockets.Characters.List.Response) => {
-			characters = msg.characterList || []
-		})
+		socket.on(
+			"characters:list",
+			(msg: Sockets.Characters.List.Response) => {
+				characters = msg.characterList || []
+			}
+		)
 		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
 			personas = msg.personaList || []
 		})
@@ -348,9 +355,10 @@
 			"updateChatCharacterVisibility",
 			(msg: Sockets.UpdateChatCharacterVisibility.Response) => {
 				if (chat && chat.id === msg.chatId) {
-					const visibilityLabel = ChatCharacterVisibility.options.find(
-						opt => opt.value === msg.visibility
-					)?.label || msg.visibility
+					const visibilityLabel =
+						ChatCharacterVisibility.options.find(
+							(opt) => opt.value === msg.visibility
+						)?.label || msg.visibility
 					toaster.success({
 						title: `Character visibility set to ${visibilityLabel}`
 					})
@@ -551,7 +559,7 @@
 								</div>
 							</div>
 							<div
-								class="flex flex-col justify-between py-1 text-center gap-2"
+								class="flex flex-col justify-between gap-2 py-1 text-center"
 							>
 								<!-- Show remove button only when creating (no chat) -->
 								{#if !chat}
@@ -591,11 +599,27 @@
 											</Switch>
 										</span>
 										<button
-											class="btn btn-sm {getVisibilityColor(visibility)} hover:scale-110 transition-transform"
-											onclick={() => updateCharacterVisibility(c, getNextVisibility(visibility))}
-											title="Context Optimization: {ChatCharacterVisibility.options.find(opt => opt.value === visibility)?.label || 'Full Info'}"
+											class="btn btn-sm {getVisibilityColor(
+												visibility
+											)} transition-transform hover:scale-110"
+											onclick={() =>
+												updateCharacterVisibility(
+													c,
+													getNextVisibility(
+														visibility
+													)
+												)}
+											title="Context Optimization: {ChatCharacterVisibility.options.find(
+												(opt) =>
+													opt.value === visibility
+											)?.label || 'Full Info'}"
 										>
-											<svelte:component this={getVisibilityIcon(visibility)} size={20} />
+											<svelte:component
+												this={getVisibilityIcon(
+													visibility
+												)}
+												size={20}
+											/>
 										</button>
 									</div>
 								{/if}

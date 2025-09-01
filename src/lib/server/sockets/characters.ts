@@ -1,5 +1,5 @@
 import { db } from "$lib/server/db"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import * as schema from "$lib/server/db/schema"
 import * as fsPromises from "fs/promises"
 import { getCharacterDataDir, handleCharacterAvatarUpload } from "../utils"
@@ -8,24 +8,54 @@ import { fileTypeFromBuffer } from "file-type"
 import type { Handler } from "$lib/shared/events"
 
 // Helper function to process tags for character creation/update
-async function processCharacterTags(characterId: number, tagNames: string[], userId: number) {
-	if (!tagNames || tagNames.length === 0) return
+async function processCharacterTags(
+	characterId: number,
+	tagNames: string[],
+	userId: number
+) {
+	// Get existing tags for this character that belong to the user
+	const existingCharacterTags = await db.query.characterTags.findMany({
+		where: eq(schema.characterTags.characterId, characterId),
+		with: {
+			tag: true
+		}
+	})
 
-	// First, remove all existing tags for this character
-	await db
-		.delete(schema.characterTags)
-		.where(eq(schema.characterTags.characterId, characterId))
-
-	// Process each tag name
-	const tagIds: number[] = []
-
-	for (const tagName of tagNames) {
-		if (!tagName.trim()) continue
-
+	// Filter to only tags that belong to this user
+	const userCharacterTags = existingCharacterTags.filter(ct => ct.tag.userId === userId)
+	const existingTagNames = userCharacterTags.map(ct => ct.tag.name)
+	
+	// Normalize tag names for comparison
+	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
+	
+	// Find tags to remove (exist in DB but not in new list)
+	const tagsToRemove = userCharacterTags.filter(ct => 
+		!normalizedNewTags.includes(ct.tag.name)
+	)
+	
+	// Find tags to add (exist in new list but not in DB)
+	const tagsToAdd = normalizedNewTags.filter(tagName => 
+		!existingTagNames.includes(tagName)
+	)
+	
+	// Remove tags that are no longer in the list
+	if (tagsToRemove.length > 0) {
+		const tagIdsToRemove = tagsToRemove.map(ct => ct.tagId)
+		await db.delete(schema.characterTags)
+			.where(
+				and(
+					eq(schema.characterTags.characterId, characterId),
+					inArray(schema.characterTags.tagId, tagIdsToRemove)
+				)
+			)
+	}
+	
+	// Add new tags
+	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: (t, { and, eq }) => 
-				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
+			where: (t, { and, eq }) =>
+				and(eq(t.name, tagName), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -33,32 +63,28 @@ async function processCharacterTags(characterId: number, tagNames: string[], use
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim(),
+					name: tagName,
 					userId
-					// description and colorPreset will use database defaults
 				})
 				.returning()
 			existingTag = newTag
 		}
 
-		tagIds.push(existingTag.id)
-	}
-
-	// Link all tags to the character
-	if (tagIds.length > 0) {
-		const characterTagsData = tagIds.map((tagId) => ({
-			characterId,
-			tagId
-		}))
-
+		// Link tag to character
 		await db
 			.insert(schema.characterTags)
-			.values(characterTagsData)
-			.onConflictDoNothing() // In case of race conditions
+			.values({
+				characterId,
+				tagId: existingTag.id
+			})
+			.onConflictDoNothing()
 	}
 }
 
-export const charactersList: Handler<Sockets.Characters.List.Params, Sockets.Characters.List.Response> = {
+export const charactersList: Handler<
+	Sockets.Characters.List.Params,
+	Sockets.Characters.List.Response
+> = {
 	event: "characters:list",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -88,12 +114,15 @@ export const charactersList: Handler<Sockets.Characters.List.Params, Sockets.Cha
 	}
 }
 
-export const charactersGet: Handler<Sockets.Characters.Get.Params, Sockets.Characters.Get.Response> = {
+export const charactersGet: Handler<
+	Sockets.Characters.Get.Params,
+	Sockets.Characters.Get.Response
+> = {
 	event: "characters:get",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
 		const character = await db.query.characters.findFirst({
-			where: (c, { and, eq }) => 
+			where: (c, { and, eq }) =>
 				and(eq(c.id, params.id), eq(c.userId, userId)),
 			with: {
 				characterTags: {
@@ -111,7 +140,9 @@ export const charactersGet: Handler<Sockets.Characters.Get.Params, Sockets.Chara
 			}
 			const { characterTags, ...characterWithoutTags } = characterWithTags
 
-			const res: Sockets.Characters.Get.Response = { character: characterWithoutTags }
+			const res: Sockets.Characters.Get.Response = {
+				character: characterWithoutTags
+			}
 			emitToUser("characters:get", res)
 			return res
 		}
@@ -121,7 +152,10 @@ export const charactersGet: Handler<Sockets.Characters.Get.Params, Sockets.Chara
 	}
 }
 
-export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets.Characters.Create.Response> = {
+export const charactersCreate: Handler<
+	Sockets.Characters.Create.Params,
+	Sockets.Characters.Create.Response
+> = {
 	event: "characters:create",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -131,9 +165,9 @@ export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets
 
 			// Remove fields that shouldn't be in the database insert
 			// @ts-ignore - Remove avatar from character data to avoid conflicts
-			delete data.avatar 
+			delete data.avatar
 			// @ts-ignore - Remove tags - will be handled separately
-			delete (data as any).tags 
+			delete (data as any).tags
 
 			const [character] = await db
 				.insert(schema.characters)
@@ -143,7 +177,8 @@ export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets
 			// Process tags after character creation
 			if (tags && tags.length > 0) {
 				await processCharacterTags(character.id, tags, userId)
-			}			if (params.avatarFile) {
+			}
+			if (params.avatarFile) {
 				await handleCharacterAvatarUpload({
 					character,
 					avatarFile: params.avatarFile
@@ -165,7 +200,10 @@ export const charactersCreate: Handler<Sockets.Characters.Create.Params, Sockets
 	}
 }
 
-export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets.Characters.Update.Response> = {
+export const charactersUpdate: Handler<
+	Sockets.Characters.Update.Params,
+	Sockets.Characters.Update.Response
+> = {
 	event: "characters:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -178,9 +216,9 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 			if ("userId" in data) (data as any).userId = undefined
 			if ("id" in data) (data as any).id = undefined
 			// @ts-ignore - Remove avatar from character data to avoid conflicts
-			delete data.avatar 
+			delete data.avatar
 			// @ts-ignore - Remove tags - will be handled separately
-			delete (data as any).tags 
+			delete (data as any).tags
 
 			const [updated] = await db
 				.update(schema.characters)
@@ -203,7 +241,9 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 				})
 			}
 
-			const res: Sockets.Characters.Update.Response = { character: updated }
+			const res: Sockets.Characters.Update.Response = {
+				character: updated
+			}
 			await charactersList.handler(socket, {}, emitToUser)
 			emitToUser("characters:update", res)
 			return res
@@ -217,7 +257,10 @@ export const charactersUpdate: Handler<Sockets.Characters.Update.Params, Sockets
 	}
 }
 
-export const charactersDelete: Handler<Sockets.Characters.Delete.Params, Sockets.Characters.Delete.Response> = {
+export const charactersDelete: Handler<
+	Sockets.Characters.Delete.Params,
+	Sockets.Characters.Delete.Response
+> = {
 	event: "characters:delete",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -232,17 +275,22 @@ export const charactersDelete: Handler<Sockets.Characters.Delete.Params, Sockets
 					eq(schema.characters.userId, userId)
 				)
 			)
-		
+
 		await charactersList.handler(socket, {}, emitToUser)
-		
+
 		// Emit the delete event
-		const res: Sockets.Characters.Delete.Response = { success: "Character deleted successfully" }
+		const res: Sockets.Characters.Delete.Response = {
+			success: "Character deleted successfully"
+		}
 		emitToUser("characters:delete", res)
 		return res
 	}
 }
 
-export const charactersImportCard: Handler<Sockets.Characters.ImportCard.Params, Sockets.Characters.ImportCard.Response> = {
+export const charactersImportCard: Handler<
+	Sockets.Characters.ImportCard.Params,
+	Sockets.Characters.ImportCard.Response
+> = {
 	event: "characters:importCard",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -268,7 +316,11 @@ export const charactersImportCard: Handler<Sockets.Characters.ImportCard.Params,
 export function registerCharacterHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, charactersList, emitToUser)
 	register(socket, charactersGet, emitToUser)

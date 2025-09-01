@@ -5,12 +5,14 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 ## Global Navigation
 
 ### Panel Focus
+
 - **Alt + [** - Focus left sidebar panel (if open, otherwise announces no sidebar is open)
 - **Alt + ]** - Focus right sidebar panel (if open, otherwise announces no sidebar is open)
 - **Alt + /** - Focus main content area
 - **Alt + ,** - Focus site navigation area
 
 ### General Navigation
+
 - **Tab** - Navigate forward through interactive elements
 - **Shift + Tab** - Navigate backward through interactive elements
 - **Enter** - Activate buttons, links, and other interactive elements
@@ -19,8 +21,9 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 ## Chat Interface Navigation
 
 ### Message Navigation (In Chat Views)
+
 - `Alt + J` - Navigate to next message
-- `Alt + K` - Navigate to previous message  
+- `Alt + K` - Navigate to previous message
 - `Alt + Home` - Navigate to first message
 - `Alt + End` - Navigate to last message
 - `Shift + G` - Navigate to latest (most recent) message
@@ -28,11 +31,13 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 - `Enter` - Focus message action buttons when on a message
 
 ### Message Actions
+
 - `Ctrl/Cmd + R` - Refresh (regenerate) last response
 - `Ctrl/Cmd + Left Arrow` - Swipe current message left (previous variation)
 - `Ctrl/Cmd + Right Arrow` - Swipe current message right (next variation or generate new)
 
 ### Message Actions (when message is focused)
+
 - **E** - Edit message (if editable)
 - **D** - Delete message (with confirmation)
 - **H** - Hide/unhide message
@@ -40,12 +45,14 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 - **S** - Swipe message (if swipes available)
 
 ### Advanced Message Actions
+
 - **Ctrl/Cmd + R** - Refresh (regenerate) last response
 - **Ctrl/Cmd + Left** - Swipe current message left (previous variation)
 - **Ctrl/Cmd + Right** - Swipe current message right (next variation or generate new)
 - **Shift + G** - Go to latest (most recent) message with scroll
 
 ### Composer
+
 - **Ctrl/Cmd + Enter** - Send message
 - **Shift + Enter** - Add line break in message
 - **Ctrl/Cmd + /** - Focus message composer
@@ -53,20 +60,23 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 ## Sidebar Navigation
 
 ### Character Management
+
 - **Tab** - Navigate between character list items
 - **Enter** - Select character
 - **E** - Edit character (when character is focused)
-- **D** - Delete character (when character is focused) 
+- **D** - Delete character (when character is focused)
 - **F** - Toggle favorite status
 - **V** - Cycle visibility setting (visible → minimal → hidden)
 
-### Chat Management  
+### Chat Management
+
 - **Tab** - Navigate between chat list items
 - **Enter** - Open chat
 - **E** - Edit chat settings
 - **D** - Delete chat
 
 ### Persona Management
+
 - **Tab** - Navigate between persona list items
 - **Enter** - Select persona
 - **E** - Edit persona
@@ -75,6 +85,7 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 ## Form Navigation
 
 ### Character/Persona Forms
+
 - **Ctrl/Cmd + S** - Save changes
 - **Escape** - Cancel/close form
 - **Tab** - Navigate form fields
@@ -82,6 +93,7 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 - **Ctrl/Cmd + Y** - Redo changes (in rich text areas)
 
 ### Modal Dialogs
+
 - **Escape** - Close modal
 - **Enter** - Confirm action (when confirm button is focused)
 - **Tab** - Navigate between modal buttons
@@ -89,7 +101,9 @@ This document outlines all keyboard shortcuts and navigation patterns available 
 ## Screen Reader Features
 
 ### Message Announcements
+
 When navigating messages, screen readers will announce:
+
 - Message number in conversation
 - Speaker name (character or persona)
 - Message content preview
@@ -97,16 +111,20 @@ When navigating messages, screen readers will announce:
 
 Example: "Chat Message 5: Alice: Hello there! How are you doing today? Actions available: Edit, Delete, Hide"
 
-### List Item Announcements  
+### List Item Announcements
+
 When navigating lists, screen readers will announce:
+
 - Item type and name
-- Position in list  
+- Position in list
 - Additional context
 
 Example: "Character List Item: Bob - A mysterious traveler with ancient knowledge"
 
 ### Panel Focus Announcements
+
 When focusing panels, screen readers will announce:
+
 - Panel name and purpose
 - Number of items (if applicable)
 - Current selection
@@ -116,7 +134,9 @@ Example: "Characters Sidebar - 12 characters available, Bob selected"
 Example: "No left sidebar is currently open" when pressing Alt+[ with no open left panel
 
 ### Action Feedback Announcements
+
 When using keyboard shortcuts, screen readers will announce:
+
 - **Navigation**: "Navigated to first/last/latest message"
 - **Regeneration**: "Regenerating last response" or "No response available to regenerate"
 - **Swiping**: "Swiped message left/right" or "Cannot swipe - no variations available"
@@ -130,15 +150,18 @@ Example: "Site navigation focused" when pressing Alt + ,
 ## Form Field Guidance
 
 ### Required Fields
-- Required fields are marked with asterisks (*) 
+
+- Required fields are marked with asterisks (\*)
 - Screen readers announce "required" for mandatory fields
 
 ### Field Descriptions
+
 - Important fields include helpful descriptions
 - Validation errors are announced immediately
 - Field format requirements are provided upfront
 
 ### Rich Text Editing
+
 - Rich text editors announce formatting options
 - Current formatting state is conveyed to screen readers
 - Keyboard shortcuts for formatting are available
@@ -146,12 +169,14 @@ Example: "Site navigation focused" when pressing Alt + ,
 ## Search and Filtering
 
 ### Search Fields
+
 - **/** - Focus search field in most contexts
 - **Escape** - Clear search field
 - **Enter** - Execute search
 - **Arrow Down/Up** - Navigate search suggestions
 
 ### Filter Controls
+
 - Screen readers announce current filter state
 - Number of filtered results is announced
 - Clear filter options are keyboard accessible
@@ -159,6 +184,7 @@ Example: "Site navigation focused" when pressing Alt + ,
 ## Connection and Model Management
 
 ### Connection Testing
+
 - Connection status is announced to screen readers
 - Success/failure feedback is provided audibly
 - Model availability is clearly communicated
@@ -166,19 +192,23 @@ Example: "Site navigation focused" when pressing Alt + ,
 ## Accessibility Features
 
 ### High Contrast Support
+
 - Application respects system high contrast settings
 - Custom theme options maintain sufficient contrast ratios
 
 ### Reduced Motion
+
 - Animations respect `prefers-reduced-motion` setting
 - Essential motion is maintained for functionality
 
 ### Focus Management
+
 - Focus is clearly visible with custom focus rings
 - Focus is trapped in modals and dialogs
 - Focus returns to triggering element when closing dialogs
 
 ### Error Handling
+
 - Errors are announced to screen readers
 - Error messages are associated with relevant form fields
 - Recovery suggestions are provided when possible
@@ -186,11 +216,13 @@ Example: "Site navigation focused" when pressing Alt + ,
 ## Mobile Accessibility
 
 ### Touch Navigation
+
 - All interactive elements meet minimum touch target size (44px)
 - Swipe gestures have keyboard alternatives
 - Mobile navigation is fully keyboard accessible
 
 ### Voice Control
+
 - All interactive elements have appropriate labels for voice control
 - Action names are clear and unambiguous
 
@@ -206,16 +238,17 @@ Example: "Site navigation focused" when pressing Alt + ,
 If you encounter accessibility barriers while using Serene Pub:
 
 1. Open the Settings panel (Alt + ] then navigate to Settings)
-2. Find the "Report Issues" link  
+2. Find the "Report Issues" link
 3. Include details about:
-   - Your assistive technology (screen reader, voice control, etc.)
-   - The specific issue encountered
-   - Steps to reproduce the problem
-   - Your operating system and browser
+    - Your assistive technology (screen reader, voice control, etc.)
+    - The specific issue encountered
+    - Steps to reproduce the problem
+    - Your operating system and browser
 
 ## Future Accessibility Improvements
 
 Planned accessibility enhancements include:
+
 - Custom keyboard shortcut configuration
 - Voice command integration
 - Enhanced mobile accessibility features
@@ -224,4 +257,4 @@ Planned accessibility enhancements include:
 
 ---
 
-*This document is continuously updated as accessibility features are added and improved. Last updated: August 10, 2025*
+_This document is continuously updated as accessibility features are added and improved. Last updated: August 10, 2025_

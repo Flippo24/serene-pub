@@ -129,30 +129,36 @@
 	}
 
 	onMount(() => {
-		socket.on("lorebooks:get", async (msg: Sockets.Lorebooks.Get.Response) => {
-			if (msg.lorebook && msg.lorebook.id === lorebookId) {
-				editLorebook = { ...msg.lorebook }
-				originalLorebook = { ...msg.lorebook }
-				isLoading = false
-				loadError = ""
-			} else {
-				loadError = "Lorebook not found"
-				isLoading = false
+		socket.on(
+			"lorebooks:get",
+			async (msg: Sockets.Lorebooks.Get.Response) => {
+				if (msg.lorebook && msg.lorebook.id === lorebookId) {
+					editLorebook = { ...msg.lorebook }
+					originalLorebook = { ...msg.lorebook }
+					isLoading = false
+					loadError = ""
+				} else {
+					loadError = "Lorebook not found"
+					isLoading = false
+				}
+				await tick() // Force state to update
 			}
-			await tick() // Force state to update
-		})
-		socket.on("lorebooks:update", async (msg: Sockets.Lorebooks.Update.Response) => {
-			if (msg.lorebook && msg.lorebook.id === lorebookId) {
-				// Update both editLorebook and originalLorebook to reflect the save
-				editLorebook = { ...msg.lorebook }
-				originalLorebook = { ...msg.lorebook }
+		)
+		socket.on(
+			"lorebooks:update",
+			async (msg: Sockets.Lorebooks.Update.Response) => {
+				if (msg.lorebook && msg.lorebook.id === lorebookId) {
+					// Update both editLorebook and originalLorebook to reflect the save
+					editLorebook = { ...msg.lorebook }
+					originalLorebook = { ...msg.lorebook }
 
-				toaster.success({
-					title: "Lorebook Updated",
-					description: `Lorebook "${msg.lorebook.name}" updated successfully.`
-				})
+					toaster.success({
+						title: "Lorebook Updated",
+						description: `Lorebook "${msg.lorebook.name}" updated successfully.`
+					})
+				}
 			}
-		})
+		)
 		socket.on("tags:list", (msg: any) => {
 			tagsList = msg.tagsList || []
 		})
@@ -174,14 +180,17 @@
 {#if isLoading}
 	<div class="flex items-center justify-center p-4">
 		<div class="text-center">
-			<Icons.Loader size={24} class="animate-spin mx-auto mb-2" />
+			<Icons.Loader size={24} class="mx-auto mb-2 animate-spin" />
 			<p>Loading lorebook...</p>
 		</div>
 	</div>
 {:else if loadError}
 	<div class="flex items-center justify-center p-4">
 		<div class="text-center">
-			<Icons.AlertTriangle size={24} class="mx-auto mb-2 text-error-500" />
+			<Icons.AlertTriangle
+				size={24}
+				class="text-error-500 mx-auto mb-2"
+			/>
 			<p class="text-error-500">{loadError}</p>
 		</div>
 	</div>

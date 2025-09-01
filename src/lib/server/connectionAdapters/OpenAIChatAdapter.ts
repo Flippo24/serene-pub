@@ -86,9 +86,7 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 		const params: ChatCompletionCreateParamsBase = {
 			model,
 			messages,
-			max_tokens: this.sampling.responseTokensEnabled
-				? this.sampling.responseTokens || 2048
-				: 2048
+			...this.mapSamplingConfig()
 		}
 
 		const promptFormat = this.connection?.extraJson?.prerenderPrompt
@@ -176,8 +174,9 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 			if (key.endsWith("Enabled")) continue
 			const enabledKey = key + "Enabled"
 			if ((this.sampling as any)[enabledKey] === false) continue
-			// Map to OpenAI parameter names if needed
-			result[key] = value
+			if (samplingKeyMap[key]) {
+				result[samplingKeyMap[key]] = value
+			}
 		}
 		return result
 	}
@@ -200,16 +199,30 @@ const connectionDefaults = {
 	}
 }
 
+// Only include samplers that OpenAI's API actually supports
 const samplingKeyMap: Record<string, string> = {
+	// Core sampling parameters
 	temperature: "temperature",
 	topP: "top_p",
-	topK: "top_k",
+	seed: "seed",
+
+	// Penalty parameters
 	frequencyPenalty: "frequency_penalty",
 	presencePenalty: "presence_penalty",
+
+	// Generation control
 	responseTokens: "max_tokens",
-	stop: "stop",
-	logitBias: "logit_bias",
-	seed: "seed"
+	logitBias: "logit_bias"
+
+	// Note: OpenAI does NOT support:
+	// - top_k
+	// - repetition_penalty
+	// - min_p, typical_p, tfs
+	// - XTC (xtc_threshold, xtc_probability)
+	// - DRY (dry_multiplier, etc.)
+	// - Mirostat
+	// - Dynamic temperature
+	// - Most other advanced samplers
 }
 
 async function listModels(

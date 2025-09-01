@@ -1,5 +1,5 @@
-import { json } from '@sveltejs/kit'
-import { db } from '$lib/server/db'
+import { json } from "@sveltejs/kit"
+import { db } from "$lib/server/db"
 
 export async function GET() {
 	try {
@@ -14,9 +14,9 @@ export async function GET() {
 			isAccountsEnabled: systemSettings?.isAccountsEnabled ?? false
 		})
 	} catch (error) {
-		console.error('Error fetching system settings:', error)
+		console.error("Error fetching system settings:", error)
 		return json(
-			{ error: 'Failed to fetch system settings' },
+			{ error: "Failed to fetch system settings" },
 			{ status: 500 }
 		)
 	}

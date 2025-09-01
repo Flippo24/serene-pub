@@ -101,7 +101,7 @@
 		// Emit the pull request to Ollama
 		socket.emit("ollama:pullModel", {
 			modelName: model.name
-		} as Sockets.OllamaPullModel.Call)		// Close modal and switch to downloads tab
+		} as Sockets.OllamaPullModel.Call) // Close modal and switch to downloads tab
 		closeHuggingFaceModal()
 		onDownloadStart?.(pullOption.pull)
 	}
@@ -140,7 +140,7 @@
 		// Emit the pull request to Ollama
 		socket.emit("ollama:pullModel", {
 			modelName: model
-		} as Sockets.OllamaPullModel.Call)		// Close modal and switch to downloads tab
+		} as Sockets.OllamaPullModel.Call) // Close modal and switch to downloads tab
 		closeOllamaManualPullModal()
 		onDownloadStart?.(cleanedModelName)
 	}
@@ -169,7 +169,7 @@
 		)
 
 		socket.on(
-			"ollamaSearchAvailableModels",
+			"ollama:searchAvailableModels",
 			(message: Sockets.OllamaSearchAvailableModels.Response) => {
 				isSearching = false
 				if (message.error) {
@@ -182,7 +182,7 @@
 		)
 
 		socket.on(
-			"ollamaRecommendedModels",
+			"ollama:recommendedModels",
 			(message: Sockets.OllamaRecommendedModels.Response) => {
 				isSearching = false
 				if (message.error) {
@@ -215,10 +215,10 @@
 
 	onDestroy(() => {
 		socket.off("ollama:modelsList")
-		socket.off("ollamaSearchAvailableModels")
-		socket.off("ollamaRecommendedModels")
+		socket.off("ollama:searchAvailableModels")
+		socket.off("ollama:recommendedModels")
 		socket.off("ollama:pullModel")
-		socket.off("ollamaCancelPull")
+		socket.off("ollama:cancelPull")
 	})
 </script>
 

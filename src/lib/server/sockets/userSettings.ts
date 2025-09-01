@@ -4,7 +4,10 @@ import { eq } from "drizzle-orm"
 import type { Handler } from "$lib/shared/events"
 import type { AuthenticatedSocket } from "./auth"
 
-export const userSettingsGet: Handler<Sockets.UserSettings.Get.Params, Sockets.UserSettings.Get.Response> = {
+export const userSettingsGet: Handler<
+	Sockets.UserSettings.Get.Params,
+	Sockets.UserSettings.Get.Response
+> = {
 	event: "userSettings:get",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -49,11 +52,18 @@ export const userSettingsGet: Handler<Sockets.UserSettings.Get.Params, Sockets.U
 
 			const res: Sockets.UserSettings.Get.Response = {
 				userSettings: {
+					activeConnectionId: settings.activeConnectionId,
+					activeSamplingConfigId: settings.activeSamplingConfigId,
+					activeContextConfigId: settings.activeContextConfigId,
+					activePromptConfigId: settings.activePromptConfigId,
 					theme: settings.theme || "hamlindigo",
-					darkMode: settings.darkMode !== null ? settings.darkMode : true,
+					darkMode:
+						settings.darkMode !== null ? settings.darkMode : true,
 					showHomePageBanner: settings.showHomePageBanner ?? true,
-					enableEasyPersonaCreation: settings.enableEasyPersonaCreation,
-					enableEasyCharacterCreation: settings.enableEasyCharacterCreation,
+					enableEasyPersonaCreation:
+						settings.enableEasyPersonaCreation,
+					enableEasyCharacterCreation:
+						settings.enableEasyCharacterCreation,
 					showAllCharacterFields: settings.showAllCharacterFields
 				}
 			}
@@ -70,7 +80,10 @@ export const userSettingsGet: Handler<Sockets.UserSettings.Get.Params, Sockets.U
 	}
 }
 
-export const userSettingsUpdateShowHomePageBanner: Handler<Sockets.UserSettings.UpdateShowHomePageBanner.Params, Sockets.UserSettings.UpdateShowHomePageBanner.Response> = {
+export const userSettingsUpdateShowHomePageBanner: Handler<
+	Sockets.UserSettings.UpdateShowHomePageBanner.Params,
+	Sockets.UserSettings.UpdateShowHomePageBanner.Response
+> = {
 	event: "userSettings:updateShowHomePageBanner",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -86,10 +99,11 @@ export const userSettingsUpdateShowHomePageBanner: Handler<Sockets.UserSettings.
 				})
 				.where(eq(schema.userSettings.userId, userId))
 
-			const res: Sockets.UserSettings.UpdateShowHomePageBanner.Response = {
-				success: true,
-				enabled: params.enabled
-			}
+			const res: Sockets.UserSettings.UpdateShowHomePageBanner.Response =
+				{
+					success: true,
+					enabled: params.enabled
+				}
 			emitToUser("userSettings:updateShowHomePageBanner", res)
 			await userSettingsGet.handler(socket, {}, emitToUser) // Refresh user settings after update
 			return res
@@ -103,7 +117,10 @@ export const userSettingsUpdateShowHomePageBanner: Handler<Sockets.UserSettings.
 	}
 }
 
-export const userSettingsUpdateEasyPersonaCreation: Handler<Sockets.UserSettings.UpdateEasyPersonaCreation.Params, Sockets.UserSettings.UpdateEasyPersonaCreation.Response> = {
+export const userSettingsUpdateEasyPersonaCreation: Handler<
+	Sockets.UserSettings.UpdateEasyPersonaCreation.Params,
+	Sockets.UserSettings.UpdateEasyPersonaCreation.Response
+> = {
 	event: "userSettings:updateEasyPersonaCreation",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -119,10 +136,11 @@ export const userSettingsUpdateEasyPersonaCreation: Handler<Sockets.UserSettings
 				})
 				.where(eq(schema.userSettings.userId, userId))
 
-			const res: Sockets.UserSettings.UpdateEasyPersonaCreation.Response = {
-				success: true,
-				enabled: params.enabled
-			}
+			const res: Sockets.UserSettings.UpdateEasyPersonaCreation.Response =
+				{
+					success: true,
+					enabled: params.enabled
+				}
 			emitToUser("userSettings:updateEasyPersonaCreation", res)
 			await userSettingsGet.handler(socket, {}, emitToUser) // Refresh user settings after update
 			return res
@@ -136,7 +154,10 @@ export const userSettingsUpdateEasyPersonaCreation: Handler<Sockets.UserSettings
 	}
 }
 
-export const userSettingsUpdateEasyCharacterCreation: Handler<Sockets.UserSettings.UpdateEasyCharacterCreation.Params, Sockets.UserSettings.UpdateEasyCharacterCreation.Response> = {
+export const userSettingsUpdateEasyCharacterCreation: Handler<
+	Sockets.UserSettings.UpdateEasyCharacterCreation.Params,
+	Sockets.UserSettings.UpdateEasyCharacterCreation.Response
+> = {
 	event: "userSettings:updateEasyCharacterCreation",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -152,10 +173,11 @@ export const userSettingsUpdateEasyCharacterCreation: Handler<Sockets.UserSettin
 				})
 				.where(eq(schema.userSettings.userId, userId))
 
-			const res: Sockets.UserSettings.UpdateEasyCharacterCreation.Response = {
-				success: true,
-				enabled: params.enabled
-			}
+			const res: Sockets.UserSettings.UpdateEasyCharacterCreation.Response =
+				{
+					success: true,
+					enabled: params.enabled
+				}
 			emitToUser("userSettings:updateEasyCharacterCreation", res)
 			await userSettingsGet.handler(socket, {}, emitToUser) // Refresh user settings after update
 			return res
@@ -169,7 +191,10 @@ export const userSettingsUpdateEasyCharacterCreation: Handler<Sockets.UserSettin
 	}
 }
 
-export const userSettingsUpdateShowAllCharacterFields: Handler<Sockets.UserSettings.UpdateShowAllCharacterFields.Params, Sockets.UserSettings.UpdateShowAllCharacterFields.Response> = {
+export const userSettingsUpdateShowAllCharacterFields: Handler<
+	Sockets.UserSettings.UpdateShowAllCharacterFields.Params,
+	Sockets.UserSettings.UpdateShowAllCharacterFields.Response
+> = {
 	event: "userSettings:updateShowAllCharacterFields",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -185,10 +210,11 @@ export const userSettingsUpdateShowAllCharacterFields: Handler<Sockets.UserSetti
 				})
 				.where(eq(schema.userSettings.userId, userId))
 
-			const res: Sockets.UserSettings.UpdateShowAllCharacterFields.Response = {
-				success: true,
-				enabled: params.enabled
-			}
+			const res: Sockets.UserSettings.UpdateShowAllCharacterFields.Response =
+				{
+					success: true,
+					enabled: params.enabled
+				}
 			emitToUser("userSettings:updateShowAllCharacterFields", res)
 			await userSettingsGet.handler(socket, {}, emitToUser) // Refresh user settings after update
 			return res
@@ -202,7 +228,10 @@ export const userSettingsUpdateShowAllCharacterFields: Handler<Sockets.UserSetti
 	}
 }
 
-export const userSettingsUpdateTheme: Handler<Sockets.UserSettings.UpdateTheme.Params, Sockets.UserSettings.UpdateTheme.Response> = {
+export const userSettingsUpdateTheme: Handler<
+	Sockets.UserSettings.UpdateTheme.Params,
+	Sockets.UserSettings.UpdateTheme.Response
+> = {
 	event: "userSettings:updateTheme",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -233,7 +262,10 @@ export const userSettingsUpdateTheme: Handler<Sockets.UserSettings.UpdateTheme.P
 	}
 }
 
-export const userSettingsUpdateDarkMode: Handler<Sockets.UserSettings.UpdateDarkMode.Params, Sockets.UserSettings.UpdateDarkMode.Response> = {
+export const userSettingsUpdateDarkMode: Handler<
+	Sockets.UserSettings.UpdateDarkMode.Params,
+	Sockets.UserSettings.UpdateDarkMode.Response
+> = {
 	event: "userSettings:updateDarkMode",
 	handler: async (socket: AuthenticatedSocket, params, emitToUser) => {
 		try {
@@ -268,7 +300,11 @@ export const userSettingsUpdateDarkMode: Handler<Sockets.UserSettings.UpdateDark
 export function registerUserSettingsHandlers(
 	socket: AuthenticatedSocket,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: AuthenticatedSocket, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: AuthenticatedSocket,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, userSettingsGet, emitToUser)
 	register(socket, userSettingsUpdateShowHomePageBanner, emitToUser)

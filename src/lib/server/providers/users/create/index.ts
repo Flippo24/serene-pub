@@ -18,10 +18,13 @@ export async function create({
 	isAdmin?: boolean
 }) {
 	// Create user
-	const [createdUser] = await tx.insert(schema.users).values({
-		username,
-		isAdmin
-	}).returning()
+	const [createdUser] = await tx
+		.insert(schema.users)
+		.values({
+			username,
+			isAdmin
+		})
+		.returning()
 
 	return createdUser
 }

@@ -253,7 +253,10 @@
 
 	$effect(() => {
 		if (panelsCtx.digest.lorebookId && !!lorebookList.length) {
-			selectedLorebook = lorebookList.find(l => l.id === panelsCtx.digest.lorebookId) || null
+			selectedLorebook =
+				lorebookList.find(
+					(l) => l.id === panelsCtx.digest.lorebookId
+				) || null
 			isEditingLorebook = true
 			delete panelsCtx.digest.lorebookId
 		}
@@ -265,12 +268,18 @@
 				lorebookList = msg.lorebookList
 			}
 		})
-		socket.on("lorebooks:import", (msg: Sockets.Lorebooks.Import.Response) => {
-			toaster.success({ title: "Lorebook Imported" })
-		})
-		socket.on("lorebooks:delete", (msg: Sockets.Lorebooks.Delete.Response) => {
-			toaster.success({ title: "Lorebook Deleted" })
-		})
+		socket.on(
+			"lorebooks:import",
+			(msg: Sockets.Lorebooks.Import.Response) => {
+				toaster.success({ title: "Lorebook Imported" })
+			}
+		)
+		socket.on(
+			"lorebooks:delete",
+			(msg: Sockets.Lorebooks.Delete.Response) => {
+				toaster.success({ title: "Lorebook Deleted" })
+			}
+		)
 		onclose = handleOnClose
 		socket.emit("lorebooks:list", {})
 	})
@@ -412,17 +421,25 @@
 				{#each filteredLorebooks as l}
 					<LorebookListItem
 						lorebook={l}
-						onclick={(lorebook) => handleLorebookClick(new MouseEvent('click'), { lorebook })}
+						onclick={(lorebook) =>
+							handleLorebookClick(new MouseEvent("click"), {
+								lorebook
+							})}
 						onEdit={(id) => {
-							const lorebook = lorebookList.find(lb => lb.id === id)
+							const lorebook = lorebookList.find(
+								(lb) => lb.id === id
+							)
 							if (lorebook) {
-								handleLorebookClick(new MouseEvent('click'), { lorebook })
+								handleLorebookClick(new MouseEvent("click"), {
+									lorebook
+								})
 							}
 						}}
 						onDelete={onDeleteClick}
 						bindingsCount={l.lorebookBindings?.length || 0}
 						worldEntriesCount={l.worldLoreEntries?.length || 0}
-						characterEntriesCount={l.characterLoreEntries?.length || 0}
+						characterEntriesCount={l.characterLoreEntries?.length ||
+							0}
 						historyEntriesCount={l.historyEntries?.length || 0}
 					/>
 				{/each}

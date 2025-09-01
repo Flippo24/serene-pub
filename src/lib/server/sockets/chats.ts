@@ -17,59 +17,62 @@ import { getUserConfigurations } from "../utils/getUserConfigurations"
 /**
  * Check if user owns the chat or is a guest in the chat
  */
-async function checkChatAccess(chatId: number, userId: number): Promise<{ isOwner: boolean, isGuest: boolean, hasAccess: boolean }> {
+async function checkChatAccess(
+	chatId: number,
+	userId: number
+): Promise<{ isOwner: boolean; isGuest: boolean; hasAccess: boolean }> {
 	const chat = await db.query.chats.findFirst({
 		where: eq(schema.chats.id, chatId),
 		columns: { userId: true }
 	})
-	
+
 	if (!chat) {
 		return { isOwner: false, isGuest: false, hasAccess: false }
 	}
-	
+
 	const isOwner = chat.userId === userId
-	
+
 	// Check if user is a guest
 	const guestRecord = await db.query.chatGuests.findFirst({
-		where: (cg, { and, eq }) => and(
-			eq(cg.chatId, chatId), 
-			eq(cg.userId, userId)
-		)
+		where: (cg, { and, eq }) =>
+			and(eq(cg.chatId, chatId), eq(cg.userId, userId))
 	})
-	
+
 	const isGuest = !!guestRecord
 	const hasAccess = isOwner || isGuest
-	
+
 	return { isOwner, isGuest, hasAccess }
 }
 
 /**
  * Check if user owns a character
  */
-async function checkCharacterOwnership(characterId: number, userId: number): Promise<boolean> {
+async function checkCharacterOwnership(
+	characterId: number,
+	userId: number
+): Promise<boolean> {
 	const character = await db.query.characters.findFirst({
-		where: (c, { and, eq }) => and(
-			eq(c.id, characterId),
-			eq(c.userId, userId)
-		),
+		where: (c, { and, eq }) =>
+			and(eq(c.id, characterId), eq(c.userId, userId)),
 		columns: { id: true }
 	})
-	
+
 	return !!character
 }
 
 /**
  * Check if user owns a persona
  */
-async function checkPersonaOwnership(personaId: number, userId: number): Promise<boolean> {
+async function checkPersonaOwnership(
+	personaId: number,
+	userId: number
+): Promise<boolean> {
 	const persona = await db.query.personas.findFirst({
-		where: (p, { and, eq }) => and(
-			eq(p.id, personaId),
-			eq(p.userId, userId)
-		),
+		where: (p, { and, eq }) =>
+			and(eq(p.id, personaId), eq(p.userId, userId)),
 		columns: { id: true }
 	})
-	
+
 	return !!persona
 }
 
@@ -78,50 +81,83 @@ async function checkPersonaOwnership(personaId: number, userId: number): Promise
  * - Chat owners can edit any message
  * - Character/persona owners can edit messages from their characters/personas
  */
-async function checkMessageEditPermission(messageId: number, userId: number): Promise<boolean> {
+async function checkMessageEditPermission(
+	messageId: number,
+	userId: number
+): Promise<boolean> {
 	const message = await db.query.chatMessages.findFirst({
 		where: eq(schema.chatMessages.id, messageId),
 		columns: { chatId: true, characterId: true, personaId: true }
 	})
-	
+
 	if (!message) return false
-	
+
 	// Check chat access
 	const chatAccess = await checkChatAccess(message.chatId, userId)
 	if (chatAccess.isOwner) return true // Chat owner can edit any message
-	
+
 	// Check if user owns the character that created the message
 	if (message.characterId) {
 		return await checkCharacterOwnership(message.characterId, userId)
 	}
-	
+
 	// Check if user owns the persona that created the message
 	if (message.personaId) {
 		return await checkPersonaOwnership(message.personaId, userId)
 	}
-	
+
 	return false
 }
 
 // Helper function to process tags for chat creation/update
-async function processChatTags(chatId: number, tagNames: string[], userId: number) {
-	if (!tagNames || tagNames.length === 0) return
+async function processChatTags(
+	chatId: number,
+	tagNames: string[],
+	userId: number
+) {
+	// Get existing tags for this chat that belong to the user
+	const existingChatTags = await db.query.chatTags.findMany({
+		where: eq(schema.chatTags.chatId, chatId),
+		with: {
+			tag: true
+		}
+	})
 
-	// First, remove all existing tags for this chat
-	await db
-		.delete(schema.chatTags)
-		.where(eq(schema.chatTags.chatId, chatId))
-
-	// Process each tag name
-	const tagIds: number[] = []
-
-	for (const tagName of tagNames) {
-		if (!tagName.trim()) continue
-
+	// Filter to only tags that belong to this user
+	const userChatTags = existingChatTags.filter(ct => ct.tag.userId === userId)
+	const existingTagNames = userChatTags.map(ct => ct.tag.name)
+	
+	// Normalize tag names for comparison
+	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
+	
+	// Find tags to remove (exist in DB but not in new list)
+	const tagsToRemove = userChatTags.filter(ct => 
+		!normalizedNewTags.includes(ct.tag.name)
+	)
+	
+	// Find tags to add (exist in new list but not in DB)
+	const tagsToAdd = normalizedNewTags.filter(tagName => 
+		!existingTagNames.includes(tagName)
+	)
+	
+	// Remove tags that are no longer in the list
+	if (tagsToRemove.length > 0) {
+		const tagIdsToRemove = tagsToRemove.map(ct => ct.tagId)
+		await db.delete(schema.chatTags)
+			.where(
+				and(
+					eq(schema.chatTags.chatId, chatId),
+					inArray(schema.chatTags.tagId, tagIdsToRemove)
+				)
+			)
+	}
+	
+	// Add new tags
+	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user
 		let existingTag = await db.query.tags.findFirst({
-			where: (t, { and, eq }) => 
-				and(eq(t.name, tagName.trim()), eq(t.userId, userId))
+			where: (t, { and, eq }) =>
+				and(eq(t.name, tagName), eq(t.userId, userId))
 		})
 
 		// Create tag if it doesn't exist
@@ -129,40 +165,36 @@ async function processChatTags(chatId: number, tagNames: string[], userId: numbe
 			const [newTag] = await db
 				.insert(schema.tags)
 				.values({
-					name: tagName.trim(),
+					name: tagName,
 					userId
-					// description and colorPreset will use database defaults
 				})
 				.returning()
 			existingTag = newTag
 		}
 
-		tagIds.push(existingTag.id)
-	}
-
-	// Link all tags to the chat
-	if (tagIds.length > 0) {
-		const chatTagsData = tagIds.map((tagId) => ({
-			chatId,
-			tagId
-		}))
-
+		// Link tag to chat
 		await db
 			.insert(schema.chatTags)
-			.values(chatTagsData)
-			.onConflictDoNothing() // In case of race conditions
+			.values({
+				chatId,
+				tagId: existingTag.id
+			})
+			.onConflictDoNothing()
 	}
 }
 
 // --- Global map for active adapters ---
 export const activeAdapters = new Map<string, BaseConnectionAdapter>()
 
-export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.List.Response> = {
+export const chatsListHandler: Handler<
+	Sockets.Chats.List.Params,
+	Sockets.Chats.List.Response
+> = {
 	event: "chats:list",
 	async handler(socket, params, emitToUser) {
 		const userId = socket.user!.id
 		console.log("Fetching chats for user:", userId)
-		
+
 		// First, find all chats where the current user is a guest
 		const guestChats = await db.query.chatGuests.findMany({
 			where: eq(schema.chatGuests.userId, userId),
@@ -170,18 +202,16 @@ export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.
 				chatId: true
 			}
 		})
-		
-		const guestChatIds = guestChats.map(gc => gc.chatId)
+
+		const guestChatIds = guestChats.map((gc) => gc.chatId)
 		console.log("User is guest in chat IDs:", guestChatIds)
-		
+
 		// Build the where clause: user owns the chat OR user is a guest in the chat
-		const whereCondition = (c, {or, eq, inArray}) => guestChatIds.length > 0 
-			? or(
-				eq(c.userId, userId),
-				inArray(c.id, guestChatIds)
-			)
-			: eq(c.userId, userId)
-		
+		const whereCondition = (c, { or, eq, inArray }) =>
+			guestChatIds.length > 0
+				? or(eq(c.userId, userId), inArray(c.id, guestChatIds))
+				: eq(c.userId, userId)
+
 		const chatsList = await db.query.chats.findMany({
 			with: {
 				chatCharacters: {
@@ -221,9 +251,9 @@ export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.
 			where: whereCondition,
 			orderBy: desc(schema.chats.updatedAt)
 		})
-		
+
 		// Add canEdit property to each chat
-		const chatsWithEditPermission = chatsList.map(chat => ({
+		const chatsWithEditPermission = chatsList.map((chat) => ({
 			...chat,
 			canEdit: chat.userId === userId // User can edit only if they own the chat
 		}))
@@ -234,8 +264,11 @@ export const chatsListHandler: Handler<Sockets.Chats.List.Params, Sockets.Chats.
 	}
 }
 
-export const chatsCreateHandler: Handler<Sockets.Chats.Create.Params, Sockets.Chats.Create.Response> = {
-	event: "chats:create", 
+export const chatsCreateHandler: Handler<
+	Sockets.Chats.Create.Params,
+	Sockets.Chats.Create.Response
+> = {
+	event: "chats:create",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
 		const tags = params.tags || []
@@ -310,9 +343,11 @@ export const chatsCreateHandler: Handler<Sockets.Chats.Create.Params, Sockets.Ch
 				await db.insert(schema.chatMessages).values(newMessage)
 			}
 		}
+
+		// Fetch the complete chat with messages
 		const resChat = await getChatFromDB(newChat.id, userId)
 		if (!resChat) throw new Error("Failed to fetch created chat")
-		
+
 		await chatsListHandler.handler(socket, {}, emitToUser) // Refresh chat list
 		const res: Sockets.Chats.Create.Response = { chat: resChat as any }
 		emitToUser("chats:create", res)
@@ -469,22 +504,25 @@ async function getPromptChatFromDb(chatId: number, userId: number) {
 	return chat
 }
 
-export const chatsDeleteHandler: Handler<Sockets.Chats.Delete.Params, Sockets.Chats.Delete.Response> = {
+export const chatsDeleteHandler: Handler<
+	Sockets.Chats.Delete.Params,
+	Sockets.Chats.Delete.Response
+> = {
 	event: "chats:delete",
 	async handler(socket, params, emitToUser) {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Check if user has access to delete this chat (only owners can delete)
 			const chatAccess = await checkChatAccess(params.id, userId)
 			if (!chatAccess.hasAccess || !chatAccess.isOwner) {
-				throw new Error("Access denied. Only chat owners can delete chats.")
+				throw new Error(
+					"Access denied. Only chat owners can delete chats."
+				)
 			}
-			
-			await db
-				.delete(schema.chats)
-				.where(eq(schema.chats.id, params.id))
-				
+
+			await db.delete(schema.chats).where(eq(schema.chats.id, params.id))
+
 			return { success: "Chat deleted successfully" }
 		} catch (error) {
 			throw error
@@ -492,12 +530,15 @@ export const chatsDeleteHandler: Handler<Sockets.Chats.Delete.Params, Sockets.Ch
 	}
 }
 
-export const chatsGetHandler: Handler<Sockets.Chats.Get.Params, Sockets.Chats.Get.Response> = {
+export const chatsGetHandler: Handler<
+	Sockets.Chats.Get.Params,
+	Sockets.Chats.Get.Response
+> = {
 	event: "chats:get",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Check if user has access to this chat (both owners and guests can get)
 			const chatAccess = await checkChatAccess(params.id, userId)
 			if (!chatAccess.hasAccess) {
@@ -508,9 +549,9 @@ export const chatsGetHandler: Handler<Sockets.Chats.Get.Params, Sockets.Chats.Ge
 				emitToUser("chats:get", res)
 				return res
 			}
-			
+
 			const chatData = await getChatFromDB(params.id, userId)
-			
+
 			if (!chatData) {
 				const res: Sockets.Chats.Get.Response = {
 					chat: null,
@@ -536,29 +577,43 @@ export const chatsGetHandler: Handler<Sockets.Chats.Get.Params, Sockets.Chats.Ge
 	}
 }
 
-export const chatsUpdateHandler: Handler<Sockets.Chats.Update.Params, Sockets.Chats.Update.Response> = {
+export const chatsUpdateHandler: Handler<
+	Sockets.Chats.Update.Params,
+	Sockets.Chats.Update.Response
+> = {
 	event: "chats:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Check if user has access to update this chat
 			const chatAccess = await checkChatAccess(params.chat.id!, userId)
 			if (!chatAccess.hasAccess) {
 				emitToUser("chats:update:error", {
 					error: "Access denied. Only chat owners can update chats."
 				})
-				throw new Error("Access denied. Only chat owners can update chats.")
+				throw new Error(
+					"Access denied. Only chat owners can update chats."
+				)
 			}
-			
+
+			const tags = params.tags || params.chat.tags || []
+
+			// Remove tags from chat data as it will be handled separately
+			const chatDataWithoutTags = { ...params.chat }
+			delete chatDataWithoutTags.tags
+
 			// Update the chat
 			await db
 				.update(schema.chats)
 				.set({
-					...params.chat,
+					...chatDataWithoutTags,
 					updatedAt: new Date().toISOString()
 				})
 				.where(eq(schema.chats.id, params.chat.id!))
+
+			// Process tags after chat update
+			await processChatTags(params.chat.id!, tags, userId)
 
 			// Fetch updated chat
 			const updatedChat = await getChatFromDB(params.chat.id!, userId)
@@ -582,13 +637,16 @@ export const chatsUpdateHandler: Handler<Sockets.Chats.Update.Params, Sockets.Ch
 	}
 }
 
-export const chatMessagesSendPersonaMessageHandler: Handler<Sockets.ChatMessages.SendPersonaMessage.Params, Sockets.ChatMessages.SendPersonaMessage.Response> = {
+export const chatMessagesSendPersonaMessageHandler: Handler<
+	Sockets.ChatMessages.SendPersonaMessage.Params,
+	Sockets.ChatMessages.SendPersonaMessage.Response
+> = {
 	event: "chatMessages:sendPersonaMessage",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const { chatId, personaId, content } = params
 			const userId = socket.user!.id
-			
+
 			// Check if user has access to this chat (both owners and guests can send messages)
 			const chatAccess = await checkChatAccess(chatId, userId)
 			if (!chatAccess.hasAccess) {
@@ -599,20 +657,24 @@ export const chatMessagesSendPersonaMessageHandler: Handler<Sockets.ChatMessages
 				emitToUser("chatMessages:sendPersonaMessage", res)
 				return res
 			}
-			
+
 			// Check if user owns the persona they're trying to use
 			if (personaId) {
-				const canUsePersona = await checkPersonaOwnership(personaId, userId)
+				const canUsePersona = await checkPersonaOwnership(
+					personaId,
+					userId
+				)
 				if (!canUsePersona) {
-					const res: Sockets.ChatMessages.SendPersonaMessage.Response = {
-						chatMessage: undefined,
-						error: "Access denied. You can only send messages with personas you own."
-					}
+					const res: Sockets.ChatMessages.SendPersonaMessage.Response =
+						{
+							chatMessage: undefined,
+							error: "Access denied. You can only send messages with personas you own."
+						}
 					emitToUser("chatMessages:sendPersonaMessage", res)
 					return res
 				}
 			}
-			
+
 			// Check if chat exists
 			const chat = await getPromptChatFromDb(chatId, userId)
 			if (!chat) {
@@ -642,6 +704,20 @@ export const chatMessagesSendPersonaMessageHandler: Handler<Sockets.ChatMessages
 				chatMessage: inserted as any
 			}
 			emitToUser("chatMessages:sendPersonaMessage", res)
+
+			// Emit chatMessage to notify listeners of new message
+			await chatMessage(socket, { chatMessage: inserted }, emitToUser)
+
+			// Check if this is a 1-on-1 chat (not a group chat)
+			if (!chat.isGroup) {
+				// Trigger character response generation
+				await triggerGenerateMessageHandler.handler(
+					socket,
+					{ chatId, once: true },
+					emitToUser
+				)
+			}
+
 			return res
 		} catch (error: any) {
 			console.error("Error sending persona message:", error)
@@ -655,13 +731,16 @@ export const chatMessagesSendPersonaMessageHandler: Handler<Sockets.ChatMessages
 	}
 }
 
-export const chatMessagesUpdateHandler: Handler<Sockets.ChatMessages.Update.Params, Sockets.ChatMessages.Update.Response> = {
+export const chatMessagesUpdateHandler: Handler<
+	Sockets.ChatMessages.Update.Params,
+	Sockets.ChatMessages.Update.Response
+> = {
 	event: "chatMessages:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const { id, content } = params
 			const userId = 1
-			
+
 			// Update the message
 			const [updated] = await db
 				.update(schema.chatMessages)
@@ -687,6 +766,10 @@ export const chatMessagesUpdateHandler: Handler<Sockets.ChatMessages.Update.Para
 				chatMessage: updated as any
 			}
 			emitToUser("chatMessages:update", res)
+
+			// Emit chatMessage to notify listeners of updated message
+			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+
 			return res
 		} catch (error: any) {
 			console.error("Error updating chat message:", error)
@@ -700,12 +783,15 @@ export const chatMessagesUpdateHandler: Handler<Sockets.ChatMessages.Update.Para
 	}
 }
 
-export const chatMessagesDeleteHandler: Handler<Sockets.ChatMessages.Delete.Params, Sockets.ChatMessages.Delete.Response> = {
+export const chatMessagesDeleteHandler: Handler<
+	Sockets.ChatMessages.Delete.Params,
+	Sockets.ChatMessages.Delete.Response
+> = {
 	event: "chatMessages:delete",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// First get the message to check permissions
 			const message = await db.query.chatMessages.findFirst({
 				where: (cm, { eq }) => eq(cm.id, params.id)
@@ -728,7 +814,7 @@ export const chatMessagesDeleteHandler: Handler<Sockets.ChatMessages.Delete.Para
 				emitToUser("chatMessages:delete", res)
 				return res
 			}
-			
+
 			// Delete the message
 			await db
 				.delete(schema.chatMessages)
@@ -738,6 +824,14 @@ export const chatMessagesDeleteHandler: Handler<Sockets.ChatMessages.Delete.Para
 				success: "Message deleted successfully"
 			}
 			emitToUser("chatMessages:delete", res)
+
+			// Emit chats:get to refresh the entire chat after deletion
+			await chatsGetHandler.handler(
+				socket,
+				{ id: message.chatId },
+				emitToUser
+			)
+
 			return res
 		} catch (error: any) {
 			console.error("Error deleting chat message:", error)
@@ -750,12 +844,15 @@ export const chatMessagesDeleteHandler: Handler<Sockets.ChatMessages.Delete.Para
 	}
 }
 
-export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regenerate.Params, Sockets.ChatMessages.Regenerate.Response> = {
+export const chatMessagesRegenerateHandler: Handler<
+	Sockets.ChatMessages.Regenerate.Params,
+	Sockets.ChatMessages.Regenerate.Response
+> = {
 	event: "chatMessages:regenerate",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Get the message to regenerate first
 			const messageToRegenerate = await db.query.chatMessages.findFirst({
 				where: (cm, { eq }) => eq(cm.id, params.id)
@@ -771,7 +868,10 @@ export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regener
 			}
 
 			// Check if user owns the chat (only chat owners can regenerate)
-			const chatAccess = await checkChatAccess(messageToRegenerate.chatId, userId)
+			const chatAccess = await checkChatAccess(
+				messageToRegenerate.chatId,
+				userId
+			)
 			if (!chatAccess.hasAccess || !chatAccess.isOwner) {
 				const res: Sockets.ChatMessages.Regenerate.Response = {
 					chatMessage: undefined,
@@ -784,7 +884,7 @@ export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regener
 			// Clear the content and set as generating
 			const [updated] = await db
 				.update(schema.chatMessages)
-				.set({ 
+				.set({
 					content: "",
 					isGenerating: true
 				})
@@ -795,6 +895,19 @@ export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regener
 				chatMessage: updated as any
 			}
 			emitToUser("chatMessages:regenerate", res)
+
+			// Emit chatMessage to notify listeners that regeneration has started
+			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+
+			// Start generating the response
+			await generateResponse({
+				socket,
+				emitToUser,
+				chatId: messageToRegenerate.chatId,
+				userId,
+				generatingMessage: updated as any
+			})
+
 			return res
 		} catch (error: any) {
 			console.error("Error regenerating chat message:", error)
@@ -808,12 +921,15 @@ export const chatMessagesRegenerateHandler: Handler<Sockets.ChatMessages.Regener
 	}
 }
 
-export const chatMessagesSwipeLeftHandler: Handler<Sockets.ChatMessages.SwipeLeft.Params, Sockets.ChatMessages.SwipeLeft.Response> = {
+export const chatMessagesSwipeLeftHandler: Handler<
+	Sockets.ChatMessages.SwipeLeft.Params,
+	Sockets.ChatMessages.SwipeLeft.Response
+> = {
 	event: "chatMessages:swipeLeft",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Get the message first to check chat access
 			const message = await db.query.chatMessages.findFirst({
 				where: (cm, { eq }) => eq(cm.id, params.id)
@@ -823,6 +939,33 @@ export const chatMessagesSwipeLeftHandler: Handler<Sockets.ChatMessages.SwipeLef
 				const res: Sockets.ChatMessages.SwipeLeft.Response = {
 					chatMessage: undefined,
 					error: "Message not found"
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			if (message.isGenerating) {
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: undefined,
+					error: "Message is still generating, please wait."
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			if (message.isHidden) {
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: undefined,
+					error: "Message is hidden, cannot swipe left."
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			if (message.role !== "assistant") {
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: undefined,
+					error: "Only assistant messages can be swiped."
 				}
 				emitToUser("chatMessages:swipeLeft", res)
 				return res
@@ -839,32 +982,73 @@ export const chatMessagesSwipeLeftHandler: Handler<Sockets.ChatMessages.SwipeLef
 				return res
 			}
 
-			// Handle swipe left logic (move to previous swipe)
-			const metadata = message.metadata as any
-			if (metadata?.swipes && metadata.swipes.currentIdx > 0) {
-				metadata.swipes.currentIdx -= 1
-				const newContent = metadata.swipes.history[metadata.swipes.currentIdx]
-				
-				const [updated] = await db
-					.update(schema.chatMessages)
-					.set({ 
-						content: newContent,
-						metadata: metadata
-					})
-					.where(eq(schema.chatMessages.id, params.id))
-					.returning()
+			let isOnFirstSwipe = false
 
+			// Check if metadata.swipes, if not, initialize it
+			const data: SelectChatMessage = {
+				...message,
+				metadata: {
+					...message.metadata,
+					swipes: {
+						currentIdx: null,
+						history: [],
+						...(message.metadata?.swipes || {})
+					}
+				}
+			}
+
+			// Check if we are on the first swipe (idx=0|null) (or if there are no swipes)
+			if (
+				!data.metadata!.swipes!.history.length ||
+				data.metadata!.swipes!.currentIdx === null ||
+				data.metadata!.swipes!.currentIdx === 0
+			) {
+				isOnFirstSwipe = true
+			}
+
+			// If we are on the first swipe, return an error
+			if (isOnFirstSwipe) {
 				const res: Sockets.ChatMessages.SwipeLeft.Response = {
-					chatMessage: updated as any
+					chatMessage: undefined,
+					error: "Already on the first swipe, cannot swipe left."
+				}
+				emitToUser("chatMessages:swipeLeft", res)
+				return res
+			}
+
+			// If not on the first swipe, update the current index and content
+			data.metadata!.swipes!.currentIdx =
+				(data.metadata!.swipes!.currentIdx || 0) - 1
+			data.content =
+				data.metadata!.swipes!.history[
+					data.metadata!.swipes!.currentIdx
+				] || ""
+
+			// Update the chat message in the database
+			delete data.id
+			const [updated] = await db
+				.update(schema.chatMessages)
+				.set({ ...data })
+				.where(eq(schema.chatMessages.id, message.id))
+				.returning()
+
+			if (!updated) {
+				const res: Sockets.ChatMessages.SwipeLeft.Response = {
+					chatMessage: undefined,
+					error: "Failed to update chat message."
 				}
 				emitToUser("chatMessages:swipeLeft", res)
 				return res
 			}
 
 			const res: Sockets.ChatMessages.SwipeLeft.Response = {
-				chatMessage: message as any
+				chatMessage: updated as any
 			}
 			emitToUser("chatMessages:swipeLeft", res)
+
+			// Emit chatMessage to notify listeners
+			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+
 			return res
 		} catch (error: any) {
 			console.error("Error swiping left chat message:", error)
@@ -878,12 +1062,15 @@ export const chatMessagesSwipeLeftHandler: Handler<Sockets.ChatMessages.SwipeLef
 	}
 }
 
-export const chatMessagesSwipeRightHandler: Handler<Sockets.ChatMessages.SwipeRight.Params, Sockets.ChatMessages.SwipeRight.Response> = {
+export const chatMessagesSwipeRightHandler: Handler<
+	Sockets.ChatMessages.SwipeRight.Params,
+	Sockets.ChatMessages.SwipeRight.Response
+> = {
 	event: "chatMessages:swipeRight",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Get the message first to check chat access
 			const message = await db.query.chatMessages.findFirst({
 				where: (cm, { eq }) => eq(cm.id, params.id)
@@ -897,7 +1084,6 @@ export const chatMessagesSwipeRightHandler: Handler<Sockets.ChatMessages.SwipeRi
 				emitToUser("chatMessages:swipeRight", res)
 				return res
 			}
-
 			// Check if user owns the chat (only chat owners can swipe)
 			const chatAccess = await checkChatAccess(message.chatId, userId)
 			if (!chatAccess.hasAccess || !chatAccess.isOwner) {
@@ -909,32 +1095,94 @@ export const chatMessagesSwipeRightHandler: Handler<Sockets.ChatMessages.SwipeRi
 				return res
 			}
 
-			// Handle swipe right logic (move to next swipe)
-			const metadata = message.metadata as any
-			if (metadata?.swipes && metadata.swipes.currentIdx < metadata.swipes.history.length - 1) {
-				metadata.swipes.currentIdx += 1
-				const newContent = metadata.swipes.history[metadata.swipes.currentIdx]
-				
-				const [updated] = await db
-					.update(schema.chatMessages)
-					.set({ 
-						content: newContent,
-						metadata: metadata
-					})
-					.where(eq(schema.chatMessages.id, params.id))
-					.returning()
+			let isOnLastSwipe = false
 
+			// Check if metadata.swipes, if not, initialize it
+			const data: SelectChatMessage = {
+				...message,
+				metadata: {
+					...message.metadata,
+					swipes: {
+						currentIdx: null,
+						history: [],
+						...(message.metadata?.swipes || {})
+					}
+				}
+			}
+
+			// Check if we are on the last swipe (or if there are no swipes)
+			if (
+				!data.metadata!.swipes!.history.length ||
+				data.metadata!.swipes!.currentIdx === null
+			) {
+				isOnLastSwipe = true
+			} else {
+				isOnLastSwipe =
+					data.metadata!.swipes!.currentIdx ===
+					data.metadata!.swipes!.history.length - 1
+			}
+
+			if (!isOnLastSwipe) {
+				// If not on the last swipe, just update the current index and content
+				data.metadata!.swipes!.currentIdx =
+					(data.metadata!.swipes!.currentIdx || 0) + 1
+				data.content =
+					data.metadata!.swipes!.history[
+						data.metadata!.swipes!.currentIdx
+					] || ""
+			} else {
+				if (data.metadata!.swipes!.currentIdx === null) {
+					data.metadata!.swipes!.currentIdx = 0
+					data.metadata!.swipes!.history.push(data.content)
+				}
+				// Now increment the current index and content
+				data.metadata!.swipes!.currentIdx += 1
+				data.content = "" // Clear the message content
+				data.isGenerating = true // Set generating state to true
+				// Push the new empty content to history
+				data.metadata!.swipes!.history.push("") // Add an empty string to history
+			}
+
+			delete data.id
+
+			// Update the chat message in the database
+			const [updated] = await db
+				.update(schema.chatMessages)
+				.set({ ...data })
+				.where(eq(schema.chatMessages.id, message.id))
+				.returning()
+
+			if (!updated) {
 				const res: Sockets.ChatMessages.SwipeRight.Response = {
-					chatMessage: updated as any
+					chatMessage: undefined,
+					error: "Failed to update chat message."
 				}
 				emitToUser("chatMessages:swipeRight", res)
 				return res
 			}
 
 			const res: Sockets.ChatMessages.SwipeRight.Response = {
-				chatMessage: message as any
+				chatMessage: updated as any
 			}
 			emitToUser("chatMessages:swipeRight", res)
+
+			if (!updated.isGenerating) {
+				// If the message is not generating, emit the updated chatMessage
+				await chatMessage(socket, { chatMessage: updated }, emitToUser)
+				return res
+			}
+
+			// If the message is generating, we need to start generating a response
+			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+
+			await generateResponse({
+				socket,
+				emitToUser,
+				chatId: message.chatId,
+				userId,
+				generatingMessage: updated as any
+			})
+
 			return res
 		} catch (error: any) {
 			console.error("Error swiping right chat message:", error)
@@ -948,7 +1196,10 @@ export const chatMessagesSwipeRightHandler: Handler<Sockets.ChatMessages.SwipeRi
 	}
 }
 
-export const chatsGetResponseOrderHandler: Handler<Sockets.Chats.GetResponseOrder.Params, Sockets.Chats.GetResponseOrder.Response> = {
+export const chatsGetResponseOrderHandler: Handler<
+	Sockets.Chats.GetResponseOrder.Params,
+	Sockets.Chats.GetResponseOrder.Response
+> = {
 	event: "chats:getResponseOrder",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -957,6 +1208,7 @@ export const chatsGetResponseOrderHandler: Handler<Sockets.Chats.GetResponseOrde
 
 			if (!chat) {
 				const res: Sockets.Chats.GetResponseOrder.Response = {
+					chatId: params.chatId,
 					characterId: null
 				}
 				emitToUser("chats:getResponseOrder", res)
@@ -969,7 +1221,9 @@ export const chatsGetResponseOrderHandler: Handler<Sockets.Chats.GetResponseOrde
 					chatMessages: chat.chatMessages,
 					chatCharacters: chat.chatCharacters
 						.filter((cc) => cc.character !== null && cc.isActive)
-						.sort((a, b) => (a.position ?? 0) - (b.position ?? 0)) as any,
+						.sort(
+							(a, b) => (a.position ?? 0) - (b.position ?? 0)
+						) as any,
 					chatPersonas: chat.chatPersonas.filter(
 						(cp) => cp.persona !== null
 					) as any
@@ -993,26 +1247,30 @@ export const chatsGetResponseOrderHandler: Handler<Sockets.Chats.GetResponseOrde
 	}
 }
 
-export const chatMessagesCancelHandler: Handler<Sockets.ChatMessages.Cancel.Params, Sockets.ChatMessages.Cancel.Response> = {
+export const chatMessagesCancelHandler: Handler<
+	Sockets.ChatMessages.Cancel.Params,
+	Sockets.ChatMessages.Cancel.Response
+> = {
 	event: "chatMessages:cancel",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = 1
-			
+
 			// Find messages being generated for this chat
 			const generatingMessages = await db.query.chatMessages.findMany({
-				where: (cm, { and, eq }) => and(
-					eq(cm.chatId, params.chatId),
-					eq(cm.isGenerating, true),
-					eq(cm.userId, userId)
-				)
+				where: (cm, { and, eq }) =>
+					and(
+						eq(cm.chatId, params.chatId),
+						eq(cm.isGenerating, true),
+						eq(cm.userId, userId)
+					)
 			})
 
 			// Stop generation for all messages in this chat
 			for (const message of generatingMessages) {
 				await db
 					.update(schema.chatMessages)
-					.set({ 
+					.set({
 						isGenerating: false,
 						adapterId: null
 					})
@@ -1036,6 +1294,16 @@ export const chatMessagesCancelHandler: Handler<Sockets.ChatMessages.Cancel.Para
 				success: `Cancelled ${generatingMessages.length} generating messages`
 			}
 			emitToUser("chatMessages:cancel", res)
+
+			// Emit chats:get to refresh all messages after cancellation
+			if (generatingMessages.length > 0) {
+				await chatsGetHandler.handler(
+					socket,
+					{ id: params.chatId },
+					emitToUser
+				)
+			}
+
 			return res
 		} catch (error: any) {
 			console.error("Error cancelling chat messages:", error)
@@ -1048,13 +1316,10 @@ export const chatMessagesCancelHandler: Handler<Sockets.ChatMessages.Cancel.Para
 	}
 }
 
-
-
-
-
-
-
-export const chatMessageHandler: Handler<Sockets.ChatMessage.Call, Sockets.ChatMessage.Response> = {
+export const chatMessageHandler: Handler<
+	Sockets.ChatMessage.Call,
+	Sockets.ChatMessage.Response
+> = {
 	event: "chatMessage",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -1126,12 +1391,6 @@ export async function chatMessage(
 		emitToUser("error", { error: "Must provide either id or chatMessage." })
 	}
 }
-
-
-
-
-
-
 
 // Builds the chatMessage history for the first chat message of a character, with history swipes for the user to choose from
 function buildCharacterFirstChatMessage({
@@ -1223,12 +1482,6 @@ function buildCharacterFirstChatMessage({
 	return history
 }
 
-
-
-
-
-
-
 // =============================================
 // TYPE-SAFE CHAT HANDLERS
 // =============================================
@@ -1244,14 +1497,14 @@ export const promptTokenCountHandler: Handler<
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
-			
+
 			// Only admin users can get prompt token count
 			if (!socket.user!.isAdmin) {
 				return {
 					error: "Access denied. Only admin users can get prompt token count."
 				}
 			}
-			
+
 			// Check if user has access to this chat
 			const chatAccess = await checkChatAccess(params.chatId, userId)
 			if (!chatAccess.hasAccess) {
@@ -1259,35 +1512,40 @@ export const promptTokenCountHandler: Handler<
 					error: "Access denied. Chat not found or no permission to access."
 				}
 			}
-			
+
 			const chat = await getPromptChatFromDb(params.chatId, userId)
 			if (!chat) {
 				return {
 					error: "Error Generating Prompt Token Count: Chat not found."
 				}
 			}
-			
+
 			const user = await db.query.users.findFirst({
 				where: (u, { eq }) => eq(u.id, userId)
 			})
 
 			// Get user configurations with fallbacks
-			const { connection, sampling, contextConfig, promptConfig } = await getUserConfigurations(userId)
-			
+			const { connection, sampling, contextConfig, promptConfig } =
+				await getUserConfigurations(userId)
+
 			if (!chat || !user) {
 				return {
 					error: "Incomplete configuration, failed to calculate token count."
 				}
 			}
-			
-			let chatForPrompt = { ...chat, chatMessages: [...chat.chatMessages] }
-			
+
+			let chatForPrompt = {
+				...chat,
+				chatMessages: [...chat.chatMessages]
+			}
+
 			const currentCharacterId = getNextCharacterTurn(
 				{
 					chatMessages: chat.chatMessages,
 					chatCharacters: chat.chatCharacters
 						.filter(
-							(cc: any) => cc && cc.character != null && cc.isActive
+							(cc: any) =>
+								cc && cc.character != null && cc.isActive
 						)
 						.sort(
 							(a, b) => (a.position ?? 0) - (b.position ?? 0)
@@ -1321,15 +1579,15 @@ export const promptTokenCountHandler: Handler<
 				tokenLimit,
 				contextThresholdPercent
 			})
-			
+
 			const promptResult = await adapter.compilePrompt({})
-			
+
 			// Map CompiledPrompt to expected Ack format
 			// Note: adapter.compilePrompt returns the app.d.ts CompiledPrompt format
 			return {
 				prompt: JSON.stringify(promptResult.prompt),
 				tokenCount: undefined, // Not available in adapter CompiledPrompt format
-				characterLimit: undefined, // Not available in adapter CompiledPrompt format  
+				characterLimit: undefined, // Not available in adapter CompiledPrompt format
 				tokenLimit: undefined, // Not available in adapter CompiledPrompt format
 				percentFull: undefined // Not available in adapter CompiledPrompt format
 			}
@@ -1352,7 +1610,7 @@ export const triggerGenerateMessageHandler: Handler<
 	event: "chats:triggerGenerateMessage",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const userId = 1
+			const userId = socket.user!.id
 			const msgLimit = 10
 			let currentMsg = 1
 			let triggered = true
@@ -1371,7 +1629,9 @@ export const triggerGenerateMessageHandler: Handler<
 					(msg) => msg.isGenerating
 				)
 				if (hasGeneratingMessages) {
-					console.log("Generation already in progress, stopping trigger loop")
+					console.log(
+						"Generation already in progress, stopping trigger loop"
+					)
 					break
 				}
 
@@ -1382,9 +1642,12 @@ export const triggerGenerateMessageHandler: Handler<
 						{
 							chatMessages: chat.chatMessages,
 							chatCharacters: chat.chatCharacters
-								.filter((cc) => cc.character !== null && cc.isActive)
+								.filter(
+									(cc) => cc.character !== null && cc.isActive
+								)
 								.sort(
-									(a, b) => (a.position ?? 0) - (b.position ?? 0)
+									(a, b) =>
+										(a.position ?? 0) - (b.position ?? 0)
 								) as any,
 							chatPersonas: chat.chatPersonas.filter(
 								(cp) => cp.persona !== null
@@ -1396,13 +1659,14 @@ export const triggerGenerateMessageHandler: Handler<
 				if (!nextCharacterId) {
 					break
 				}
-				
+
 				if (chat && chat.chatCharacters.length > 0 && nextCharacterId) {
 					const nextCharacter = chat.chatCharacters.find(
-						(cc) => cc.character && cc.character.id === nextCharacterId
+						(cc) =>
+							cc.character && cc.character.id === nextCharacterId
 					)
 					if (!nextCharacter || !nextCharacter.character) break
-					
+
 					const assistantMessage: InsertChatMessage = {
 						userId,
 						chatId: params.chatId,
@@ -1412,20 +1676,21 @@ export const triggerGenerateMessageHandler: Handler<
 						role: "assistant",
 						isGenerating: true
 					}
-					
+
 					const [generatingMessage] = await db
 						.insert(schema.chatMessages)
 						.values(assistantMessage)
 						.returning()
-						
+
 					if (emitToUser) {
 						await chatMessage(
 							socket,
 							{ chatMessage: generatingMessage },
 							emitToUser
 						)
+						// chatMessage was already emitted above, no need for duplicate emission
 					}
-					
+
 					ok = await generateResponse({
 						socket,
 						emitToUser,
@@ -1436,13 +1701,20 @@ export const triggerGenerateMessageHandler: Handler<
 
 					// If generation was aborted, stop the loop
 					if (!ok) {
-						console.log("Generation was aborted, stopping trigger loop")
+						console.log(
+							"Generation was aborted, stopping trigger loop"
+						)
 						break
 					}
 				}
 				currentMsg++
+
+				// If once is true, exit after the first message
+				if (params.once) {
+					break
+				}
 			}
-			
+
 			return { success: true }
 		} catch (error) {
 			console.error("Error in triggerGenerateMessageHandler:", error)
@@ -1465,11 +1737,11 @@ export const toggleChatCharacterActiveHandler: Handler<
 		try {
 			const userId = 1
 			if (!userId) {
-				return { 
+				return {
 					chatId: params.chatId,
 					characterId: params.characterId,
 					isActive: false,
-					error: "User not authenticated" 
+					error: "User not authenticated"
 				}
 			}
 
@@ -1478,11 +1750,12 @@ export const toggleChatCharacterActiveHandler: Handler<
 					and(eq(c.id, params.chatId), eq(c.userId, userId)),
 				with: {
 					chatCharacters: {
-						where: (cc, { eq }) => eq(cc.characterId, params.characterId)
+						where: (cc, { eq }) =>
+							eq(cc.characterId, params.characterId)
 					}
 				}
 			})
-			
+
 			if (!chat) {
 				return {
 					chatId: params.chatId,
@@ -1509,7 +1782,10 @@ export const toggleChatCharacterActiveHandler: Handler<
 				.set({ isActive: newActiveStatus })
 				.where(
 					and(
-						eq(schema.chatCharacters.characterId, params.characterId),
+						eq(
+							schema.chatCharacters.characterId,
+							params.characterId
+						),
 						eq(schema.chatCharacters.chatId, params.chatId)
 					)
 				)
@@ -1548,11 +1824,11 @@ export const updateChatCharacterVisibilityHandler: Handler<
 		try {
 			const userId = 1
 			if (!userId) {
-				return { 
+				return {
 					chatId: params.chatId,
 					characterId: params.characterId,
 					visibility: params.visibility,
-					error: "User not authenticated" 
+					error: "User not authenticated"
 				}
 			}
 
@@ -1561,11 +1837,12 @@ export const updateChatCharacterVisibilityHandler: Handler<
 					and(eq(c.id, params.chatId), eq(c.userId, userId)),
 				with: {
 					chatCharacters: {
-						where: (cc, { eq }) => eq(cc.characterId, params.characterId)
+						where: (cc, { eq }) =>
+							eq(cc.characterId, params.characterId)
 					}
 				}
 			})
-			
+
 			if (!chat) {
 				return {
 					chatId: params.chatId,
@@ -1590,7 +1867,10 @@ export const updateChatCharacterVisibilityHandler: Handler<
 				.set({ visibility: params.visibility })
 				.where(
 					and(
-						eq(schema.chatCharacters.characterId, params.characterId),
+						eq(
+							schema.chatCharacters.characterId,
+							params.characterId
+						),
 						eq(schema.chatCharacters.chatId, params.chatId)
 					)
 				)
@@ -1606,7 +1886,10 @@ export const updateChatCharacterVisibilityHandler: Handler<
 				visibility: params.visibility
 			}
 		} catch (error) {
-			console.error("Error in updateChatCharacterVisibilityHandler:", error)
+			console.error(
+				"Error in updateChatCharacterVisibilityHandler:",
+				error
+			)
 			return {
 				chatId: params.chatId,
 				characterId: params.characterId,
@@ -1621,7 +1904,11 @@ export const updateChatCharacterVisibilityHandler: Handler<
 export function registerChatHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, chatsListHandler, emitToUser)
 	register(socket, chatsCreateHandler, emitToUser)
@@ -1636,7 +1923,6 @@ export function registerChatHandlers(
 	register(socket, chatMessagesSwipeRightHandler, emitToUser)
 	register(socket, chatsGetResponseOrderHandler, emitToUser)
 	register(socket, chatMessagesCancelHandler, emitToUser)
-	register(socket, updateChatHandler, emitToUser)
 	register(socket, chatMessageHandler, emitToUser)
 	register(socket, promptTokenCountHandler, emitToUser)
 	register(socket, triggerGenerateMessageHandler, emitToUser)

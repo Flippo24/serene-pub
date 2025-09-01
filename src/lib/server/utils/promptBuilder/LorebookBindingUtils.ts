@@ -12,7 +12,7 @@ export function populateLorebookEntryBindings(
 			? chat.lorebook
 			: undefined
 	if (!lorebook) return entry
-	
+
 	// Handle {{char:#}} syntax by replacing with actual character names
 	lorebook.lorebookBindings.forEach((binding) => {
 		if (binding.character) {
@@ -22,7 +22,10 @@ export function populateLorebookEntryBindings(
 			if (bindingMatch) {
 				const bindingNumber = bindingMatch[1]
 				// Replace {{char:#}} syntax
-				entry.content = entry.content.replaceAll(`{{char:${bindingNumber}}}`, name)
+				entry.content = entry.content.replaceAll(
+					`{{char:${bindingNumber}}}`,
+					name
+				)
 			}
 		} else if (binding.persona) {
 			const name = binding.persona.name
@@ -31,11 +34,14 @@ export function populateLorebookEntryBindings(
 			if (bindingMatch) {
 				const bindingNumber = bindingMatch[1]
 				// Replace {{char:#}} syntax
-				entry.content = entry.content.replaceAll(`{{char:${bindingNumber}}}`, name)
+				entry.content = entry.content.replaceAll(
+					`{{char:${bindingNumber}}}`,
+					name
+				)
 			}
 		}
 	})
-	
+
 	// Then handle direct binding replacements (legacy approach)
 	lorebook.lorebookBindings.forEach((binding) => {
 		if (binding.character) {

@@ -5,7 +5,9 @@
 
 	interface Props {
 		persona: Sockets.Personas.List.Response["personaList"][0]
-		onclick?: (persona: Sockets.Personas.List.Response["personaList"][0]) => void
+		onclick?: (
+			persona: Sockets.Personas.List.Response["personaList"][0]
+		) => void
 		onEdit?: (id: number) => void
 		onDelete?: (id: number) => void
 		showControls?: boolean
@@ -60,7 +62,9 @@
 					{persona.name}
 				</div>
 				{#if persona.description}
-					<div class="text-muted-foreground line-clamp-2 text-left text-xs">
+					<div
+						class="text-muted-foreground line-clamp-2 text-left text-xs"
+					>
 						{persona.description}
 					</div>
 				{/if}

@@ -22,12 +22,10 @@
 	let selectedPromptId: number | undefined = $state(
 		userSettingsCtx.settings?.activePromptConfigId || undefined
 	)
-	let promptConfig: Sockets.PromptConfigs.Get.Response["promptConfig"] = $state(
-		{} as Sockets.PromptConfigs.Get.Response["promptConfig"]
-	)
-	let originalData: Sockets.PromptConfigs.Get.Response["promptConfig"] = $state(
-		{} as Sockets.PromptConfigs.Get.Response["promptConfig"]
-	)
+	let promptConfig: Sockets.PromptConfigs.Get.Response["promptConfig"] =
+		$state({} as Sockets.PromptConfigs.Get.Response["promptConfig"])
+	let originalData: Sockets.PromptConfigs.Get.Response["promptConfig"] =
+		$state({} as Sockets.PromptConfigs.Get.Response["promptConfig"])
 	let unsavedChanges = $derived(
 		JSON.stringify(promptConfig) !== JSON.stringify(originalData)
 	)
@@ -151,15 +149,19 @@
 				promptsList = msg.promptConfigsList
 				if (!selectedPromptId && promptsList.length > 0) {
 					selectedPromptId =
-						userSettingsCtx.settings?.activePromptConfigId ?? promptsList[0].id
+						userSettingsCtx.settings?.activePromptConfigId ??
+						promptsList[0].id
 				}
 			}
 		)
 
-		socket.on("promptConfigs:get", (msg: Sockets.PromptConfigs.Get.Response) => {
-			promptConfig = { ...msg.promptConfig }
-			originalData = { ...msg.promptConfig }
-		})
+		socket.on(
+			"promptConfigs:get",
+			(msg: Sockets.PromptConfigs.Get.Response) => {
+				promptConfig = { ...msg.promptConfig }
+				originalData = { ...msg.promptConfig }
+			}
+		)
 
 		socket.on(
 			"promptConfigs:create",

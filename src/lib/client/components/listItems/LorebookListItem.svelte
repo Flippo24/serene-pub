@@ -73,37 +73,25 @@
 	{#snippet extraContent()}
 		<div class="flex gap-2 text-xs">
 			{#if bindingsCount > 0}
-				<div
-					class="flex items-center gap-1"
-					title="Bindings"
-				>
+				<div class="flex items-center gap-1" title="Bindings">
 					<Icons.Link size={12} />
 					{bindingsCount}
 				</div>
 			{/if}
 			{#if worldEntriesCount > 0}
-				<div
-					class="flex items-center gap-1"
-					title="World entries"
-				>
+				<div class="flex items-center gap-1" title="World entries">
 					<Icons.Globe size={12} />
 					{worldEntriesCount}
 				</div>
 			{/if}
 			{#if characterEntriesCount > 0}
-				<div
-					class="flex items-center gap-1"
-					title="Character entries"
-				>
+				<div class="flex items-center gap-1" title="Character entries">
 					<Icons.User size={12} />
 					{characterEntriesCount}
 				</div>
 			{/if}
 			{#if historyEntriesCount > 0}
-				<div
-					class="flex items-center gap-1"
-					title="History entries"
-				>
+				<div class="flex items-center gap-1" title="History entries">
 					<Icons.Clock size={12} />
 					{historyEntriesCount}
 				</div>

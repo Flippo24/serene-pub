@@ -1,41 +1,55 @@
-import { tokens } from '$lib/server/auth'
-import { authenticate } from '$lib/server/providers/users/authenticate'
+import { tokens } from "$lib/server/auth"
+import { authenticate } from "$lib/server/providers/users/authenticate"
 
-export async function GET({ cookies, request }: { cookies: any, request: Request }) {
+export async function GET({
+	cookies,
+	request
+}: {
+	cookies: any
+	request: Request
+}) {
 	try {
 		// Get the userToken cookie
-		const userToken = cookies.get('userToken')
-		
+		const userToken = cookies.get("userToken")
+
 		if (!userToken) {
 			return new Response(JSON.stringify({ token: null }), {
 				status: 200,
 				headers: {
-					'Content-Type': 'application/json'
+					"Content-Type": "application/json"
 				}
 			})
 		}
 
 		// Decrypt the token to get the token ID
 		const payload = await tokens.decryptLocalToken({ token: userToken })
-		
+
 		if (!payload.id) {
 			return new Response(JSON.stringify({ token: null }), {
 				status: 200,
 				headers: {
-					'Content-Type': 'application/json'
+					"Content-Type": "application/json"
 				}
 			})
 		}
 
 		// Get user agent for validation
-		const userAgentString = request.headers.get('user-agent') || ''
-		const browser = userAgentString.includes('Chrome') ? 'Chrome' : 
-						userAgentString.includes('Firefox') ? 'Firefox' :
-						userAgentString.includes('Safari') ? 'Safari' : 'Unknown'
-		
-		const os = userAgentString.includes('Windows') ? 'Windows' :
-				   userAgentString.includes('Macintosh') ? 'macOS' :
-				   userAgentString.includes('Linux') ? 'Linux' : 'Unknown'
+		const userAgentString = request.headers.get("user-agent") || ""
+		const browser = userAgentString.includes("Chrome")
+			? "Chrome"
+			: userAgentString.includes("Firefox")
+				? "Firefox"
+				: userAgentString.includes("Safari")
+					? "Safari"
+					: "Unknown"
+
+		const os = userAgentString.includes("Windows")
+			? "Windows"
+			: userAgentString.includes("Macintosh")
+				? "macOS"
+				: userAgentString.includes("Linux")
+					? "Linux"
+					: "Unknown"
 
 		const userAgent = {
 			browser: { name: browser },
@@ -54,7 +68,7 @@ export async function GET({ cookies, request }: { cookies: any, request: Request
 			return new Response(JSON.stringify({ token: null }), {
 				status: 200,
 				headers: {
-					'Content-Type': 'application/json'
+					"Content-Type": "application/json"
 				}
 			})
 		}
@@ -63,16 +77,15 @@ export async function GET({ cookies, request }: { cookies: any, request: Request
 		return new Response(JSON.stringify({ token: userToken }), {
 			status: 200,
 			headers: {
-				'Content-Type': 'application/json'
+				"Content-Type": "application/json"
 			}
 		})
-
 	} catch (error) {
-		console.error('Socket token endpoint error:', error)
+		console.error("Socket token endpoint error:", error)
 		return new Response(JSON.stringify({ token: null }), {
 			status: 200,
 			headers: {
-				'Content-Type': 'application/json'
+				"Content-Type": "application/json"
 			}
 		})
 	}

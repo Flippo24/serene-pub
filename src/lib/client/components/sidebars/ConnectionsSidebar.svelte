@@ -249,17 +249,10 @@
 	// Screen reader announcements
 	let announcements = $state("")
 
-	// Computed property for binding to the active connection ID
-	let activeConnectionId = $derived.by({
-		get() {
-			return userSettingsCtx.settings?.activeConnectionId || null
-		},
-		set(value: number | null) {
-			if (userSettingsCtx.settings) {
-				userSettingsCtx.settings.activeConnectionId = value
-			}
-		}
-	})
+	// Computed property for getting the active connection ID
+	let activeConnectionId = $derived(
+		userSettingsCtx.settings?.activeConnectionId || null
+	)
 
 	function announce(message: string) {
 		announcements = message
@@ -385,18 +378,17 @@
 	}
 	function handleRefreshModels() {
 		refreshModelsResult = null
-		socket.emit("connections:refreshModels", { baseUrl: connection?.baseUrl })
+		socket.emit("connections:refreshModels", {
+			baseUrl: connection?.baseUrl
+		})
 	}
 
 	onMount(() => {
-		socket.on(
-			"connections:list",
-			(msg) => {
-				connectionsList = msg.connectionsList
-					.slice()
-					.sort((a, b) => a.name!.localeCompare(b.name!))
-			}
-		)
+		socket.on("connections:list", (msg) => {
+			connectionsList = msg.connectionsList
+				.slice()
+				.sort((a, b) => a.name!.localeCompare(b.name!))
+		})
 		socket.on("connections:get", (msg) => {
 			connection = { ...msg.connection }
 			originalConnection = { ...msg.connection }
@@ -407,39 +399,42 @@
 		socket.on("connections:refreshModels", (msg) => {
 			refreshModelsResult = msg.models || []
 		})
-		socket.on(
-			"connections:update",
-			(msg) => {
-				toaster.success({ title: "Connection Updated" })
-				announce(
-					`Connection ${connection?.name} has been updated successfully`
+		socket.on("connections:update", (msg) => {
+			toaster.success({ title: "Connection Updated" })
+			announce(
+				`Connection ${connection?.name} has been updated successfully`
+			)
+		})
+		socket.on("connections:delete", (msg) => {
+			const deletedName = connection?.name
+			toaster.success({ title: "Connection Deleted" })
+			announce(`Connection ${deletedName} has been permanently deleted`)
+			connection = undefined
+			originalConnection = undefined
+		})
+		socket.on("connections:create", (msg) => {
+			toaster.success({ title: "Connection Created" })
+			announce(
+				`New connection ${msg.connection?.name} has been created successfully`
+			)
+		})
+		socket.on("connections:setUserActive", (msg) => {
+			if (msg.id) {
+				const selectedConnection = connectionsList.find(
+					(c) => c.id === msg.id
 				)
+				if (selectedConnection) {
+					announce(
+						`Switched to connection: ${selectedConnection.name}`
+					)
+				}
 			}
-		)
-		socket.on(
-			"connections:delete",
-			(msg) => {
-				const deletedName = connection?.name
-				toaster.success({ title: "Connection Deleted" })
-				announce(
-					`Connection ${deletedName} has been permanently deleted`
-				)
-				connection = undefined
-				originalConnection = undefined
-			}
-		)
-		socket.on(
-			"connections:create",
-			(msg) => {
-				toaster.success({ title: "Connection Created" })
-				announce(
-					`New connection ${msg.connection?.name} has been created successfully`
-				)
-			}
-		)
+		})
 		socket.emit("connections:list", {})
 		if (userSettingsCtx.settings?.activeConnectionId) {
-			socket.emit("connections:get", { id: userSettingsCtx.settings.activeConnectionId })
+			socket.emit("connections:get", {
+				id: userSettingsCtx.settings.activeConnectionId
+			})
 		}
 		onclose = handleOnClose
 
@@ -451,11 +446,12 @@
 	onDestroy(() => {
 		socket.off("connections:list")
 		socket.off("connections:get")
-		socket.off("testConnection")
-		socket.off("refreshModels")
-		socket.off("updateConnection")
-		socket.off("deleteConnection")
-		socket.off("createConnection")
+		socket.off("connections:test")
+		socket.off("connections:refreshModels")
+		socket.off("connections:update")
+		socket.off("connections:delete")
+		socket.off("connections:create")
+		socket.off("connections:setUserActive")
 		onclose = undefined
 	})
 </script>
@@ -470,7 +466,7 @@
 	<div aria-live="polite" aria-atomic="true" class="sr-only">
 		{announcements}
 	</div>
-	<header class="mb-4">
+	<div class="mb-2">
 		<h2 class="sr-only">Connection Management</h2>
 		<div
 			class="mt-2 mb-2 flex justify-between gap-2 sm:mt-0"
@@ -523,7 +519,7 @@
 				</button>
 			</div>
 		</div>
-	</header>
+	</div>
 	<div
 		class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center"
 		class:hidden={!connectionsList.length}
@@ -535,7 +531,7 @@
 			id="connection-select"
 			class="select bg-background border-muted rounded border"
 			onchange={handleSelectChange}
-			bind:value={activeConnectionId}
+			value={activeConnectionId}
 			disabled={unsavedChanges}
 			aria-label="Select active AI connection"
 			aria-describedby="connection-help"

@@ -12,7 +12,12 @@
 	// Determine if this is a character or persona
 	// Characters have specific fields that personas don't have like 'personality', 'scenario', 'firstMessage'
 	// Personas have 'isDefault' field that characters don't have
-	let isCharacter = $derived(char && ('personality' in char || 'scenario' in char || 'firstMessage' in char))
+	let isCharacter = $derived(
+		char &&
+			("personality" in char ||
+				"scenario" in char ||
+				"firstMessage" in char)
+	)
 </script>
 
 <Avatar

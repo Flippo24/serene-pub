@@ -152,7 +152,7 @@
 			const req: Sockets.CreateCharacterLoreEntry.Call = {
 				characterLoreEntry: { ...entry, lorebookId, _uuid: undefined }
 			}
-			socket.emit("lorebooks:createCharacterLoreEntry", req)
+			socket.emit("characterLoreEntries:create", req)
 			newEntriesData = newEntriesData.filter(
 				(e) => e._uuid !== entry._uuid
 			)
@@ -161,7 +161,7 @@
 			const req: Sockets.UpdateCharacterLoreEntry.Call = {
 				characterLoreEntry: { ...entry, lorebookId }
 			}
-			socket.emit("lorebooks:updateCharacterLoreEntry", req)
+			socket.emit("characterLoreEntries:update", req)
 			delete editEntriesData[entry.id]
 		}
 		// tick().then(() => {
@@ -253,7 +253,7 @@
 			lorebookId,
 			positions: positionMap
 		}
-		socket.emit("lorebooks:updateCharacterLoreEntryPositions", req)
+		socket.emit("characterLoreEntries:updatePositions", req)
 	}
 
 	function getBindingLabel(bindingId: number): string {
@@ -278,7 +278,7 @@
 
 	function onDeleteConfirm() {
 		showDeleteConfirmModal = false
-		socket.emit("lorebooks:deleteCharacterLoreEntry", {
+		socket.emit("characterLoreEntries:delete", {
 			id: deleteEntryId,
 			lorebookId
 		})
@@ -292,7 +292,7 @@
 
 	onMount(() => {
 		socket.on(
-			"lorebooks:characterLoreEntryList",
+			"characterLoreEntries:list",
 			async (msg: Sockets.CharacterLoreEntryList.Response) => {
 				if (
 					msg.characterLoreEntryList.length &&
@@ -305,7 +305,7 @@
 		)
 
 		socket.on(
-			"lorebooks:createCharacterLoreEntry",
+			"characterLoreEntries:create",
 			(msg: Sockets.CreateCharacterLoreEntry.Response) => {
 				if (
 					msg.characterLoreEntry &&
@@ -317,7 +317,7 @@
 		)
 
 		socket.on(
-			"lorebooks:updateCharacterLoreEntry",
+			"characterLoreEntries:update",
 			(msg: Sockets.UpdateCharacterLoreEntry.Response) => {
 				if (
 					msg.characterLoreEntry &&
@@ -328,7 +328,7 @@
 			}
 		)
 		socket.on(
-			"lorebooks:deleteCharacterLoreEntry",
+			"characterLoreEntries:delete",
 			(msg: Sockets.DeleteCharacterLoreEntry.Response) => {
 				if (
 					msg.id &&
@@ -351,7 +351,7 @@
 			}
 		)
 		socket.on(
-			"lorebooks:updateCharacterLoreEntryPositions",
+			"characterLoreEntries:updatePositions",
 			(msg: Sockets.UpdateCharacterLoreEntryPositions.Response) => {
 				if (msg.lorebookId === lorebookId) {
 					toaster.success({ title: "Entries reordered" })
@@ -361,7 +361,7 @@
 		const req: Sockets.CharacterLoreEntryList.Call = {
 			lorebookId: lorebookId
 		}
-		socket.emit("lorebooks:characterLoreEntryList", req)
+		socket.emit("characterLoreEntries:list", req)
 		const bindingReq: Sockets.LorebookBindingList.Call = {
 			lorebookId: lorebookId
 		}
@@ -371,12 +371,12 @@
 
 	onDestroy(() => {
 		hasUnsavedChanges = false
-		socket.off("lorebooks:characterLoreEntryList")
-		socket.off("lorebooks:createCharacterLoreEntry")
-		socket.off("lorebooks:updateCharacterLoreEntry")
-		socket.off("lorebooks:deleteCharacterLoreEntry")
+		socket.off("characterLoreEntries:list")
+		socket.off("characterLoreEntries:create")
+		socket.off("characterLoreEntries:update")
+		socket.off("characterLoreEntries:delete")
 		socket.off("lorebooks:bindingList")
-		socket.off("lorebooks:updateCharacterLoreEntryPositions")
+		socket.off("characterLoreEntries:updatePositions")
 	})
 </script>
 
@@ -547,7 +547,9 @@
 								</summary>
 								<div class="mt-2 flex flex-col gap-2">
 									<div class="flex w-full justify-between">
-										<label for="useRegex-{entry.id}">Use Regex</label>
+										<label for="useRegex-{entry.id}">
+											Use Regex
+										</label>
 										<Switch
 											name="useRegex-{entry.id}"
 											checked={entry.useRegex || false}
@@ -557,7 +559,9 @@
 										/>
 									</div>
 									<div class="flex w-full justify-between">
-										<label for="caseSensitive-{entry.id}">Case Sensitive</label>
+										<label for="caseSensitive-{entry.id}">
+											Case Sensitive
+										</label>
 										<Switch
 											name="caseSensitive-{entry.id}"
 											checked={entry.caseSensitive}
@@ -568,7 +572,9 @@
 										/>
 									</div>
 									<div class="flex w-full justify-between">
-										<label for="constant-{entry.id}">Pinned</label>
+										<label for="constant-{entry.id}">
+											Pinned
+										</label>
 										<Switch
 											name="constant-{entry.id}"
 											checked={entry.constant}
@@ -578,7 +584,9 @@
 										/>
 									</div>
 									<div class="flex w-full justify-between">
-										<label for="enabled-{entry.id}">Enabled</label>
+										<label for="enabled-{entry.id}">
+											Enabled
+										</label>
 										<Switch
 											name="enabled-{entry.id}"
 											checked={entry.enabled}

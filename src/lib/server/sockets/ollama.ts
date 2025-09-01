@@ -28,7 +28,10 @@ function emitDownloadProgress(emitToAll: (event: string, data: any) => void) {
 	emitToAll("ollamaDownloadProgress", { downloadingQuants })
 }
 
-export const ollamaGetDownloadProgress: Handler<Sockets.Ollama.GetDownloadProgress.Params, Sockets.Ollama.GetDownloadProgress.Response> = {
+export const ollamaGetDownloadProgress: Handler<
+	Sockets.Ollama.GetDownloadProgress.Params,
+	Sockets.Ollama.GetDownloadProgress.Response
+> = {
 	event: "ollama:getDownloadProgress",
 	handler: async (socket, params, emitToUser) => {
 		// Send current download progress as complete state
@@ -40,15 +43,22 @@ export const ollamaGetDownloadProgress: Handler<Sockets.Ollama.GetDownloadProgre
 	}
 }
 
-export const ollamaSetBaseUrl: Handler<Sockets.Ollama.SetBaseUrl.Params, Sockets.Ollama.SetBaseUrl.Response> = {
+export const ollamaSetBaseUrl: Handler<
+	Sockets.Ollama.SetBaseUrl.Params,
+	Sockets.Ollama.SetBaseUrl.Response
+> = {
 	event: "ollama:setBaseUrl",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage Ollama settings." }
+			const res = {
+				error: "Access denied. Only admin users can manage Ollama settings."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage Ollama settings.")
+			throw new Error(
+				"Access denied. Only admin users can manage Ollama settings."
+			)
 		}
-		
+
 		try {
 			// This would typically update the active Ollama connection's baseUrl
 			// For now, we'll just validate the URL format
@@ -79,15 +89,22 @@ export const ollamaSetBaseUrl: Handler<Sockets.Ollama.SetBaseUrl.Params, Sockets
 	}
 }
 
-export const ollamaModelsList: Handler<Sockets.Ollama.ModelsList.Params, Sockets.Ollama.ModelsList.Response> = {
+export const ollamaModelsList: Handler<
+	Sockets.Ollama.ModelsList.Params,
+	Sockets.Ollama.ModelsList.Response
+> = {
 	event: "ollama:modelsList",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage Ollama models." }
+			const res = {
+				error: "Access denied. Only admin users can manage Ollama models."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage Ollama models.")
+			throw new Error(
+				"Access denied. Only admin users can manage Ollama models."
+			)
 		}
-		
+
 		try {
 			const { ollamaManagerBaseUrl: baseUrl } =
 				(await db.query.systemSettings.findFirst())!
@@ -111,15 +128,22 @@ export const ollamaModelsList: Handler<Sockets.Ollama.ModelsList.Params, Sockets
 	}
 }
 
-export const ollamaDeleteModelHandler: Handler<Sockets.Ollama.DeleteModel.Params, Sockets.Ollama.DeleteModel.Response> = {
+export const ollamaDeleteModelHandler: Handler<
+	Sockets.Ollama.DeleteModel.Params,
+	Sockets.Ollama.DeleteModel.Response
+> = {
 	event: "ollama:deleteModel",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can delete Ollama models." }
+			const res = {
+				error: "Access denied. Only admin users can delete Ollama models."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can delete Ollama models.")
+			throw new Error(
+				"Access denied. Only admin users can delete Ollama models."
+			)
 		}
-		
+
 		try {
 			const { ollamaManagerBaseUrl: baseUrl } =
 				(await db.query.systemSettings.findFirst())!
@@ -141,17 +165,22 @@ export const ollamaDeleteModelHandler: Handler<Sockets.Ollama.DeleteModel.Params
 						eq(schema.connections.model, params.modelName)
 					)
 				)
-			
+
 			return res
 		} catch (error: any) {
 			console.error("Ollama delete model error:", error)
-			emitToUser("ollama:deleteModel:error", { error: "Failed to delete model" })
+			emitToUser("ollama:deleteModel:error", {
+				error: "Failed to delete model"
+			})
 			throw error
 		}
 	}
 }
 
-export const ollamaConnectModelHandler: Handler<Sockets.Ollama.ConnectModel.Params, Sockets.Ollama.ConnectModel.Response> = {
+export const ollamaConnectModelHandler: Handler<
+	Sockets.Ollama.ConnectModel.Params,
+	Sockets.Ollama.ConnectModel.Response
+> = {
 	event: "ollama:connectModel",
 	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
@@ -217,7 +246,10 @@ export const ollamaConnectModelHandler: Handler<Sockets.Ollama.ConnectModel.Para
 	}
 }
 
-export const ollamaListRunningModelsHandler: Handler<Sockets.Ollama.ListRunningModels.Params, Sockets.Ollama.ListRunningModels.Response> = {
+export const ollamaListRunningModelsHandler: Handler<
+	Sockets.Ollama.ListRunningModels.Params,
+	Sockets.Ollama.ListRunningModels.Response
+> = {
 	event: "ollama:listRunningModels",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -243,15 +275,22 @@ export const ollamaListRunningModelsHandler: Handler<Sockets.Ollama.ListRunningM
 	}
 }
 
-export const ollamaPullModelHandler: Handler<Sockets.Ollama.PullModel.Params, Sockets.Ollama.PullModel.Response> = {
+export const ollamaPullModelHandler: Handler<
+	Sockets.Ollama.PullModel.Params,
+	Sockets.Ollama.PullModel.Response
+> = {
 	event: "ollama:pullModel",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can download Ollama models." }
+			const res = {
+				error: "Access denied. Only admin users can download Ollama models."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can download Ollama models.")
+			throw new Error(
+				"Access denied. Only admin users can download Ollama models."
+			)
 		}
-		
+
 		try {
 			// Remove from cancelingPulls if it exists
 			if (cancelingPulls.includes(params.modelName)) {
@@ -315,9 +354,12 @@ export const ollamaPullModelHandler: Handler<Sockets.Ollama.PullModel.Params, So
 							fileName = chunk.status.split("pulling ")[1]
 						}
 
-						downloadingQuants[params.modelName].status = chunk.status
+						downloadingQuants[params.modelName].status =
+							chunk.status
 						if (fileName) {
-							downloadingQuants[params.modelName].files[fileName] = {
+							downloadingQuants[params.modelName].files[
+								fileName
+							] = {
 								total: chunk.total || 0,
 								completed: chunk.completed || 0
 							}
@@ -369,7 +411,10 @@ export const ollamaPullModelHandler: Handler<Sockets.Ollama.PullModel.Params, So
 	}
 }
 
-export const ollamaVersionHandler: Handler<Sockets.Ollama.Version.Params, Sockets.Ollama.Version.Response> = {
+export const ollamaVersionHandler: Handler<
+	Sockets.Ollama.Version.Params,
+	Sockets.Ollama.Version.Response
+> = {
 	event: "ollama:version",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -378,7 +423,9 @@ export const ollamaVersionHandler: Handler<Sockets.Ollama.Version.Params, Socket
 			const response = await fetch(`${baseUrl}/api/version`)
 
 			if (!response.ok) {
-				throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+				throw new Error(
+					`HTTP ${response.status}: ${response.statusText}`
+				)
 			}
 
 			const result = await response.json()
@@ -397,7 +444,10 @@ export const ollamaVersionHandler: Handler<Sockets.Ollama.Version.Params, Socket
 	}
 }
 
-export const ollamaIsUpdateAvailableHandler: Handler<Sockets.Ollama.IsUpdateAvailable.Params, Sockets.Ollama.IsUpdateAvailable.Response> = {
+export const ollamaIsUpdateAvailableHandler: Handler<
+	Sockets.Ollama.IsUpdateAvailable.Params,
+	Sockets.Ollama.IsUpdateAvailable.Response
+> = {
 	event: "ollama:isUpdateAvailable",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -452,7 +502,10 @@ export const ollamaIsUpdateAvailableHandler: Handler<Sockets.Ollama.IsUpdateAvai
 	}
 }
 
-export const ollamaSearchAvailableModelsHandler: Handler<Sockets.Ollama.SearchAvailableModels.Params, Sockets.Ollama.SearchAvailableModels.Response> = {
+export const ollamaSearchAvailableModelsHandler: Handler<
+	Sockets.Ollama.SearchAvailableModels.Params,
+	Sockets.Ollama.SearchAvailableModels.Response
+> = {
 	event: "ollama:searchAvailableModels",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -498,7 +551,9 @@ export const ollamaSearchAvailableModelsHandler: Handler<Sockets.Ollama.SearchAv
 				)
 
 				if (!response.ok) {
-					throw new Error(`Hugging Face API error: ${response.status}`)
+					throw new Error(
+						`Hugging Face API error: ${response.status}`
+					)
 				}
 
 				const data = await response.json()
@@ -575,7 +630,9 @@ export const ollamaSearchAvailableModelsHandler: Handler<Sockets.Ollama.SearchAv
 				})
 
 				// Filter out models that don't have pull options
-				models = models.filter((model) => model.pullOptions && model.pullOptions.length > 0)
+				models = models.filter(
+					(model) => model.pullOptions && model.pullOptions.length > 0
+				)
 			}
 
 			const res: Sockets.Ollama.SearchAvailableModels.Response = {
@@ -593,7 +650,10 @@ export const ollamaSearchAvailableModelsHandler: Handler<Sockets.Ollama.SearchAv
 	}
 }
 
-export const ollamaClearDownloadHistoryHandler: Handler<Sockets.Ollama.ClearDownloadHistory.Params, Sockets.Ollama.ClearDownloadHistory.Response> = {
+export const ollamaClearDownloadHistoryHandler: Handler<
+	Sockets.Ollama.ClearDownloadHistory.Params,
+	Sockets.Ollama.ClearDownloadHistory.Response
+> = {
 	event: "ollama:clearDownloadHistory",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -620,7 +680,10 @@ export const ollamaClearDownloadHistoryHandler: Handler<Sockets.Ollama.ClearDown
 	}
 }
 
-export const ollamaCancelPullHandler: Handler<Sockets.Ollama.CancelPull.Params, Sockets.Ollama.CancelPull.Response> = {
+export const ollamaCancelPullHandler: Handler<
+	Sockets.Ollama.CancelPull.Params,
+	Sockets.Ollama.CancelPull.Response
+> = {
 	event: "ollama:cancelPull",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -650,7 +713,10 @@ export const ollamaCancelPullHandler: Handler<Sockets.Ollama.CancelPull.Params, 
 	}
 }
 
-export const ollamaRecommendedModelsHandler: Handler<Sockets.Ollama.RecommendedModels.Params, Sockets.Ollama.RecommendedModels.Response> = {
+export const ollamaRecommendedModelsHandler: Handler<
+	Sockets.Ollama.RecommendedModels.Params,
+	Sockets.Ollama.RecommendedModels.Response
+> = {
 	event: "ollama:recommendedModels",
 	handler: async (socket, params, emitToUser) => {
 		try {
@@ -794,7 +860,11 @@ export async function ollamaSearchAvailableModelsLegacy(
 	message: any,
 	emitToUser: (event: string, data: any) => void
 ) {
-	await ollamaSearchAvailableModelsHandler.handler(socket, message, emitToUser)
+	await ollamaSearchAvailableModelsHandler.handler(
+		socket,
+		message,
+		emitToUser
+	)
 }
 
 export async function ollamaDeleteModelLegacy(
@@ -865,7 +935,11 @@ export async function ollamaRecommendedModelsLegacy(
 export function registerOllamaHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, ollamaSetBaseUrl, emitToUser)
 	register(socket, ollamaModelsList, emitToUser)

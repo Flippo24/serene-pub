@@ -107,7 +107,7 @@
 	onMount(() => {
 		// Socket event listeners
 		socket.on(
-			"ollamaSetBaseUrl",
+			"ollama:setBaseUrl",
 			(message: Sockets.OllamaSetBaseUrl.Response) => {
 				isSavingBaseUrl = false
 				if (message.success) {
@@ -121,14 +121,14 @@
 		)
 
 		socket.on(
-			"ollamaVersion",
+			"ollama:version",
 			(message: Sockets.OllamaVersion.Response) => {
 				currentVersion = message.version || "Unknown"
 			}
 		)
 
 		socket.on(
-			"ollamaIsUpdateAvailable",
+			"ollama:isUpdateAvailable",
 			(message: Sockets.OllamaIsUpdateAvailable.Response) => {
 				isCheckingUpdates = false
 				updateAvailable = message.updateAvailable
@@ -149,9 +149,9 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollamaSetBaseUrl")
-		socket.off("ollamaVersion")
-		socket.off("ollamaIsUpdateAvailable")
+		socket.off("ollama:setBaseUrl")
+		socket.off("ollama:version")
+		socket.off("ollama:isUpdateAvailable")
 	})
 </script>
 

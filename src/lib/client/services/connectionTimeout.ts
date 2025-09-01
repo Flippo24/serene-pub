@@ -38,10 +38,13 @@ class ConnectionTimeoutService {
 	/**
 	 * Initialize connection timeout tracking
 	 */
-	startTimeout(onTimeout?: () => void, onReconnectAvailable?: () => void): void {
+	startTimeout(
+		onTimeout?: () => void,
+		onReconnectAvailable?: () => void
+	): void {
 		this.callbacks.onTimeout = onTimeout || null
 		this.callbacks.onReconnectAvailable = onReconnectAvailable || null
-		
+
 		this.state.isConnected = true
 		this.state.isTimedOut = false
 		this.state.canReconnect = false
@@ -53,7 +56,7 @@ class ConnectionTimeoutService {
 	 */
 	updateActivity(): void {
 		this.state.lastActivity = Date.now()
-		
+
 		// Clear existing timeout
 		if (this.state.timeoutId) {
 			clearTimeout(this.state.timeoutId)
@@ -70,7 +73,7 @@ class ConnectionTimeoutService {
 	 */
 	private handleTimeout(): void {
 		console.log("Connection timed out after 1 hour of inactivity")
-		
+
 		this.state.isTimedOut = true
 		this.state.isConnected = false
 		this.state.canReconnect = false
@@ -118,13 +121,19 @@ class ConnectionTimeoutService {
 		return {
 			...this.state,
 			// Calculate time remaining until timeout
-			timeUntilTimeout: this.state.isConnected && this.state.timeoutId
-				? Math.max(0, this.TIMEOUT_MS - (Date.now() - this.state.lastActivity))
-				: 0,
+			timeUntilTimeout:
+				this.state.isConnected && this.state.timeoutId
+					? Math.max(
+							0,
+							this.TIMEOUT_MS -
+								(Date.now() - this.state.lastActivity)
+						)
+					: 0,
 			// Calculate time remaining until reconnect available
-			timeUntilReconnect: this.state.isTimedOut && !this.state.canReconnect
-				? Math.max(0, this.state.reconnectAvailableAt - Date.now())
-				: 0
+			timeUntilReconnect:
+				this.state.isTimedOut && !this.state.canReconnect
+					? Math.max(0, this.state.reconnectAvailableAt - Date.now())
+					: 0
 		}
 	}
 
@@ -160,7 +169,8 @@ class ConnectionTimeoutService {
 			return "Not connected"
 		}
 
-		const timeRemaining = this.TIMEOUT_MS - (Date.now() - this.state.lastActivity)
+		const timeRemaining =
+			this.TIMEOUT_MS - (Date.now() - this.state.lastActivity)
 		if (timeRemaining <= 0) {
 			return "Timed out"
 		}

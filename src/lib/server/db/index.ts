@@ -25,10 +25,17 @@ const metaPath = dbConfig.dataDir + "/meta.json"
 
 // Ensure meta.json exists
 if (!fs.existsSync(metaPath)) {
-	fs.writeFileSync(metaPath, JSON.stringify({ 
-		version: "0.0.0",
-		cryptoSecretKey: crypto.randomUUID()
-	}, null, 2))
+	fs.writeFileSync(
+		metaPath,
+		JSON.stringify(
+			{
+				version: "0.0.0",
+				cryptoSecretKey: crypto.randomUUID()
+			},
+			null,
+			2
+		)
+	)
 }
 
 // Read meta.json with error handling
@@ -41,9 +48,11 @@ try {
 		fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 	}
 } catch (error) {
-	console.warn(`Warning: Invalid meta.json detected, recreating. Error: ${error}`)
+	console.warn(
+		`Warning: Invalid meta.json detected, recreating. Error: ${error}`
+	)
 	// Recreate meta.json if it's corrupted
-	meta = { 
+	meta = {
 		version: "0.0.0",
 		cryptoSecretKey: crypto.randomUUID()
 	}
@@ -58,7 +67,9 @@ async function checkDatabaseLock(): Promise<void> {
 	try {
 		meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 	} catch (error) {
-		console.warn(`Warning: Error reading meta.json during lock check. Error: ${error}`)
+		console.warn(
+			`Warning: Error reading meta.json during lock check. Error: ${error}`
+		)
 		meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 	}
@@ -84,7 +95,9 @@ async function checkDatabaseLock(): Promise<void> {
 		try {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
-			console.warn(`Warning: Error reading meta.json during lock recheck. Error: ${error}`)
+			console.warn(
+				`Warning: Error reading meta.json during lock recheck. Error: ${error}`
+			)
 			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 			fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2))
 		}
@@ -110,7 +123,9 @@ function updateDatabaseLock(): void {
 		try {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
-			console.warn(`Warning: Error reading meta.json during lock update. Error: ${error}`)
+			console.warn(
+				`Warning: Error reading meta.json during lock update. Error: ${error}`
+			)
 			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		}
 
@@ -149,7 +164,9 @@ function stopLockUpdates(): void {
 		try {
 			meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"))
 		} catch (error) {
-			console.warn(`Warning: Error reading meta.json during lock clear. Error: ${error}`)
+			console.warn(
+				`Warning: Error reading meta.json during lock clear. Error: ${error}`
+			)
 			meta = { version: "0.0.0", cryptoSecretKey: crypto.randomUUID() }
 		}
 		delete meta.lock
@@ -184,7 +201,7 @@ export function compareVersions(a: string, b: string): -1 | 0 | 1 {
 	// Strip pre-release identifiers (e.g., "-alpha", "-beta") for comparison
 	const cleanVersionA = a.split("-")[0]
 	const cleanVersionB = b.split("-")[0]
-	
+
 	const pa = cleanVersionA.split(".").map(Number)
 	const pb = cleanVersionB.split(".").map(Number)
 	for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -208,9 +225,11 @@ export function getCryptoSecretKey(): string {
 		}
 		return currentMeta.cryptoSecretKey
 	} catch (error) {
-		console.warn(`Warning: Error reading meta.json for crypto key. Error: ${error}`)
+		console.warn(
+			`Warning: Error reading meta.json for crypto key. Error: ${error}`
+		)
 		// Recreate meta.json if it's corrupted
-		const newMeta = { 
+		const newMeta = {
 			version: "0.0.0",
 			cryptoSecretKey: crypto.randomUUID()
 		}

@@ -344,16 +344,37 @@ const connectionDefaults = {
 }
 
 // --- SamplingConfig mapping ---
+// Only include samplers that LM Studio's SDK actually supports
 const samplingKeyMap: Record<string, string> = {
+	// Core sampling parameters
 	temperature: "temperature",
 	topP: "topPSampling",
 	topK: "topKSampling",
+	seed: "seed",
+
+	// Repetition control
 	repetitionPenalty: "repeatPenalty",
+
+	// Min-P sampling
 	minP: "minPSampling",
+
+	// XTC (Exclude Top Choices) sampling
 	xtcProbability: "xtcProbability",
 	xtcThreshold: "xtcThreshold",
-	responseTokens: "maxTokens",
-	stopStrings: "stopStrings"
+
+	// Generation limits
+	responseTokens: "maxTokens"
+
+	// Note: LM Studio uses llama.cpp under the hood but exposes limited parameters through its SDK
+	// The following are NOT exposed via the LM Studio SDK:
+	// - DRY sampling (dryMultiplier, dryBase, etc.)
+	// - Dynamic temperature (dynatemp)
+	// - Mirostat
+	// - Typical sampling (typical_p)
+	// - TFS (tail free sampling)
+	// - Frequency/presence penalties
+	// - Logit bias
+	// - Most other advanced samplers
 }
 
 async function testConnection(

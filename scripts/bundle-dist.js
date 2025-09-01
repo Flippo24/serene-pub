@@ -286,7 +286,7 @@ if (!target) {
 		const nodeSrcName = isWindows ? "node.exe" : "node"
 		const nodeSrcPath = path.resolve(__dirname, "..", nodeSrcName)
 		const nodeDestPath = path.join(outDir, nodeSrcName)
-		
+
 		if (fs.existsSync(nodeSrcPath)) {
 			fs.copyFileSync(nodeSrcPath, nodeDestPath)
 			if (!isWindows) {
@@ -319,18 +319,21 @@ if (!target) {
 		}
 
 		// Copy platform-specific executables and icons
-		const platformDir = path.resolve(__dirname, `../dist-assets/${target.name.split("-")[0]}`)
+		const platformDir = path.resolve(
+			__dirname,
+			`../dist-assets/${target.name.split("-")[0]}`
+		)
 		const platformFiles = fs.readdirSync(platformDir)
-		
+
 		for (const file of platformFiles) {
 			const srcPath = path.join(platformDir, file)
 			const destPath = path.join(outDir, file)
-			
+
 			// Skip run files (already copied above) and INSTRUCTIONS.txt (copied separately)
 			if (file.startsWith("run.") || file === "INSTRUCTIONS.txt") {
 				continue
 			}
-			
+
 			if (fs.lstatSync(srcPath).isDirectory()) {
 				// Copy directories recursively (like .app bundles)
 				copyRecursive(srcPath, destPath)
@@ -338,10 +341,12 @@ if (!target) {
 			} else {
 				// Copy individual files
 				fs.copyFileSync(srcPath, destPath)
-				
+
 				// Make executables executable on Unix platforms
-				if (target.platform !== "win32" && 
-					(file === "Serene Pub" || file.endsWith(".desktop"))) {
+				if (
+					target.platform !== "win32" &&
+					(file === "Serene Pub" || file.endsWith(".desktop"))
+				) {
 					fs.chmodSync(destPath, 0o755)
 				}
 				console.log(`Copied file: ${file}`)

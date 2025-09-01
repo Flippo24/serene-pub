@@ -307,62 +307,46 @@ const connectionDefaults = {
 }
 
 // --- SamplingConfig mapping ---
+// Only include samplers that Ollama's API actually supports
 const samplingKeyMap: Record<string, string> = {
+	// Core sampling parameters
 	temperature: "temperature",
 	topP: "top_p",
 	topK: "top_k",
-	repetitionPenalty: "repetition_penalty",
+	seed: "seed",
+
+	// Repetition control
+	repetitionPenalty: "repeat_penalty",
+	repeatLastN: "repeat_last_n",
+	penalizeNewline: "penalize_newline",
+
+	// Min-P sampling
 	minP: "min_p",
-	tfs: "tfs",
+
+	// Tail Free Sampling
+	tfs: "tfs_z",
+
+	// Typical sampling
 	typicalP: "typical_p",
+
+	// Mirostat sampling
 	mirostat: "mirostat",
 	mirostatTau: "mirostat_tau",
 	mirostatEta: "mirostat_eta",
-	penaltyAlpha: "penalty_alpha",
-	frequencyPenalty: "frequency_penalty",
-	presencePenalty: "presence_penalty",
+
+	// Generation limits
 	responseTokens: "num_predict",
-	contextTokens: "num_ctx",
-	noRepeatNgramSize: "no_repeat_ngram_size",
-	numBeams: "num_beams",
-	lengthPenalty: "length_penalty",
-	minLength: "min_length",
-	encoderRepetitionPenalty: "encoder_repetition_penalty",
-	freqPen: "freq_pen",
-	presencePen: "presence_pen",
-	skew: "skew",
-	doSample: "do_sample",
-	earlyStopping: "early_stopping",
-	dynatemp: "dynatemp",
-	minTemp: "min_temp",
-	maxTemp: "max_temp",
-	dynatempExponent: "dynatemp_exponent",
-	smoothingFactor: "smoothing_factor",
-	smoothingCurve: "smoothing_curve",
-	dryAllowedLength: "dry_allowed_length",
-	dryMultiplier: "dry_multiplier",
-	dryBase: "dry_base",
-	dryPenaltyLastN: "dry_penalty_last_n",
-	maxTokensSecond: "max_tokens_second",
-	seed: "seed",
-	addBosToken: "add_bos_token",
-	banEosToken: "ban_eos_token",
-	skipSpecialTokens: "skip_special_tokens",
-	includeReasoning: "include_reasoning",
-	streaming: "streaming", // Not sent to Ollama, handled separately
-	mirostatMode: "mirostat_mode",
-	xtcThreshold: "xtc_threshold",
-	xtcProbability: "xtc_probability",
-	nsigma: "nsigma",
-	speculativeNgram: "speculative_ngram",
-	guidanceScale: "guidance_scale",
-	etaCutoff: "eta_cutoff",
-	epsilonCutoff: "epsilon_cutoff",
-	repPenRange: "rep_pen_range",
-	repPenDecay: "rep_pen_decay",
-	repPenSlope: "rep_pen_slope",
-	logitBias: "logit_bias",
-	bannedTokens: "banned_tokens"
+	contextTokens: "num_ctx"
+
+	// Note: The following are NOT yet supported by Ollama but may be in the future:
+	// - XTC (xtcThreshold, xtcProbability)
+	// - DRY (dryMultiplier, dryBase, dryAllowedLength, dryPenaltyLastN)
+	// - Dynamic temperature (dynatemp, minTemp, maxTemp, dynatempExponent)
+	// - Smoothing (smoothingFactor, smoothingCurve)
+	// - Frequency/presence penalties
+	// - Logit bias
+	// - Guidance scale
+	// - Advanced penalties (penaltyAlpha, etaCutoff, epsilonCutoff, etc.)
 }
 
 async function listModels(

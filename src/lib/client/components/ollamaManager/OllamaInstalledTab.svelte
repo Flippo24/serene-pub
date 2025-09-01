@@ -171,7 +171,7 @@
 	onMount(() => {
 		// Socket event listeners
 		socket.on(
-			"ollamaModelsList",
+			"ollama:modelsList",
 			(message: Sockets.OllamaModelsList.Response) => {
 				installedModels = message.models
 				isLoading = false
@@ -180,7 +180,7 @@
 		)
 
 		socket.on(
-			"ollamaDeleteModel",
+			"ollama:deleteModel",
 			(message: Sockets.OllamaDeleteModel.Response) => {
 				if (message.success) {
 					refreshModels()
@@ -192,14 +192,14 @@
 		)
 
 		socket.on(
-			"ollamaListRunningModels",
+			"ollama:listRunningModels",
 			(message: Sockets.OllamaListRunningModels.Response) => {
 				runningModels = message.models
 			}
 		)
 
 		socket.on(
-			"ollamaStopModel",
+			"ollama:stopModel",
 			(message: Sockets.OllamaStopModel.Response) => {
 				if (message.success) {
 					toaster.success({ title: "Model stopped successfully" })
@@ -209,7 +209,7 @@
 		)
 
 		socket.on(
-			"ollamaConnectModel",
+			"ollama:connectModel",
 			(message: Sockets.OllamaConnectModel.Response) => {
 				if (message.success) {
 					toaster.success({ title: "Model connected successfully" })
@@ -223,11 +223,11 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollamaModelsList")
-		socket.off("ollamaDeleteModel")
-		socket.off("ollamaListRunningModels")
-		socket.off("ollamaStopModel")
-		socket.off("ollamaConnectModel")
+		socket.off("ollama:modelsList")
+		socket.off("ollama:deleteModel")
+		socket.off("ollama:listRunningModels")
+		socket.off("ollama:stopModel")
+		socket.off("ollama:connectModel")
 	})
 </script>
 

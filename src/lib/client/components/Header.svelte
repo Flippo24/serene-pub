@@ -30,12 +30,12 @@
 		class="bg-surface-100-900 bg-opacity-25 relative mx-auto flex w-full justify-between px-4 py-2 backdrop-blur"
 	>
 		<!-- Desktop left nav -->
-		<nav 
+		<nav
 			class="hidden flex-1 justify-start gap-2 lg:flex"
 			aria-label="Left navigation"
 			role="navigation"
 		>
-			{#each Object.entries(panelsCtx.leftNav) as [key, item]}
+			{#each panelsCtx.getOrderedEntries(panelsCtx.leftNav, panelsCtx.leftNavOrder || []) as [key, item]}
 				{@const isOpen = panelsCtx.leftPanel === key}
 				<button
 					title={item.title}
@@ -68,7 +68,7 @@
 		</div>
 
 		<!-- Desktop right nav -->
-		<nav 
+		<nav
 			class="hidden flex-1 justify-end gap-2 lg:flex"
 			aria-label="Right navigation"
 			role="navigation"
@@ -103,7 +103,10 @@
 				type="button"
 				aria-expanded={panelsCtx.isMobileMenuOpen}
 			>
-				<Icons.Menu class="text-foreground h-6 w-6" aria-hidden="true" />
+				<Icons.Menu
+					class="text-foreground h-6 w-6"
+					aria-hidden="true"
+				/>
 			</button>
 		</div>
 	</div>

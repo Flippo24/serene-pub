@@ -311,20 +311,23 @@
 		socket.emit("tags:list", {})
 
 		if (personaId) {
-			socket.once("personas:get", (message: Sockets.Personas.Get.Response) => {
-				if (message.persona) {
-					const personaData = { ...message.persona }
-					editPersonaData = {
-						...editPersonaData,
-						...personaData,
-						avatar: personaData.avatar ?? "",
-						description: personaData.description ?? "",
-						tags: personaData.tags || [],
-						_avatar: ""
+			socket.once(
+				"personas:get",
+				(message: Sockets.Personas.Get.Response) => {
+					if (message.persona) {
+						const personaData = { ...message.persona }
+						editPersonaData = {
+							...editPersonaData,
+							...personaData,
+							avatar: personaData.avatar ?? "",
+							description: personaData.description ?? "",
+							tags: personaData.tags || [],
+							_avatar: ""
+						}
+						originalPersonaData = { ...editPersonaData }
 					}
-					originalPersonaData = { ...editPersonaData }
 				}
-			})
+			)
 			socket.emit("personas:get", { id: personaId })
 		}
 	})

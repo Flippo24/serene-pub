@@ -49,20 +49,19 @@
 	}
 </script>
 
-<SidebarListItem
-	itemType="Chat"
-	onclick={handleClick}
-	{contentTitle}
-	{classes}
->
+<SidebarListItem itemType="Chat" onclick={handleClick} {contentTitle} {classes}>
 	{#snippet content()}
 		<div class="relative w-fit">
-			<div class="relative mr-2 flex flex-shrink-0 flex-grow-0 items-center">
+			<div
+				class="relative mr-2 flex flex-shrink-0 flex-grow-0 items-center"
+			>
 				{#if avatars.length <= 2}
 					{#each avatars as avatar, i}
 						<div
 							class="inline-block"
-							style="margin-left: {i === 0 ? '0' : '-0.7em'}; z-index: {10 - i};"
+							style="margin-left: {i === 0
+								? '0'
+								: '-0.7em'}; z-index: {10 - i};"
 						>
 							<Avatar char={avatar.data} />
 						</div>
@@ -77,7 +76,9 @@
 						</div>
 					{/each}
 					{#if avatars.length > 3}
-						<div class="preset-tonal-secondary relative z-1 mb-auto aspect-square rounded-full px-1 pt-[0.15em] text-xs select-none">
+						<div
+							class="preset-tonal-secondary relative z-1 mb-auto aspect-square rounded-full px-1 pt-[0.15em] text-xs select-none"
+						>
 							+{avatars.length - 3}
 						</div>
 					{/if}
@@ -91,7 +92,9 @@
 			<div class="text-muted-foreground line-clamp-2 text-left text-xs">
 				{#if chat.chatCharacters?.length}
 					{chat.chatCharacters
-						.map((cc) => cc.character?.nickname || cc.character?.name)
+						.map(
+							(cc) => cc.character?.nickname || cc.character?.name
+						)
 						.filter(Boolean)
 						.join(", ")}
 				{/if}

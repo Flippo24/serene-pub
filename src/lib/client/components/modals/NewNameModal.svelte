@@ -71,12 +71,12 @@
 		</header>
 		<article class="space-y-4">
 			{#if description}
-				<p id="modal-description" class="text-muted-foreground">{description}</p>
+				<p id="modal-description" class="text-muted-foreground">
+					{description}
+				</p>
 			{/if}
 			<div class="form-field">
-				<label for="name-input" class="sr-only">
-					Name
-				</label>
+				<label for="name-input" class="sr-only">Name</label>
 				<input
 					id="name-input"
 					bind:this={inputRef}
@@ -88,7 +88,9 @@
 					placeholder="Enter a name..."
 					aria-required="true"
 					aria-invalid={!!validationErrors.name}
-					aria-describedby={validationErrors.name ? "name-error" : undefined}
+					aria-describedby={validationErrors.name
+						? "name-error"
+						: undefined}
 					onkeydown={(e) => {
 						if (e.key === "Enter" && isValid) {
 							if (validateForm()) {
@@ -104,15 +106,19 @@
 					}}
 				/>
 				{#if validationErrors.name}
-					<p id="name-error" class="mt-1 text-sm text-red-500" role="alert">
+					<p
+						id="name-error"
+						class="mt-1 text-sm text-red-500"
+						role="alert"
+					>
 						{validationErrors.name}
 					</p>
 				{/if}
 			</div>
 		</article>
 		<footer class="flex justify-end gap-4">
-			<button 
-				class="btn preset-filled-surface-500" 
+			<button
+				class="btn preset-filled-surface-500"
 				onclick={onCancel}
 				type="button"
 				aria-label="Cancel and close modal"

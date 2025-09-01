@@ -8,11 +8,15 @@
 	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 
 	// Passphrase validation schema
-	const passphraseSchema = z.string()
+	const passphraseSchema = z
+		.string()
 		.min(6, "Passphrase must be at least 6 characters long")
 		.regex(/[a-z]/, "Passphrase must contain at least one lowercase letter")
 		.regex(/[A-Z]/, "Passphrase must contain at least one uppercase letter")
-		.regex(/[^a-zA-Z0-9]/, "Passphrase must contain at least one special character")
+		.regex(
+			/[^a-zA-Z0-9]/,
+			"Passphrase must contain at least one special character"
+		)
 
 	const socket = useTypedSocket()
 
@@ -22,14 +26,17 @@
 	let userCtx: UserCtx = $state(getContext("userCtx"))
 
 	// URL validation schema
-	const urlSchema = z.string().url().refine((url) => {
-		try {
-			const parsed = new URL(url)
-			return parsed.port !== "" || parsed.hostname === "localhost"
-		} catch {
-			return false
-		}
-	}, "URL must include a port (e.g., http://localhost:11434)")
+	const urlSchema = z
+		.string()
+		.url()
+		.refine((url) => {
+			try {
+				const parsed = new URL(url)
+				return parsed.port !== "" || parsed.hostname === "localhost"
+			} catch {
+				return false
+			}
+		}, "URL must include a port (e.g., http://localhost:11434)")
 
 	// State for ollama manager base URL
 	let ollamaBaseUrlField = $state("")
@@ -53,10 +60,13 @@
 
 	async function onOllamaManagerEnabledClick(event: { checked: boolean }) {
 		if (!userCtx.user?.isAdmin) {
-			toaster.error({ title: "Access denied", description: "Admin privileges required" })
+			toaster.error({
+				title: "Access denied",
+				description: "Admin privileges required"
+			})
 			return
 		}
-		
+
 		socket?.emit("systemSettings:updateOllamaManagerEnabled", {
 			enabled: event.checked
 		})
@@ -64,16 +74,20 @@
 
 	async function handleSaveOllamaBaseUrl() {
 		if (!userCtx.user?.isAdmin) {
-			toaster.error({ title: "Access denied", description: "Admin privileges required" })
+			toaster.error({
+				title: "Access denied",
+				description: "Admin privileges required"
+			})
 			return
 		}
 
 		const trimmedUrl = ollamaBaseUrlField.trim()
-		
+
 		// Validate URL
 		const result = urlSchema.safeParse(trimmedUrl)
 		if (!result.success) {
-			ollamaBaseUrlError = result.error.errors[0]?.message || "Invalid URL format"
+			ollamaBaseUrlError =
+				result.error.errors[0]?.message || "Invalid URL format"
 			return
 		}
 
@@ -92,7 +106,10 @@
 
 	function handleEnableAccountsClick(event: { checked: boolean }) {
 		if (!userCtx.user?.isAdmin) {
-			toaster.error({ title: "Access denied", description: "Admin privileges required" })
+			toaster.error({
+				title: "Access denied",
+				description: "Admin privileges required"
+			})
 			return
 		}
 
@@ -119,7 +136,7 @@
 
 	function validatePassphrase() {
 		passphraseError = ""
-		
+
 		if (!passphrase) {
 			passphraseError = "Passphrase is required"
 			return false
@@ -135,7 +152,7 @@
 			return true
 		} catch (error) {
 			if (error instanceof z.ZodError) {
-				passphraseError = error.errors.map(e => e.message).join(", ")
+				passphraseError = error.errors.map((e) => e.message).join(", ")
 			}
 			return false
 		}
@@ -143,7 +160,10 @@
 
 	function handleSetPassphrase() {
 		if (!userCtx.user?.isAdmin) {
-			toaster.error({ title: "Access denied", description: "Admin privileges required" })
+			toaster.error({
+				title: "Access denied",
+				description: "Admin privileges required"
+			})
 			return
 		}
 
@@ -159,7 +179,10 @@
 
 	function confirmEnableAccounts() {
 		if (!userCtx.user?.isAdmin) {
-			toaster.error({ title: "Access denied", description: "Admin privileges required" })
+			toaster.error({
+				title: "Access denied",
+				description: "Admin privileges required"
+			})
 			return
 		}
 
@@ -194,10 +217,12 @@
 		const handleOllamaManagerEnabled = (message: any) => {
 			if (message.success) {
 				toaster.success({
-					title: `Ollama Manager ${message.enabled ? 'enabled' : 'disabled'} successfully`
+					title: `Ollama Manager ${message.enabled ? "enabled" : "disabled"} successfully`
 				})
 			} else {
-				toaster.error({ title: "Failed to update Ollama Manager setting" })
+				toaster.error({
+					title: "Failed to update Ollama Manager setting"
+				})
 			}
 		}
 
@@ -225,8 +250,8 @@
 		}
 
 		const handleAccountsEnabledError = (message: any) => {
-			toaster.error({ 
-				title: "Cannot enable user accounts", 
+			toaster.error({
+				title: "Cannot enable user accounts",
 				description: message.error || "An error occurred"
 			})
 		}
@@ -267,13 +292,22 @@
 				showEnableAccountsModal = false
 			} else {
 				passphraseError = message.message || "Failed to set passphrase"
-				toaster.error({ title: "Failed to set passphrase", description: message.message })
+				toaster.error({
+					title: "Failed to set passphrase",
+					description: message.message
+				})
 			}
 		}
 
 		// Register event listeners
-		socket.on("systemSettings:updateOllamaManagerEnabled", handleOllamaManagerEnabled)
-		socket.on("systemSettings:updateOllamaManagerBaseUrl", handleOllamaManagerBaseUrl)
+		socket.on(
+			"systemSettings:updateOllamaManagerEnabled",
+			handleOllamaManagerEnabled
+		)
+		socket.on(
+			"systemSettings:updateOllamaManagerBaseUrl",
+			handleOllamaManagerBaseUrl
+		)
 		socket.on("systemSettings:updateAccountsEnabled", handleAccountsEnabled)
 		socket.on("**:error", handleGenericError)
 		socket.on("users:current:hasPassphrase", handleHasPassphrase)
@@ -281,9 +315,18 @@
 
 		// Cleanup function to remove listeners
 		return () => {
-			socket.off("systemSettings:updateOllamaManagerEnabled", handleOllamaManagerEnabled)
-			socket.off("systemSettings:updateOllamaManagerBaseUrl", handleOllamaManagerBaseUrl)
-			socket.off("systemSettings:updateAccountsEnabled", handleAccountsEnabled)
+			socket.off(
+				"systemSettings:updateOllamaManagerEnabled",
+				handleOllamaManagerEnabled
+			)
+			socket.off(
+				"systemSettings:updateOllamaManagerBaseUrl",
+				handleOllamaManagerBaseUrl
+			)
+			socket.off(
+				"systemSettings:updateAccountsEnabled",
+				handleAccountsEnabled
+			)
 			socket.off("**:error", handleGenericError)
 			socket.off("users:current:hasPassphrase", handleHasPassphrase)
 			socket.off("users:current:setPassphrase", handleSetPassphrase)
@@ -296,8 +339,8 @@
 		<!-- Ollama Manager Settings -->
 		<div class="space-y-4">
 			<h3 class="text-lg font-semibold">Ollama Manager</h3>
-			
-			<div class="flex gap-2 items-center">
+
+			<div class="flex items-center gap-2">
 				<Switch
 					name="ollama-manager"
 					checked={systemSettingsCtx.settings?.ollamaManagerEnabled}
@@ -322,10 +365,14 @@
 							type="text"
 							bind:value={ollamaBaseUrlField}
 							placeholder="http://localhost:11434"
-							class="input w-full {ollamaBaseUrlError ? 'border-error-500' : ''}"
+							class="input w-full {ollamaBaseUrlError
+								? 'border-error-500'
+								: ''}"
 						/>
 						{#if ollamaBaseUrlError}
-							<p class="text-error-500 text-sm mt-1">{ollamaBaseUrlError}</p>
+							<p class="text-error-500 mt-1 text-sm">
+								{ollamaBaseUrlError}
+							</p>
 						{/if}
 					</div>
 
@@ -349,8 +396,8 @@
 		<!-- Account Settings -->
 		<div class="space-y-4">
 			<h3 class="text-lg font-semibold">Account Management</h3>
-			
-			<div class="flex gap-2 items-center">
+
+			<div class="flex items-center gap-2">
 				<Switch
 					name="enable-accounts"
 					checked={systemSettingsCtx.settings?.isAccountsEnabled}
@@ -361,14 +408,15 @@
 					Enable User Accounts
 				</label>
 			</div>
-			
+
 			{#if systemSettingsCtx.settings?.isAccountsEnabled}
-				<p class="text-muted-foreground text-sm ml-6">
+				<p class="text-muted-foreground ml-6 text-sm">
 					User accounts are enabled. This setting cannot be reversed.
 				</p>
 			{:else}
-				<p class="text-muted-foreground text-sm ml-6">
-					Enable user authentication and multi-user support. This is a permanent change.
+				<p class="text-muted-foreground ml-6 text-sm">
+					Enable user authentication and multi-user support. This is a
+					permanent change.
 				</p>
 			{/if}
 		</div>
@@ -386,17 +434,14 @@
 <!-- Enable Accounts Confirmation Modal -->
 <Modal
 	open={showEnableAccountsModal}
-	onOpenChange={(e) => showEnableAccountsModal = e.open}
+	onOpenChange={(e) => (showEnableAccountsModal = e.open)}
 	contentBase="card bg-surface-100-900 p-6 space-y-6 shadow-xl max-w-lg"
 	backdropClasses="backdrop-blur-sm"
 >
 	{#snippet content()}
-		<header class="flex justify-between items-center">
+		<header class="flex items-center justify-between">
 			<h2 class="text-xl font-bold">Enable User Accounts</h2>
-			<button
-				class="btn-ghost"
-				onclick={cancelEnableAccounts}
-			>
+			<button class="btn-ghost" onclick={cancelEnableAccounts}>
 				<Icons.X class="h-5 w-5" />
 			</button>
 		</header>
@@ -406,26 +451,36 @@
 				<span class="font-semibold">Warning: Permanent Change</span>
 			</div>
 			<p>
-				Enabling user accounts will activate authentication and multi-user support. 
-				This change is <strong>permanent and cannot be reversed</strong>.
+				Enabling user accounts will activate authentication and
+				multi-user support. This change is <strong>
+					permanent and cannot be reversed
+				</strong>
+				.
 			</p>
 			<p class="text-muted-foreground text-sm">
-				After enabling accounts, you will need to create accounts for all new users.
+				After enabling accounts, you will need to create accounts for
+				all new users.
 			</p>
 
 			{#if !hasPassphrase}
-				<div class="bg-warning-500/10 border border-warning-500/20 rounded-lg p-4 space-y-3">
-					<div class="flex items-center gap-2 text-warning-500">
+				<div
+					class="bg-warning-500/10 border-warning-500/20 space-y-3 rounded-lg border p-4"
+				>
+					<div class="text-warning-500 flex items-center gap-2">
 						<Icons.Key class="h-4 w-4" />
 						<span class="font-semibold">Passphrase Required</span>
 					</div>
 					<p class="text-sm">
-						You need to set a passphrase for your account to continue.
+						You need to set a passphrase for your account to
+						continue.
 					</p>
-					
+
 					<div class="space-y-3">
 						<p class="text-sm">
-							<label class="text-sm font-medium block mb-1" for="username">
+							<label
+								class="mb-1 block text-sm font-medium"
+								for="username"
+							>
 								Username
 							</label>
 							<input
@@ -436,7 +491,10 @@
 							/>
 						</p>
 						<div>
-							<label class="text-sm font-medium block mb-1" for="passphrase">
+							<label
+								class="mb-1 block text-sm font-medium"
+								for="passphrase"
+							>
 								Passphrase
 							</label>
 							<input
@@ -444,11 +502,16 @@
 								type="password"
 								bind:value={passphrase}
 								placeholder="Enter your passphrase"
-								class="input w-full {passphraseError ? 'border-error-500' : ''}"
+								class="input w-full {passphraseError
+									? 'border-error-500'
+									: ''}"
 							/>
 						</div>
 						<div>
-							<label class="text-sm font-medium block mb-1" for="confirmPassphrase">
+							<label
+								class="mb-1 block text-sm font-medium"
+								for="confirmPassphrase"
+							>
 								Confirm Passphrase
 							</label>
 							<input
@@ -456,15 +519,19 @@
 								type="password"
 								bind:value={confirmPassphrase}
 								placeholder="Confirm your passphrase"
-								class="input w-full {passphraseError ? 'border-error-500' : ''}"
+								class="input w-full {passphraseError
+									? 'border-error-500'
+									: ''}"
 							/>
 						</div>
 						{#if passphraseError}
-							<p class="text-error-500 text-sm">{passphraseError}</p>
+							<p class="text-error-500 text-sm">
+								{passphraseError}
+							</p>
 						{/if}
-						<div class="text-xs text-muted-foreground">
+						<div class="text-muted-foreground text-xs">
 							<p>Requirements:</p>
-							<ul class="list-disc list-inside ml-2 space-y-1">
+							<ul class="ml-2 list-inside list-disc space-y-1">
 								<li>At least 6 characters long</li>
 								<li>At least one lowercase letter</li>
 								<li>At least one uppercase letter</li>
@@ -492,7 +559,9 @@
 					Setting up...
 				{:else}
 					<Icons.Shield class="h-4 w-4" />
-					{hasPassphrase ? 'Enable Accounts' : 'Set Passphrase & Enable'}
+					{hasPassphrase
+						? "Enable Accounts"
+						: "Set Passphrase & Enable"}
 				{/if}
 			</button>
 		</footer>

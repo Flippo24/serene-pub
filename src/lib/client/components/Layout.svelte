@@ -23,6 +23,7 @@
 	import type { Snippet } from "svelte"
 	import { Theme } from "$lib/client/consts/Theme"
 	import OllamaIcon from "./icons/OllamaIcon.svelte"
+	import { page } from "$app/state"
 
 	interface Props {
 		children?: Snippet
@@ -50,13 +51,6 @@
 		onRightPanelClose: undefined,
 		onMobilePanelClose: undefined,
 		leftNav: {
-			sampling: {
-				icon: Icons.SlidersHorizontal,
-				title: "Sampling"
-			},
-			connections: { icon: Icons.Cable, title: "Connections" },
-			contexts: { icon: Icons.BookOpenText, title: "Contexts" },
-			prompts: { icon: Icons.MessageCircle, title: "Prompts" },
 			settings: { icon: Icons.Settings, title: "Settings" }
 		},
 		rightNav: {
@@ -66,7 +60,32 @@
 			lorebooks: { icon: Icons.BookMarked, title: "Lorebooks+" },
 			chats: { icon: Icons.MessageSquare, title: "Chats" }
 		},
-		digest: {}
+		digest: {},
+		leftNavOrder: [
+			"sampling",
+			"connections",
+			"ollama",
+			"contexts",
+			"prompts",
+			"users",
+			"settings"
+		],
+		rightNavOrder: [
+			"tags", "personas", "characters", "lorebooks", "chats"
+		],
+		getOrderedEntries: (nav: Record<string, any>, order: string[]) => {
+		// First, get entries that are in the order array
+		const orderedEntries = order
+			.filter((key) => key in nav)
+			.map((key) => [key, nav[key]] as const)
+
+		// Then, append any entries not in the order array
+		const remainingEntries = Object.entries(nav).filter(
+			([key]) => !order.includes(key)
+		)
+
+		return [...orderedEntries, ...remainingEntries]
+	}
 	})
 	let systemSettingsCtx: SystemSettingsCtx = $state({ settings: undefined })
 	let userSettingsCtx: UserSettingsCtx = $state({ settings: undefined })
@@ -84,39 +103,44 @@
 		systemSettingsCtx?.settings?.isAccountsEnabled
 	)
 	let hasUser = $derived(!!userCtx.user)
-	let shouldShowApp = $derived(
-		isSettingsLoaded && hasUser
-	)
+	let shouldShowApp = $derived(isSettingsLoaded && hasUser)
+	let isAdmin = $derived(!!userCtx.user?.isAdmin)
 
 	// Update leftNav based on Ollama Manager setting
 	$effect(() => {
 		if (!isSettingsLoaded) return
 
-		// Start with base navigation items
-		const baseLeftNav: any = {
-			sampling: {
-				icon: Icons.SlidersHorizontal,
-				title: "Sampling"
-			},
-			connections: { icon: Icons.Cable, title: "Connections" }
-		}
-
 		// Add Users sidebar if accounts are enabled
-		if (systemSettingsCtx?.settings?.isAccountsEnabled) {
-			baseLeftNav.users = { icon: Icons.Users, title: "Users" }
+		if (isAccountsEnabled) {
+			panelsCtx.leftNav.users = { icon: Icons.Users, title: "Users" }
 		}
 
 		// Add Ollama Manager if enabled
-		if (systemSettingsCtx?.settings?.ollamaManagerEnabled) {
-			baseLeftNav.ollama = { icon: OllamaIcon, title: "Ollama Manager" }
+		if (systemSettingsCtx?.settings?.ollamaManagerEnabled && isAdmin) {
+			panelsCtx.leftNav.ollama = {
+				icon: OllamaIcon,
+				title: "Ollama Manager"
+			}
 		}
 
-		// Add remaining navigation items
-		baseLeftNav.contexts = { icon: Icons.BookOpenText, title: "Contexts" }
-		baseLeftNav.prompts = { icon: Icons.MessageCircle, title: "Prompts" }
-		baseLeftNav.settings = { icon: Icons.Settings, title: "Settings" }
-
-		panelsCtx.leftNav = baseLeftNav
+		if (isAdmin) {
+			panelsCtx.leftNav.sampling = {
+				icon: Icons.SlidersHorizontal,
+				title: "Sampling"
+			}
+			panelsCtx.leftNav.connections = {
+				icon: Icons.Cable,
+				title: "Connections"
+			}
+			panelsCtx.leftNav.contexts = {
+				icon: Icons.BookOpenText,
+				title: "Contexts"
+			}
+			panelsCtx.leftNav.prompts = {
+				icon: Icons.MessageCircle,
+				title: "Prompts"
+			}
+		}
 	})
 
 	function openPanel({
@@ -256,38 +280,43 @@
 
 		// Check system settings first before connecting to sockets
 		try {
-			const { checkSystemSettings, checkAuthentication } = await import("$lib/client/utils/authFlow")
-			
+			const { checkSystemSettings, checkAuthentication } = await import(
+				"$lib/client/utils/authFlow"
+			)
+
 			// Phase 1: Check if accounts are enabled
 			const systemSettings = await checkSystemSettings()
-			
+
 			// If accounts are enabled, verify authentication
 			if (systemSettings.isAccountsEnabled) {
 				const isAuthenticated = await checkAuthentication()
 				if (!isAuthenticated) {
 					// User is not authenticated, redirect to login
-					console.log("Authentication required but user not authenticated")
+					console.log(
+						"Authentication required but user not authenticated"
+					)
 					toaster.error({
 						title: "Authentication Required",
-						description: "Please login to continue using the application."
+						description:
+							"Please login to continue using the application."
 					})
 					// Note: Actual redirect to login page would be handled by the app's routing
 					return
 				}
 			}
-			
+
 			// User is authenticated or accounts are disabled, proceed with socket connection
 			initializeSocketConnection()
-			
 		} catch (error) {
 			console.error("Failed to check authentication flow:", error)
 			toaster.error({
 				title: "Connection Error",
-				description: "Failed to verify authentication. Please refresh the page."
+				description:
+					"Failed to verify authentication. Please refresh the page."
 			})
 		}
 	})
-	
+
 	function initializeSocketConnection() {
 		socket.on("systemSettings:get", (message) => {
 			console.log("Received systemSettings:get", message)
@@ -426,6 +455,7 @@
 		socket.off("success")
 	})
 </script>
+
 {#if shouldShowApp}
 	<!-- Show normal app when accounts are disabled OR when accounts are enabled and user is authenticated -->
 	<div
@@ -695,7 +725,7 @@
 					</button>
 				</div>
 				<div class="flex flex-col gap-4 overflow-y-auto p-4 text-2xl">
-					{#each Object.entries( { ...panelsCtx.rightNav, ...panelsCtx.leftNav } ) as [key, item]}
+					{#each panelsCtx.getOrderedEntries( { ...panelsCtx.leftNav, ...panelsCtx.rightNav }, [...panelsCtx.leftNavOrder, ...panelsCtx.rightNavOrder] ) as [key, item]}
 						<button
 							class="btn-ghost flex items-center gap-2"
 							title={item.title}

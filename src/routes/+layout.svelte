@@ -21,7 +21,9 @@
 
 	async function initializeSocketsIfAllowed() {
 		if (!browser) return
-		const { checkSystemSettings, checkAuthentication } = await import("$lib/client/utils/authFlow")
+		const { checkSystemSettings, checkAuthentication } = await import(
+			"$lib/client/utils/authFlow"
+		)
 		const systemSettings = await checkSystemSettings()
 		if (systemSettings.isAccountsEnabled) {
 			const isAuthenticated = await checkAuthentication()
@@ -39,6 +41,11 @@
 		initializeSocketsIfAllowed()
 	}
 </script>
+
+<svelte:head>
+	<title>Serene Pub</title>
+	<meta name="description" content="Serene Pub" />
+</svelte:head>
 
 {#if socketsInitialized}
 	<Layout>

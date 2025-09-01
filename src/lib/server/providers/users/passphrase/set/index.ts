@@ -38,7 +38,10 @@ export async function set({
 	})
 
 	// Delete any existing passphrases for this user if createOnly is false
-	!createOnly && (await tx.delete(schema.passphrases).where(eq(schema.passphrases.userId, parseInt(userId))))
+	!createOnly &&
+		(await tx
+			.delete(schema.passphrases)
+			.where(eq(schema.passphrases.userId, parseInt(userId))))
 
 	// Store hash, salt, and iterations in database
 	await tx.insert(schema.passphrases).values({

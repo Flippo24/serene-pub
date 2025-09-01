@@ -299,6 +299,7 @@ declare global {
 					chatId: number
 				}
 				interface Response {
+					chatId: number
 					characterId: number | null
 				}
 			}
@@ -358,6 +359,14 @@ declare global {
 
 		// Chat Messages namespace
 		namespace ChatMessages {
+			namespace Get {
+				interface Params {
+					chatId: number
+				}
+				interface Response {
+					chatMessages: SelectChatMessage[]
+				}
+			}
 			namespace SendPersonaMessage {
 				interface Params {
 					chatId: number
@@ -911,6 +920,7 @@ declare global {
 					username: string
 					displayName?: string
 					isAdmin?: boolean
+					passphrase: string
 				}
 				interface Response {
 					user: SelectUser
@@ -922,6 +932,7 @@ declare global {
 					username?: string
 					displayName?: string
 					isAdmin?: boolean
+					passphrase?: string
 				}
 				interface Response {
 					user: SelectUser
@@ -1100,17 +1111,19 @@ declare global {
 					}
 				}
 				interface Response {
-					selectionMemory: {
-						chat: SelectChat | null
-						character: SelectCharacter | null
-						persona: SelectPersona | null
-						prompt: SelectPromptConfig | null
-						sampling: SelectSamplingConfig | null
-						context: SelectContextConfig | null
-						activePromptConfig: SelectPromptConfig | null
-						activeSamplingConfig: SelectSamplingConfig | null
-						activeContextConfig: SelectContextConfig | null
-					} | undefined
+					selectionMemory:
+						| {
+								chat: SelectChat | null
+								character: SelectCharacter | null
+								persona: SelectPersona | null
+								prompt: SelectPromptConfig | null
+								sampling: SelectSamplingConfig | null
+								context: SelectContextConfig | null
+								activePromptConfig: SelectPromptConfig | null
+								activeSamplingConfig: SelectSamplingConfig | null
+								activeContextConfig: SelectContextConfig | null
+						  }
+						| undefined
 				}
 			}
 		}
@@ -1228,6 +1241,10 @@ declare global {
 				interface Params {}
 				interface Response {
 					userSettings: {
+						activeConnectionId?: number | null
+						activeSamplingConfigId?: number | null
+						activeContextConfigId?: number | null
+						activePromptConfigId?: number | null
 						theme: string
 						darkMode: boolean
 						showHomePageBanner: boolean

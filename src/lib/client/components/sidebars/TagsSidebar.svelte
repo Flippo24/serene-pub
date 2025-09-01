@@ -323,7 +323,7 @@
 
 	function handleCharacterEditClick(character: SelectCharacter) {
 		panelsCtx.digest.characterId = character.id
-		panelsCtx.openPanel({ key: "characters", toggle: false})
+		panelsCtx.openPanel({ key: "characters", toggle: false })
 	}
 
 	function handlePersonaClick(persona: SelectPersona) {
@@ -333,7 +333,7 @@
 
 	function handlePersonaEditClick(persona: SelectPersona) {
 		panelsCtx.digest.characterId = persona.id
-		panelsCtx.openPanel({ key: "personas", toggle: false})
+		panelsCtx.openPanel({ key: "personas", toggle: false })
 	}
 
 	function handleLorebookClick(lorebook: SelectLorebook) {
@@ -347,7 +347,7 @@
 
 	function handleChatEditClick(chat: SelectChat) {
 		panelsCtx.digest.chatId = chat.id
-		panelsCtx.openPanel({ key: "chats", toggle: false})
+		panelsCtx.openPanel({ key: "chats", toggle: false })
 	}
 
 	onMount(() => {
@@ -460,7 +460,8 @@
 							<CharacterListItem
 								{character}
 								onclick={handleCharacterClick}
-								onEdit={() => handleCharacterEditClick(character)}
+								onEdit={() =>
+									handleCharacterEditClick(character)}
 								showControls={true}
 								contentTitle="Go to character chats"
 							/>
@@ -525,7 +526,9 @@
 							<ChatListItem
 								{chat}
 								onclick={handleChatClick}
-								onEdit={() => {handleChatEditClick(chat)}}
+								onEdit={() => {
+									handleChatEditClick(chat)
+								}}
 								showControls={true}
 								contentTitle="Go to chat"
 							/>

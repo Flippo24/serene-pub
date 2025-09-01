@@ -6,20 +6,29 @@ import type { Handler } from "$lib/shared/events"
 
 // --- WEIGHTS SOCKET HANDLERS ---
 
-export const samplingHandler: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
+export const samplingHandler: Handler<
+	Sockets.SamplingConfigs.Get.Params,
+	Sockets.SamplingConfigs.Get.Response
+> = {
 	event: "sampling",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can manage sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can manage sampling configurations."
+			)
 		}
-		
+
 		const sampling = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id),
 			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
 		})
-		const res: Sockets.SamplingConfigs.Get.Response = { sampling: sampling! }
+		const res: Sockets.SamplingConfigs.Get.Response = {
+			sampling: sampling!
+		}
 		emitToUser("sampling", res)
 		return res
 	}
@@ -47,7 +56,11 @@ export async function setUserActiveSamplingConfig(
 	message: { id: number },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await samplingConfigsSetUserActive.handler(socket, { id: message.id }, emitToUser)
+	await samplingConfigsSetUserActive.handler(
+		socket,
+		{ id: message.id },
+		emitToUser
+	)
 }
 
 export async function createSamplingConfig(
@@ -55,7 +68,11 @@ export async function createSamplingConfig(
 	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await samplingConfigsCreate.handler(socket, { sampling: message.sampling }, emitToUser)
+	await samplingConfigsCreate.handler(
+		socket,
+		{ sampling: message.sampling },
+		emitToUser
+	)
 }
 
 export async function deleteSamplingConfig(
@@ -71,37 +88,57 @@ export async function updateSamplingConfig(
 	message: { sampling: any },
 	emitToUser: (event: string, data: any) => void
 ) {
-	await samplingConfigsUpdate.handler(socket, { sampling: message.sampling }, emitToUser)
+	await samplingConfigsUpdate.handler(
+		socket,
+		{ sampling: message.sampling },
+		emitToUser
+	)
 }
 
-export const samplingConfigsGet: Handler<Sockets.SamplingConfigs.Get.Params, Sockets.SamplingConfigs.Get.Response> = {
+export const samplingConfigsGet: Handler<
+	Sockets.SamplingConfigs.Get.Params,
+	Sockets.SamplingConfigs.Get.Response
+> = {
 	event: "samplingConfigs:get",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can manage sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can manage sampling configurations."
+			)
 		}
-		
+
 		const sampling = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id),
 			orderBy: (w, { asc }) => [asc(w.isImmutable), asc(w.name)]
 		})
-		const res: Sockets.SamplingConfigs.Get.Response = { sampling: sampling! }
+		const res: Sockets.SamplingConfigs.Get.Response = {
+			sampling: sampling!
+		}
 		emitToUser("samplingConfigs:get", res)
 		return res
 	}
 }
 
-export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Params, Sockets.SamplingConfigs.List.Response> = {
+export const samplingConfigsListHandler: Handler<
+	Sockets.SamplingConfigs.List.Params,
+	Sockets.SamplingConfigs.List.Response
+> = {
 	event: "samplingConfigs:list",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can manage sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can manage sampling configurations."
+			)
 		}
-		
+
 		const samplingConfigsList = await db.query.samplingConfigs.findMany({
 			columns: {
 				id: true,
@@ -109,27 +146,38 @@ export const samplingConfigsListHandler: Handler<Sockets.SamplingConfigs.List.Pa
 				isImmutable: true
 			}
 		})
-		const res: Sockets.SamplingConfigs.List.Response = { samplingConfigsList }
+		const res: Sockets.SamplingConfigs.List.Response = {
+			samplingConfigsList
+		}
 		emitToUser("samplingConfigs:list", res)
 		return res
 	}
 }
 
-export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUserActive.Params, Sockets.SamplingConfigs.SetUserActive.Response> = {
+export const samplingConfigsSetUserActive: Handler<
+	Sockets.SamplingConfigs.SetUserActive.Params,
+	Sockets.SamplingConfigs.SetUserActive.Response
+> = {
 	event: "samplingConfigs:setUserActive",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can set active sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can set active sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can set active sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can set active sampling configurations."
+			)
 		}
-		
+
 		const userId = socket.user!.id
 		const currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, userId)
 		})
 		if (!currentUser) {
-			emitToUser("samplingConfigs:setUserActive:error", { error: "User not found." })
+			emitToUser("samplingConfigs:setUserActive:error", {
+				error: "User not found."
+			})
 			throw new Error("User not found")
 		}
 
@@ -150,12 +198,16 @@ export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUs
 				activeSamplingConfigId: params.id
 			})
 			.where(eq(schema.userSettings.userId, currentUser.id))
-		
+
 		await user(socket, {}, emitToUser)
 		if (params.id) {
-			await samplingConfigsGet.handler(socket, { id: params.id }, emitToUser)
+			await samplingConfigsGet.handler(
+				socket,
+				{ id: params.id },
+				emitToUser
+			)
 		}
-		
+
 		// Get the updated user to return in response
 		const updatedUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, currentUser.id),
@@ -163,44 +215,65 @@ export const samplingConfigsSetUserActive: Handler<Sockets.SamplingConfigs.SetUs
 				userSettings: true
 			}
 		})
-		const res: Sockets.SamplingConfigs.SetUserActive.Response = { user: updatedUser! }
+		const res: Sockets.SamplingConfigs.SetUserActive.Response = {
+			user: updatedUser!
+		}
 		emitToUser("samplingConfigs:setUserActive", res)
 		return res
 	}
 }
 
-export const samplingConfigsCreate: Handler<Sockets.SamplingConfigs.Create.Params, Sockets.SamplingConfigs.Create.Response> = {
+export const samplingConfigsCreate: Handler<
+	Sockets.SamplingConfigs.Create.Params,
+	Sockets.SamplingConfigs.Create.Response
+> = {
 	event: "samplingConfigs:create",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can create sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can create sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can create sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can create sampling configurations."
+			)
 		}
-		
+
 		const [sampling] = await db
 			.insert(schema.samplingConfigs)
 			.values(params.sampling)
 			.returning()
-		
-		await samplingConfigsSetUserActive.handler(socket, { id: sampling.id }, emitToUser)
+
+		await samplingConfigsSetUserActive.handler(
+			socket,
+			{ id: sampling.id },
+			emitToUser
+		)
 		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
-		
+
 		const res: Sockets.SamplingConfigs.Create.Response = { sampling }
 		emitToUser("samplingConfigs:create", res)
+		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }
 
-export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Params, Sockets.SamplingConfigs.Delete.Response> = {
+export const samplingConfigsDelete: Handler<
+	Sockets.SamplingConfigs.Delete.Params,
+	Sockets.SamplingConfigs.Delete.Response
+> = {
 	event: "samplingConfigs:delete",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can delete sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can delete sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can delete sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can delete sampling configurations."
+			)
 		}
-		
+
 		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, params.id)
 		})
@@ -215,31 +288,48 @@ export const samplingConfigsDelete: Handler<Sockets.SamplingConfigs.Delete.Param
 			where: (us, { eq }) => eq(us.userId, socket.user!.id)
 		})
 		if (userSettings?.activeSamplingConfigId === params.id) {
-			await samplingConfigsSetUserActive.handler(socket, { id: 1 }, emitToUser)
+			// Get the system default sampling config
+			const systemSettings = await db.query.systemSettings.findFirst()
+			const defaultConfigId = systemSettings?.defaultSamplingConfigId || 1
+			await samplingConfigsSetUserActive.handler(
+				socket,
+				{ id: defaultConfigId },
+				emitToUser
+			)
 		}
 		await db
 			.delete(schema.samplingConfigs)
 			.where(eq(schema.samplingConfigs.id, params.id))
 		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
-		
-		const res: Sockets.SamplingConfigs.Delete.Response = { success: "Sampling config deleted successfully" }
+
+		const res: Sockets.SamplingConfigs.Delete.Response = {
+			success: "Sampling config deleted successfully"
+		}
 		emitToUser("samplingConfigs:delete", res)
+		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }
 
-export const samplingConfigsUpdate: Handler<Sockets.SamplingConfigs.Update.Params, Sockets.SamplingConfigs.Update.Response> = {
+export const samplingConfigsUpdate: Handler<
+	Sockets.SamplingConfigs.Update.Params,
+	Sockets.SamplingConfigs.Update.Response
+> = {
 	event: "samplingConfigs:update",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can update sampling configurations." }
+			const res = {
+				error: "Access denied. Only admin users can update sampling configurations."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can update sampling configurations.")
+			throw new Error(
+				"Access denied. Only admin users can update sampling configurations."
+			)
 		}
-		
+
 		const id = params.sampling.id!
 		const { id: _, ...updateData } = params.sampling // Remove id from sampling object to avoid conflicts
-		
+
 		const currentSamplingConfig = await db.query.samplingConfigs.findFirst({
 			where: (w, { eq }) => eq(w.id, id)
 		})
@@ -249,19 +339,22 @@ export const samplingConfigsUpdate: Handler<Sockets.SamplingConfigs.Update.Param
 			})
 			throw new Error("Cannot update immutable samplingConfigs")
 		}
-		
+
 		const [updatedSamplingConfig] = await db
 			.update(schema.samplingConfigs)
 			.set(updateData)
 			.where(eq(schema.samplingConfigs.id, id))
 			.returning()
-		
+
 		await samplingConfigsListHandler.handler(socket, {}, emitToUser)
 		await samplingConfigsGet.handler(socket, { id }, emitToUser)
 		await user(socket, {}, emitToUser)
-		
-		const res: Sockets.SamplingConfigs.Update.Response = { sampling: updatedSamplingConfig }
+
+		const res: Sockets.SamplingConfigs.Update.Response = {
+			sampling: updatedSamplingConfig
+		}
 		emitToUser("samplingConfigs:update", res)
+		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }
@@ -270,7 +363,11 @@ export const samplingConfigsUpdate: Handler<Sockets.SamplingConfigs.Update.Param
 export function registerSamplingConfigHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, samplingConfigsListHandler, emitToUser)
 	register(socket, samplingConfigsGet, emitToUser)

@@ -29,7 +29,7 @@ Serene Pub is a brand new, open source chat application for immersive AI rolepla
 ## Table of Contents
 
 - [Why Serene Pub?](#-why-serene-pub)
-- [Screenshots](#-screenshots) 
+- [Screenshots](#-screenshots)
 - [Features](#-features)
 - [Quick Start](#-quick-start)
 - [Documentation](#-documentation)
@@ -81,8 +81,8 @@ Serene Pub is a brand new, open source chat application for immersive AI rolepla
 
 ### Ollama Manager
 
-| Available Models                                               | Downloads                                               | Installed Models                                               | Settings                                               |
-| -------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------ |
+| Available Models                                             | Downloads                                                    | Installed Models                                             | Settings                                                    |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------- |
 | ![](static/screenshots/sidebar-ollama-manager-available.png) | ![](static/screenshots/sidebar-ollama-manager-downloads.png) | ![](static/screenshots/sidebar-ollama-manager-installed.png) | ![](static/screenshots/sidebar-ollama-manager-settings.png) |
 
 ### Mobile Experience
@@ -159,6 +159,7 @@ Linux, MacOS and Windows are supported!
 ### **[Complete Documentation Available in our Wiki](https://github.com/doolijb/serene-pub/wiki)**
 
 **Popular Wiki Pages:**
+
 - **[Installation & Setup](https://github.com/doolijb/serene-pub/wiki/Installation-&-Setup)** - Detailed setup instructions for all platforms
 - **[Connections](https://github.com/doolijb/serene-pub/wiki/Connections)** - How to connect to AI models (OpenAI, Ollama, LM Studio, etc.)
 - **[Characters & Personas](https://github.com/doolijb/serene-pub/wiki/Characters-&-Personas)** - Creating and managing your roleplay characters

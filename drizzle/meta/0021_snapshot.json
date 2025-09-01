@@ -1,6 +1,6 @@
 {
-	"id": "c7bddd36-b37c-4e1a-8765-fc7198511f5e",
-	"prevId": "ad8b2a43-6595-4084-8255-50f29caf0834",
+	"id": "af6e7ca1-8033-4afc-9608-0f13a6bced16",
+	"prevId": "2d348a4a-d6a8-4a29-b969-c04a4771dcfa",
 	"version": "7",
 	"dialect": "postgresql",
 	"tables": {
@@ -1946,6 +1946,286 @@
 					"primaryKey": false,
 					"notNull": true,
 					"default": false
+				},
+				"min_p": {
+					"name": "min_p",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0.05
+				},
+				"min_p_enabled": {
+					"name": "min_p_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"typical_p": {
+					"name": "typical_p",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1
+				},
+				"typical_p_enabled": {
+					"name": "typical_p_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"mirostat": {
+					"name": "mirostat",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"mirostat_enabled": {
+					"name": "mirostat_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"mirostat_tau": {
+					"name": "mirostat_tau",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 5
+				},
+				"mirostat_tau_enabled": {
+					"name": "mirostat_tau_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"mirostat_eta": {
+					"name": "mirostat_eta",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0.1
+				},
+				"mirostat_eta_enabled": {
+					"name": "mirostat_eta_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"xtc_probability": {
+					"name": "xtc_probability",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"xtc_probability_enabled": {
+					"name": "xtc_probability_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"xtc_threshold": {
+					"name": "xtc_threshold",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0.1
+				},
+				"xtc_threshold_enabled": {
+					"name": "xtc_threshold_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dry_multiplier": {
+					"name": "dry_multiplier",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"dry_multiplier_enabled": {
+					"name": "dry_multiplier_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dry_base": {
+					"name": "dry_base",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1.75
+				},
+				"dry_base_enabled": {
+					"name": "dry_base_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dry_allowed_length": {
+					"name": "dry_allowed_length",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 2
+				},
+				"dry_allowed_length_enabled": {
+					"name": "dry_allowed_length_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dry_penalty_last_n": {
+					"name": "dry_penalty_last_n",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": -1
+				},
+				"dry_penalty_last_n_enabled": {
+					"name": "dry_penalty_last_n_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dry_sequence_breakers": {
+					"name": "dry_sequence_breakers",
+					"type": "json",
+					"primaryKey": false,
+					"notNull": false,
+					"default": "'[\"\\\\n\",\":\",\"\\\"\",\"*\"]'::json"
+				},
+				"dry_sequence_breakers_enabled": {
+					"name": "dry_sequence_breakers_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dynatemp_range": {
+					"name": "dynatemp_range",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 0
+				},
+				"dynatemp_range_enabled": {
+					"name": "dynatemp_range_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"dynatemp_exponent": {
+					"name": "dynatemp_exponent",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1
+				},
+				"dynatemp_exponent_enabled": {
+					"name": "dynatemp_exponent_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"tfs_z": {
+					"name": "tfs_z",
+					"type": "real",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 1
+				},
+				"tfs_z_enabled": {
+					"name": "tfs_z_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"repeat_last_n": {
+					"name": "repeat_last_n",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": 64
+				},
+				"repeat_last_n_enabled": {
+					"name": "repeat_last_n_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"penalize_newline": {
+					"name": "penalize_newline",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": false,
+					"default": false
+				},
+				"penalize_newline_enabled": {
+					"name": "penalize_newline_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"logit_bias": {
+					"name": "logit_bias",
+					"type": "json",
+					"primaryKey": false,
+					"notNull": false,
+					"default": "'{}'::json"
+				},
+				"logit_bias_enabled": {
+					"name": "logit_bias_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"stop": {
+					"name": "stop",
+					"type": "json",
+					"primaryKey": false,
+					"notNull": false,
+					"default": "'[]'::json"
+				},
+				"stop_enabled": {
+					"name": "stop_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"max_tokens": {
+					"name": "max_tokens",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"default": -1
+				},
+				"max_tokens_enabled": {
+					"name": "max_tokens_enabled",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
 				}
 			},
 			"indexes": {},
@@ -1977,6 +2257,58 @@
 						"cycle": false
 					}
 				},
+				"default_connection_id": {
+					"name": "default_connection_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"lock_connection": {
+					"name": "lock_connection",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"default_sampling_id": {
+					"name": "default_sampling_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"lock_sampling_config": {
+					"name": "lock_sampling_config",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"default_context_config_id": {
+					"name": "default_context_config_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"lock_context_config": {
+					"name": "lock_context_config",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
+				"default_prompt_config_id": {
+					"name": "default_prompt_config_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"lock_prompt_config": {
+					"name": "lock_prompt_config",
+					"type": "boolean",
+					"primaryKey": false,
+					"notNull": true,
+					"default": false
+				},
 				"ollama_manager_enabled": {
 					"name": "ollama_manager_enabled",
 					"type": "boolean",
@@ -2000,7 +2332,44 @@
 				}
 			},
 			"indexes": {},
-			"foreignKeys": {},
+			"foreignKeys": {
+				"system_settings_default_connection_id_connections_id_fk": {
+					"name": "system_settings_default_connection_id_connections_id_fk",
+					"tableFrom": "system_settings",
+					"tableTo": "connections",
+					"columnsFrom": ["default_connection_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"system_settings_default_sampling_id_sampling_configs_id_fk": {
+					"name": "system_settings_default_sampling_id_sampling_configs_id_fk",
+					"tableFrom": "system_settings",
+					"tableTo": "sampling_configs",
+					"columnsFrom": ["default_sampling_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"system_settings_default_context_config_id_context_configs_id_fk": {
+					"name": "system_settings_default_context_config_id_context_configs_id_fk",
+					"tableFrom": "system_settings",
+					"tableTo": "context_configs",
+					"columnsFrom": ["default_context_config_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"system_settings_default_prompt_config_id_prompt_configs_id_fk": {
+					"name": "system_settings_default_prompt_config_id_prompt_configs_id_fk",
+					"tableFrom": "system_settings",
+					"tableTo": "prompt_configs",
+					"columnsFrom": ["default_prompt_config_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				}
+			},
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {},
 			"policies": {},
@@ -2099,6 +2468,30 @@
 					"primaryKey": false,
 					"notNull": true
 				},
+				"active_connection_id": {
+					"name": "active_connection_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"active_sampling_id": {
+					"name": "active_sampling_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"active_context_config_id": {
+					"name": "active_context_config_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"active_prompt_config_id": {
+					"name": "active_prompt_config_id",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"theme": {
 					"name": "theme",
 					"type": "text",
@@ -2165,6 +2558,42 @@
 					"columnsFrom": ["user_id"],
 					"columnsTo": ["id"],
 					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"user_settings_active_connection_id_connections_id_fk": {
+					"name": "user_settings_active_connection_id_connections_id_fk",
+					"tableFrom": "user_settings",
+					"tableTo": "connections",
+					"columnsFrom": ["active_connection_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"user_settings_active_sampling_id_sampling_configs_id_fk": {
+					"name": "user_settings_active_sampling_id_sampling_configs_id_fk",
+					"tableFrom": "user_settings",
+					"tableTo": "sampling_configs",
+					"columnsFrom": ["active_sampling_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"user_settings_active_context_config_id_context_configs_id_fk": {
+					"name": "user_settings_active_context_config_id_context_configs_id_fk",
+					"tableFrom": "user_settings",
+					"tableTo": "context_configs",
+					"columnsFrom": ["active_context_config_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"user_settings_active_prompt_config_id_prompt_configs_id_fk": {
+					"name": "user_settings_active_prompt_config_id_prompt_configs_id_fk",
+					"tableFrom": "user_settings",
+					"tableTo": "prompt_configs",
+					"columnsFrom": ["active_prompt_config_id"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
 					"onUpdate": "no action"
 				}
 			},
@@ -2268,27 +2697,9 @@
 					"primaryKey": false,
 					"notNull": true
 				},
-				"active_connection_id": {
-					"name": "active_connection_id",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"active_sampling_id": {
-					"name": "active_sampling_id",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"active_context_config_id": {
-					"name": "active_context_config_id",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": false
-				},
-				"active_prompt_config_id": {
-					"name": "active_prompt_config_id",
-					"type": "integer",
+				"display_name": {
+					"name": "display_name",
+					"type": "text",
 					"primaryKey": false,
 					"notNull": false
 				},
@@ -2336,44 +2747,7 @@
 				}
 			},
 			"indexes": {},
-			"foreignKeys": {
-				"users_active_connection_id_connections_id_fk": {
-					"name": "users_active_connection_id_connections_id_fk",
-					"tableFrom": "users",
-					"tableTo": "connections",
-					"columnsFrom": ["active_connection_id"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
-					"onUpdate": "no action"
-				},
-				"users_active_sampling_id_sampling_configs_id_fk": {
-					"name": "users_active_sampling_id_sampling_configs_id_fk",
-					"tableFrom": "users",
-					"tableTo": "sampling_configs",
-					"columnsFrom": ["active_sampling_id"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
-					"onUpdate": "no action"
-				},
-				"users_active_context_config_id_context_configs_id_fk": {
-					"name": "users_active_context_config_id_context_configs_id_fk",
-					"tableFrom": "users",
-					"tableTo": "context_configs",
-					"columnsFrom": ["active_context_config_id"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
-					"onUpdate": "no action"
-				},
-				"users_active_prompt_config_id_prompt_configs_id_fk": {
-					"name": "users_active_prompt_config_id_prompt_configs_id_fk",
-					"tableFrom": "users",
-					"tableTo": "prompt_configs",
-					"columnsFrom": ["active_prompt_config_id"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
-					"onUpdate": "no action"
-				}
-			},
+			"foreignKeys": {},
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {},
 			"policies": {},

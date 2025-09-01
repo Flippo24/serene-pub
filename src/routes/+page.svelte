@@ -117,7 +117,7 @@
 	// Quick setup functions
 	function handleQuickSetup() {
 		if (!socket) return
-		
+
 		// Auto-set the default configs if not already set
 		if (!userCtx.user?.activeSamplingConfig) {
 			socket.emit("samplingConfigs:setUserActive", { id: 1 }) // Default
@@ -155,7 +155,7 @@
 
 	function createSamplePersona() {
 		if (!socket) return
-		
+
 		const samplePersona = {
 			name: "You",
 			description:
@@ -309,8 +309,8 @@
 	{#if userSettingsCtx.settings?.showHomePageBanner}
 		<div class="relative w-full">
 			<img
-				src={(userSettingsCtx.settings?.darkMode !== undefined 
-					? userSettingsCtx.settings.darkMode 
+				src={(userSettingsCtx.settings?.darkMode !== undefined
+					? userSettingsCtx.settings.darkMode
 					: true) === false
 					? "logo-w-text.png"
 					: "logo-w-text-dark.png"}
@@ -318,7 +318,7 @@
 				class="bg-primary-500/25 w-full rounded-xl"
 			/>
 			<button
-				class="text-primary-800 hover:text-primary-900 dark:text-primary-200 hover:dark:text-primary-100 absolute right-2 top-2 text-xl leading-none font-bold bg-black/20 hover:bg-black/30 rounded-full w-6 h-6 flex items-center justify-center"
+				class="text-primary-800 hover:text-primary-900 dark:text-primary-200 hover:dark:text-primary-100 absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/20 text-xl leading-none font-bold hover:bg-black/30"
 				onclick={toggleBanner}
 				title="Hide banner"
 			>

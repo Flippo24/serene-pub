@@ -26,7 +26,7 @@ class LoginRateLimitService {
 		if (!rateLimit) return false
 
 		const now = Date.now()
-		
+
 		// If window has passed, reset attempts
 		if (now - rateLimit.firstAttempt >= this.windowMs) {
 			this.attempts.delete(ip)
@@ -82,7 +82,7 @@ class LoginRateLimitService {
 		if (!rateLimit) return this.maxAttempts
 
 		const now = Date.now()
-		
+
 		// If window has passed, return max attempts
 		if (now - rateLimit.firstAttempt >= this.windowMs) {
 			return this.maxAttempts
@@ -100,7 +100,7 @@ class LoginRateLimitService {
 
 		const now = Date.now()
 		const windowEnd = rateLimit.firstAttempt + this.windowMs
-		
+
 		return Math.max(0, Math.ceil((windowEnd - now) / 1000))
 	}
 
@@ -108,16 +108,19 @@ class LoginRateLimitService {
 	 * Start cleanup process to remove expired entries
 	 */
 	private startCleanup(): void {
-		this.cleanupInterval = setInterval(() => {
-			const now = Date.now()
-			
-			for (const [ip, rateLimit] of this.attempts.entries()) {
-				// Remove entries older than window
-				if (now - rateLimit.firstAttempt >= this.windowMs) {
-					this.attempts.delete(ip)
+		this.cleanupInterval = setInterval(
+			() => {
+				const now = Date.now()
+
+				for (const [ip, rateLimit] of this.attempts.entries()) {
+					// Remove entries older than window
+					if (now - rateLimit.firstAttempt >= this.windowMs) {
+						this.attempts.delete(ip)
+					}
 				}
-			}
-		}, 2 * 60 * 1000) // Clean up every 2 minutes
+			},
+			2 * 60 * 1000
+		) // Clean up every 2 minutes
 	}
 
 	/**

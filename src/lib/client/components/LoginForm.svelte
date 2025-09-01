@@ -2,11 +2,17 @@
 	import { z } from "zod"
 	import * as Icons from "@lucide/svelte"
 	import { toaster } from "$lib/client/utils/toaster"
-	import { useTypedSocket, refreshAuthAfterLogin } from "$lib/client/sockets/loadSockets.client"
+	import {
+		useTypedSocket,
+		refreshAuthAfterLogin
+	} from "$lib/client/sockets/loadSockets.client"
 
 	// Login form schema
 	const loginSchema = z.object({
-		username: z.string().min(1, "Username is required").max(50, "Username must be 50 characters or less"),
+		username: z
+			.string()
+			.min(1, "Username is required")
+			.max(50, "Username must be 50 characters or less"),
 		passphrase: z.string().min(1, "Passphrase is required")
 	})
 
@@ -44,18 +50,18 @@
 	// Handle form submission
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault()
-		
+
 		if (!validateForm()) {
 			return
 		}
 
 		isLoading = true
-		
+
 		try {
-			const response = await fetch('/api/login', {
-				method: 'POST',
+			const response = await fetch("/api/login", {
+				method: "POST",
 				headers: {
-					'Content-Type': 'application/json'
+					"Content-Type": "application/json"
 				},
 				body: JSON.stringify({
 					username: formData.username,
@@ -77,12 +83,11 @@
 				title: "Login Successful",
 				description: "Welcome back!"
 			})
-			
+
 			// Refresh authentication to load user context
 			refreshAuthAfterLogin()
-
 		} catch (error) {
-			console.error('Login error:', error)
+			console.error("Login error:", error)
 			toaster.error({
 				title: "Login Error",
 				description: "An unexpected error occurred. Please try again."
@@ -95,7 +100,7 @@
 	// Handle input changes with real-time validation
 	function handleInputChange(field: keyof LoginForm, value: string) {
 		formData[field] = value
-		
+
 		// Clear field-specific error when user starts typing
 		if (errors[field]) {
 			errors[field] = ""
@@ -103,23 +108,23 @@
 	}
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-50 to-surface-200 dark:from-surface-900 dark:to-surface-950 px-4 py-12 sm:px-6 lg:px-8">
+<div
+	class="from-surface-50 to-surface-200 dark:from-surface-900 dark:to-surface-950 flex min-h-screen items-center justify-center bg-gradient-to-br px-4 py-12 sm:px-6 lg:px-8"
+>
 	<div class="w-full max-w-md">
 		<!-- Login Container Card -->
-		<div class="bg-surface-0 dark:bg-surface-900 shadow-2xl rounded-2xl border border-surface-200 dark:border-surface-800 p-8 space-y-8">
+		<div
+			class="bg-surface-0 dark:bg-surface-900 border-surface-200 dark:border-surface-800 space-y-8 rounded-2xl border p-8 shadow-2xl"
+		>
 			<!-- Logo and Header -->
 			<div class="text-center">
-				<div class="flex justify-center mb-6">
-					<img
-						src="/logo.png"
-						alt="Serene Pub"
-						class="h-30"
-					/>
+				<div class="mb-6 flex justify-center">
+					<img src="/logo.png" alt="Serene Pub" class="h-30" />
 				</div>
-				<h2 class="text-3xl font-bold tracking-tight text-foreground">
+				<h2 class="text-foreground text-3xl font-bold tracking-tight">
 					Welcome Back
 				</h2>
-				<p class="mt-2 text-sm text-muted-foreground">
+				<p class="text-muted-foreground mt-2 text-sm">
 					Sign in to your Serene Pub account
 				</p>
 			</div>
@@ -128,7 +133,10 @@
 				<div class="space-y-4">
 					<!-- Username Field -->
 					<div>
-						<label for="username" class="block text-sm font-medium text-foreground mb-2">
+						<label
+							for="username"
+							class="text-foreground mb-2 block text-sm font-medium"
+						>
 							Username
 						</label>
 						<div class="relative">
@@ -138,16 +146,25 @@
 								type="text"
 								autocomplete="username"
 								required
-								class="input w-full pl-10 {errors.username ? 'border-error-500' : ''}"
+								class="input w-full pl-10 {errors.username
+									? 'border-error-500'
+									: ''}"
 								placeholder="Enter your username"
 								bind:value={formData.username}
-								oninput={(e) => handleInputChange('username', e.currentTarget.value)}
+								oninput={(e) =>
+									handleInputChange(
+										"username",
+										e.currentTarget.value
+									)}
 								disabled={isLoading}
 							/>
-							<Icons.User class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Icons.User
+								class="text-muted-foreground absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+								aria-hidden="true"
+							/>
 						</div>
 						{#if errors.username}
-							<p class="mt-2 text-sm text-error-500" role="alert">
+							<p class="text-error-500 mt-2 text-sm" role="alert">
 								{errors.username}
 							</p>
 						{/if}
@@ -155,7 +172,10 @@
 
 					<!-- Passphrase Field -->
 					<div>
-						<label for="passphrase" class="block text-sm font-medium text-foreground mb-2">
+						<label
+							for="passphrase"
+							class="text-foreground mb-2 block text-sm font-medium"
+						>
 							Passphrase
 						</label>
 						<div class="relative">
@@ -165,29 +185,47 @@
 								type={showPassphrase ? "text" : "password"}
 								autocomplete="current-password"
 								required
-								class="input w-full pl-10 pr-12 {errors.passphrase ? 'border-error-500' : ''}"
+								class="input w-full pr-12 pl-10 {errors.passphrase
+									? 'border-error-500'
+									: ''}"
 								placeholder="Enter your passphrase"
 								bind:value={formData.passphrase}
-								oninput={(e) => handleInputChange('passphrase', e.currentTarget.value)}
+								oninput={(e) =>
+									handleInputChange(
+										"passphrase",
+										e.currentTarget.value
+									)}
 								disabled={isLoading}
 							/>
-							<Icons.Key class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+							<Icons.Key
+								class="text-muted-foreground absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2"
+								aria-hidden="true"
+							/>
 							<button
 								type="button"
-								class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-								onclick={() => showPassphrase = !showPassphrase}
-								aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
+								class="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
+								onclick={() =>
+									(showPassphrase = !showPassphrase)}
+								aria-label={showPassphrase
+									? "Hide passphrase"
+									: "Show passphrase"}
 								disabled={isLoading}
 							>
 								{#if showPassphrase}
-									<Icons.EyeOff class="h-5 w-5" aria-hidden="true" />
+									<Icons.EyeOff
+										class="h-5 w-5"
+										aria-hidden="true"
+									/>
 								{:else}
-									<Icons.Eye class="h-5 w-5" aria-hidden="true" />
+									<Icons.Eye
+										class="h-5 w-5"
+										aria-hidden="true"
+									/>
 								{/if}
 							</button>
 						</div>
 						{#if errors.passphrase}
-							<p class="mt-2 text-sm text-error-500" role="alert">
+							<p class="text-error-500 mt-2 text-sm" role="alert">
 								{errors.passphrase}
 							</p>
 						{/if}
@@ -198,13 +236,19 @@
 					<button
 						type="submit"
 						disabled={isLoading}
-						class="btn preset-filled-primary-500 w-full flex justify-center items-center py-3 px-4 text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
+						class="btn preset-filled-primary-500 focus:ring-primary-500 flex w-full items-center justify-center px-4 py-3 text-sm font-medium transition-all duration-200 hover:shadow-lg focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						{#if isLoading}
-							<Icons.Loader2 class="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+							<Icons.Loader2
+								class="mr-2 h-4 w-4 animate-spin"
+								aria-hidden="true"
+							/>
 							Signing in...
 						{:else}
-							<Icons.LogIn class="mr-2 h-4 w-4" aria-hidden="true" />
+							<Icons.LogIn
+								class="mr-2 h-4 w-4"
+								aria-hidden="true"
+							/>
 							Sign in
 						{/if}
 					</button>
@@ -212,13 +256,14 @@
 			</form>
 
 			<div class="text-center">
-				<p class="text-xs text-muted-foreground">
+				<p class="text-muted-foreground text-xs">
 					Need help? Contact your administrator.
 				</p>
 			</div>
 		</div>
 	</div>
 </div>
+
 <style lang="postcss">
 	@reference "tailwindcss";
 </style>

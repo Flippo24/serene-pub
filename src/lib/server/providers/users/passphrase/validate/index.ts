@@ -20,12 +20,10 @@ export async function validate({
 }): Promise<boolean> {
 	// Query database for user's passphrase
 	const res = await tx.query.passphrases.findFirst({
-		where: (p, { eq, and, isNull }) => and(
-			eq(p.userId, parseInt(userId)),
-			isNull(p.invalidatedAt)
-		)
+		where: (p, { eq, and, isNull }) =>
+			and(eq(p.userId, parseInt(userId)), isNull(p.invalidatedAt))
 	})
-	
+
 	if (!res) return false
 
 	// Encrypt passphrase with salt and iterations from database

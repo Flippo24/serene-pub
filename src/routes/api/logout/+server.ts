@@ -1,5 +1,5 @@
-import { json, type RequestEvent } from '@sveltejs/kit'
-import { logout } from '$lib/server/providers/users/logout'
+import { json, type RequestEvent } from "@sveltejs/kit"
+import { logout } from "$lib/server/providers/users/logout"
 
 export async function POST({ request, cookies, locals }: RequestEvent) {
 	try {
@@ -10,13 +10,10 @@ export async function POST({ request, cookies, locals }: RequestEvent) {
 
 		return json({
 			success: true,
-			message: 'Logged out successfully'
+			message: "Logged out successfully"
 		})
 	} catch (error) {
-		console.error('Logout API error:', error)
-		return json(
-			{ error: 'Logout failed' },
-			{ status: 500 }
-		)
+		console.error("Logout API error:", error)
+		return json({ error: "Logout failed" }, { status: 500 })
 	}
 }

@@ -57,6 +57,12 @@ declare global {
 			lorebookId?: number
 			tutorial?: boolean
 		}
+		leftNavOrder: string[]
+		rightNavOrder: string[]
+		getOrderedEntries: (
+			nav: Record<string, any>,
+			order: string[]
+		) => Array<[string, any]>
 	}
 
 	interface UserCtx {

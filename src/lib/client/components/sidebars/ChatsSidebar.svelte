@@ -115,7 +115,7 @@
 		url.searchParams.delete("chats-by-characterId")
 		url.searchParams.delete("chats-by-personaId")
 		goto(url.toString(), { replaceState: true })
-		
+
 		if (confirmCloseSidebarResolve) confirmCloseSidebarResolve(true)
 	}
 
@@ -195,12 +195,14 @@
 		delete panelsCtx.digest.chatPersonaId
 	})
 
-
 	$effect(() => {
 		if (searchByCharacterId) {
-			socket.once("characters:get", (msg: Sockets.Characters.Get.Response) => {
-				searchCharacter = msg.character
-			})
+			socket.once(
+				"characters:get",
+				(msg: Sockets.Characters.Get.Response) => {
+					searchCharacter = msg.character
+				}
+			)
 			const charIdReq: Sockets.Characters.Get.Params = {
 				id: searchByCharacterId
 			}
@@ -210,9 +212,12 @@
 
 	$effect(() => {
 		if (searchByPersonaId) {
-			socket.once("personas:get", (msg: Sockets.Personas.Get.Response) => {
-				searchPersona = msg.persona
-			})
+			socket.once(
+				"personas:get",
+				(msg: Sockets.Personas.Get.Response) => {
+					searchPersona = msg.persona
+				}
+			)
 			const personaIdReq: Sockets.Personas.Get.Params = {
 				id: searchByPersonaId
 			}
@@ -234,9 +239,9 @@
 
 <div class="text-foreground flex h-full flex-col p-4">
 	{#if showEditChatForm}
-		<EditChatForm 
-			bind:showEditChatForm 
-			bind:editChatId 
+		<EditChatForm
+			bind:showEditChatForm
+			bind:editChatId
 			bind:hasChanges={chatFormHasChanges}
 		/>
 	{:else}

@@ -68,7 +68,7 @@
 
 	onMount(() => {
 		socket.on(
-			"ollamaVersion",
+			"ollama:version",
 			(message: Sockets.OllamaVersion.Response) => {
 				// We only want to set isConnected if it hasn't been set yet
 				// We don't want to display the initial setup screen if the user
@@ -80,7 +80,7 @@
 		)
 
 		socket.on(
-			"ollamaSetBaseUrl",
+			"ollama:setBaseUrl",
 			(message: Sockets.OllamaSetBaseUrl.Response) => {
 				isSavingBaseUrl = false
 				if (message.success) {
@@ -100,8 +100,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollamaVersion")
-		socket.off("ollamaSetBaseUrl")
+		socket.off("ollama:version")
+		socket.off("ollama:setBaseUrl")
 	})
 
 	// Sidebar close handler

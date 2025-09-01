@@ -447,13 +447,62 @@ const connectionDefaults = {
 }
 
 const samplingKeyMap: Record<string, string> = {
+	// Core sampling parameters
 	temperature: "temperature",
 	topP: "top_p",
 	topK: "top_k",
-	repetitionPenalty: "repeat_penalty",
 	minP: "min_p",
+	seed: "seed",
+
+	// Dynamic temperature
+	dynatemp: "dynatemp_range",
+	dynatempExponent: "dynatemp_exponent",
+
+	// Typical sampling
+	typicalP: "typical_p",
+
+	// Repetition control
+	repetitionPenalty: "repeat_penalty",
+	repeatLastN: "repeat_last_n",
+	presencePenalty: "presence_penalty",
+	frequencyPenalty: "frequency_penalty",
+
+	// DRY (Don't Repeat Yourself) sampling
+	dryMultiplier: "dry_multiplier",
+	dryBase: "dry_base",
+	dryAllowedLength: "dry_allowed_length",
+	dryPenaltyLastN: "dry_penalty_last_n",
+
+	// XTC (Exclude Top Choices) sampling
+	xtcProbability: "xtc_probability",
+	xtcThreshold: "xtc_threshold",
+
+	// Mirostat sampling
+	mirostat: "mirostat",
+	mirostatTau: "mirostat_tau",
+	mirostatEta: "mirostat_eta",
+
+	// Generation limits and control
 	responseTokens: "n_predict",
-	seed: "seed"
+	contextTokens: "n_ctx",
+	nKeep: "n_keep",
+	ignoreEos: "ignore_eos",
+
+	// Advanced features
+	logitBias: "logit_bias",
+	grammar: "grammar",
+	jsonSchema: "json_schema",
+
+	// Special tokens handling
+	addBosToken: "add_bos_token",
+	banEosToken: "ban_eos_token"
+
+	// Note: llama.cpp also supports but not yet mapped:
+	// - n_probs (token probabilities)
+	// - min_keep (minimum tokens to keep)
+	// - t_max_predict_ms (max prediction time)
+	// - samplers (custom sampler order)
+	// - timings_per_token, post_sampling_probs
 }
 
 async function testConnection(

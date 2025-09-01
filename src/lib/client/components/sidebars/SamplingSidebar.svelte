@@ -35,17 +35,10 @@
 	let confirmCloseSidebarResolve: ((v: boolean) => void) | null = null
 	let editingField: string | null = $state(null)
 
-	// Computed property for binding to the active sampling config ID
-	let activeConfigId = $derived.by({
-		get() {
-			return userSettingsCtx.settings?.activeSamplingConfigId || null
-		},
-		set(value: number | null) {
-			if (userSettingsCtx.settings) {
-				userSettingsCtx.settings.activeSamplingConfigId = value
-			}
-		}
-	})
+	// Computed property for getting the active sampling config ID
+	let activeConfigId = $derived(
+		userSettingsCtx.settings?.activeSamplingConfigId || null
+	)
 
 	// Zod validation schema
 	const samplingConfigSchema = z.object({
@@ -55,7 +48,7 @@
 	type ValidationErrors = Record<string, string>
 	let validationErrors: ValidationErrors = $state({})
 
-	type FieldType = "number" | "boolean" | "string"
+	type FieldType = "number" | "boolean" | "string" | "array" | "object"
 
 	const fieldMeta: Record<
 		string,
@@ -66,7 +59,8 @@
 			max?: number
 			step?: number
 			unlockedMax?: number
-			default?: number
+			default?: number | string | boolean | any[] | Record<string, any>
+			description?: string
 		}
 	> = {
 		responseTokens: {
@@ -75,7 +69,8 @@
 			min: 1,
 			max: 4096,
 			step: 1,
-			unlockedMax: 65536
+			unlockedMax: 65536,
+			description: "Maximum number of tokens to generate in the response"
 		}, // Unlocked max for response tokens
 		contextTokens: {
 			label: "Context Tokens",
@@ -83,39 +78,221 @@
 			min: 1,
 			max: 32768,
 			step: 1,
-			unlockedMax: 524288
+			unlockedMax: 524288,
+			description: "Maximum context window size for the model"
 		}, // Unlocked max for context tokens
 		temperature: {
 			label: "Temperature",
 			type: "number",
 			min: 0,
 			max: 2,
-			step: 0.01
+			step: 0.01,
+			description:
+				"Controls randomness: 0 = deterministic, higher = more creative"
 		},
-		topP: { label: "Top P", type: "number", min: 0, max: 1, step: 0.01 },
-		topK: { label: "Top K", type: "number", min: 0, max: 200, step: 1 },
+		topP: {
+			label: "Top P",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description:
+				"Nucleus sampling: consider tokens with cumulative probability P"
+		},
+		topK: {
+			label: "Top K",
+			type: "number",
+			min: 0,
+			max: 200,
+			step: 1,
+			description: "Consider only the K most likely tokens"
+		},
 		repetitionPenalty: {
 			label: "Repetition Penalty",
 			type: "number",
 			min: 0.5,
 			max: 2,
-			step: 0.01
+			step: 0.01,
+			description: "Penalty for repeating tokens (1.0 = no penalty)"
 		},
 		frequencyPenalty: {
 			label: "Frequency Penalty",
 			type: "number",
 			min: 0,
 			max: 2,
-			step: 0.01
+			step: 0.01,
+			description:
+				"Reduces repetition based on token frequency in the output"
 		},
 		presencePenalty: {
 			label: "Presence Penalty",
 			type: "number",
 			min: 0,
 			max: 2,
-			step: 0.01
+			step: 0.01,
+			description:
+				"Encourages new topics by penalizing tokens that have appeared"
 		},
-		seed: { label: "Seed", type: "number", min: -1, max: 999999, step: 1 }
+		seed: {
+			label: "Seed",
+			type: "number",
+			min: -1,
+			max: 999999,
+			step: 1,
+			description: "Random seed for reproducible outputs (-1 = random)"
+		},
+		// New samplers
+		minP: {
+			label: "Min P",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Minimum probability threshold for token sampling"
+		},
+		typicalP: {
+			label: "Typical P",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Typical sampling threshold"
+		},
+		mirostat: {
+			label: "Mirostat Mode",
+			type: "number",
+			min: 0,
+			max: 2,
+			step: 1,
+			description: "0 = disabled, 1 = Mirostat, 2 = Mirostat 2.0"
+		},
+		mirostatTau: {
+			label: "Mirostat Tau",
+			type: "number",
+			min: 0,
+			max: 10,
+			step: 0.1,
+			description: "Target perplexity for Mirostat"
+		},
+		mirostatEta: {
+			label: "Mirostat Eta",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Learning rate for Mirostat"
+		},
+		xtcProbability: {
+			label: "XTC Probability",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Probability for XTC sampling"
+		},
+		xtcThreshold: {
+			label: "XTC Threshold",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Threshold for XTC sampling"
+		},
+		dryMultiplier: {
+			label: "DRY Multiplier",
+			type: "number",
+			min: 0,
+			max: 5,
+			step: 0.1,
+			description: "Penalty multiplier for DRY sampling"
+		},
+		dryBase: {
+			label: "DRY Base",
+			type: "number",
+			min: 1,
+			max: 10,
+			step: 0.1,
+			description: "Exponential base for DRY sampling"
+		},
+		dryAllowedLength: {
+			label: "DRY Allowed Length",
+			type: "number",
+			min: 1,
+			max: 20,
+			step: 1,
+			description: "Allowed repetition length for DRY"
+		},
+		dryPenaltyLastN: {
+			label: "DRY Penalty Last N",
+			type: "number",
+			min: -1,
+			max: 2048,
+			step: 1,
+			description: "Context window for DRY penalty (-1 = full context)"
+		},
+		drySequenceBreakers: {
+			label: "DRY Sequence Breakers",
+			type: "array",
+			default: ["\\n", ":", '"', "*"],
+			description: "Characters that break DRY sequences"
+		},
+		dynatempRange: {
+			label: "Dynamic Temperature Range",
+			type: "number",
+			min: 0,
+			max: 5,
+			step: 0.1,
+			description: "Range for dynamic temperature"
+		},
+		dynatempExponent: {
+			label: "Dynamic Temperature Exponent",
+			type: "number",
+			min: 0.1,
+			max: 5,
+			step: 0.1,
+			description: "Exponent for dynamic temperature scaling"
+		},
+		tfsZ: {
+			label: "TFS Z",
+			type: "number",
+			min: 0,
+			max: 1,
+			step: 0.01,
+			description: "Tail-free sampling parameter (1.0 = disabled)"
+		},
+		repeatLastN: {
+			label: "Repeat Last N",
+			type: "number",
+			min: 0,
+			max: 2048,
+			step: 1,
+			description: "Window size for repetition penalty"
+		},
+		penalizeNewline: {
+			label: "Penalize Newline",
+			type: "boolean",
+			description: "Apply penalty to newline tokens"
+		},
+		logitBias: {
+			label: "Logit Bias",
+			type: "object",
+			default: {},
+			description: "Token ID to bias value mapping"
+		},
+		stop: {
+			label: "Stop Sequences",
+			type: "array",
+			default: [],
+			description: "Sequences that stop generation"
+		},
+		maxTokens: {
+			label: "Max Tokens",
+			type: "number",
+			min: -1,
+			max: 65536,
+			step: 1,
+			description: "Maximum tokens (OpenAI-style, -1 = disabled)"
+		}
 	}
 
 	// Helper: Show field if enabled, or if no enabled flag exists
@@ -123,7 +300,8 @@
 		const enabledKey = key + "Enabled"
 		return (
 			key !== "isImmutable" &&
-			((sampling as any)?.[enabledKey] === undefined || (sampling as any)?.[enabledKey])
+			((sampling as any)?.[enabledKey] === undefined ||
+				(sampling as any)?.[enabledKey])
 		)
 	}
 
@@ -152,8 +330,9 @@
 		$state([])
 
 	function handleSelectChange(e: Event) {
+		const selectedId = +(e.target as HTMLSelectElement).value
 		socket.emit("samplingConfigs:setUserActive", {
-			id: (e.target as HTMLSelectElement).value
+			id: selectedId
 		})
 	}
 
@@ -272,10 +451,13 @@
 
 	onMount(() => {
 		onclose = handleOnClose
-		socket.on("samplingConfigs:get", (message: Sockets.SamplingConfigs.Get.Response) => {
-			sampling = { ...message.sampling }
-			originalSamplingConfig = { ...message.sampling }
-		})
+		socket.on(
+			"samplingConfigs:get",
+			(message: Sockets.SamplingConfigs.Get.Response) => {
+				sampling = { ...message.sampling }
+				originalSamplingConfig = { ...message.sampling }
+			}
+		)
 
 		socket.on(
 			"samplingConfigs:list",
@@ -309,8 +491,25 @@
 				toaster.success({ title: "Sampling Config Created" })
 			}
 		)
+		socket.on(
+			"samplingConfigs:setUserActive",
+			(message: Sockets.SamplingConfigs.SetUserActive.Response) => {
+				if (message.id) {
+					const selectedSampling = samplingConfigsList.find(
+						(s) => s.id === message.id
+					)
+					if (selectedSampling) {
+						console.log(
+							`Switched to sampling config: ${selectedSampling.name}`
+						)
+					}
+				}
+			}
+		)
 
-		socket.emit("samplingConfigs:get", { id: userSettingsCtx.settings?.activeSamplingConfigId })
+		socket.emit("samplingConfigs:get", {
+			id: userSettingsCtx.settings?.activeSamplingConfigId
+		})
 		socket.emit("samplingConfigs:list", {})
 	})
 
@@ -320,6 +519,7 @@
 		socket.off("samplingConfigs:delete")
 		socket.off("samplingConfigs:update")
 		socket.off("samplingConfigs:create")
+		socket.off("samplingConfigs:setUserActive")
 	})
 </script>
 
@@ -341,7 +541,7 @@
 			</h2>
 			<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
 				{#each Object.entries(fieldMeta) as [key, meta]}
-					{#if meta.type === "number" || meta.type === "boolean"}
+					{#if meta.type === "number" || meta.type === "boolean" || meta.type === "array" || meta.type === "object"}
 						<label
 							class="hover:bg-muted flex items-center gap-2 rounded p-2 transition"
 							for="{key}Enabled"
@@ -349,15 +549,19 @@
 							<input
 								id="{key}Enabled"
 								type="checkbox"
-								checked={(sampling as any)?.[key + "Enabled"] ?? false}
+								checked={(sampling as any)?.[key + "Enabled"] ??
+									false}
 								onchange={(e) => {
 									if (sampling) {
-										(sampling as any)[key + "Enabled"] = (e.target as HTMLInputElement).checked
+										;(sampling as any)[key + "Enabled"] = (
+											e.target as HTMLInputElement
+										).checked
 									}
 								}}
 								class="accent-primary"
-								disabled={(sampling as any)?.[key + "Enabled"] ===
-									undefined}
+								disabled={(sampling as any)?.[
+									key + "Enabled"
+								] === undefined}
 							/>
 							<span class="font-medium">{meta.label}</span>
 						</label>
@@ -398,7 +602,7 @@
 			<select
 				class="select select-sm bg-background border-muted rounded border"
 				onchange={handleSelectChange}
-				bind:value={activeConfigId}
+				value={activeConfigId}
 				disabled={unsavedChanges}
 			>
 				{#each samplingConfigsList.filter((w) => w.isImmutable) as w}
@@ -463,6 +667,11 @@
 						<label class="font-semibold" for={key}>
 							{meta?.label ?? key}
 						</label>
+						{#if meta?.description}
+							<p class="text-muted-foreground mb-1 text-xs">
+								{meta.description}
+							</p>
+						{/if}
 						{#if meta?.type === "number"}
 							<div class="flex flex-col items-center gap-2">
 								<input
@@ -474,7 +683,12 @@
 									value={(sampling as any)?.[key] ?? 0}
 									oninput={(e) => {
 										if (sampling) {
-											(sampling as any)[key] = parseFloat((e.target as HTMLInputElement).value)
+											;(sampling as any)[key] =
+												parseFloat(
+													(
+														e.target as HTMLInputElement
+													).value
+												)
 										}
 									}}
 									class="accent-primary w-full"
@@ -494,10 +708,16 @@
 											min={meta.min}
 											max={getFieldMax(key)}
 											step={meta.step}
-											value={(sampling as any)?.[key] ?? 0}
+											value={(sampling as any)?.[key] ??
+												0}
 											oninput={(e) => {
 												if (sampling) {
-													(sampling as any)[key] = parseFloat((e.target as HTMLInputElement).value)
+													;(sampling as any)[key] =
+														parseFloat(
+															(
+																e.target as HTMLInputElement
+															).value
+														)
 												}
 											}}
 											id={key + "-manual"}
@@ -576,10 +796,84 @@
 								checked={(sampling as any)?.[key] ?? false}
 								onchange={(e) => {
 									if (sampling) {
-										(sampling as any)[key] = (e.target as HTMLInputElement).checked
+										;(sampling as any)[key] = (
+											e.target as HTMLInputElement
+										).checked
 									}
 								}}
 								class="accent-primary"
+							/>
+						{:else if meta?.type === "array"}
+							{#if key === "drySequenceBreakers"}
+								<input
+									type="text"
+									id={key}
+									value={(sampling as any)?.[key]?.join(
+										", "
+									) ?? ""}
+									placeholder="Enter comma-separated values"
+									oninput={(e) => {
+										if (sampling) {
+											const value = ((
+												e.target as HTMLInputElement
+											).value(sampling as any)[key] =
+												value
+													.split(",")
+													.map((s) => s.trim())
+													.filter(
+														(s) => s.length > 0
+													))
+										}
+									}}
+									class="input"
+								/>
+							{:else if key === "stop"}
+								<textarea
+									id={key}
+									rows="3"
+									value={(sampling as any)?.[key]?.join(
+										"\n"
+									) ?? ""}
+									placeholder="Enter one sequence per line"
+									oninput={(e) => {
+										if (sampling) {
+											const value = ((
+												e.target as HTMLTextAreaElement
+											).value(sampling as any)[key] =
+												value
+													.split("\n")
+													.map((s) => s.trim())
+													.filter(
+														(s) => s.length > 0
+													))
+										}
+									}}
+									class="textarea resize-none"
+								/>
+							{/if}
+						{:else if meta?.type === "object"}
+							<textarea
+								id={key}
+								rows="3"
+								value={JSON.stringify(
+									(sampling as any)?.[key] ?? {},
+									null,
+									2
+								)}
+								placeholder={`{"token_id": bias_value}`}
+								oninput={(e) => {
+									if (sampling) {
+										try {
+											const value = ((
+												e.target as HTMLTextAreaElement
+											).value(sampling as any)[key] =
+												JSON.parse(value))
+										} catch (err) {
+											// Invalid JSON, don't update
+										}
+									}
+								}}
+								class="textarea resize-none font-mono text-xs"
 							/>
 						{:else}
 							<input
@@ -588,7 +882,9 @@
 								value={(sampling as any)?.[key] ?? ""}
 								oninput={(e) => {
 									if (sampling) {
-										(sampling as any)[key] = (e.target as HTMLInputElement).value
+										;(sampling as any)[key] = (
+											e.target as HTMLInputElement
+										).value
 									}
 								}}
 								class="input"

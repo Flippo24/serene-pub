@@ -3,30 +3,30 @@
 ## Features Implemented:
 
 1. ✅ **Added Users sidebar to navigation**
-   - Added import for UsersSidebar in Layout.svelte
-   - Added "users" navigation item with Users icon to leftNav (conditionally enabled when accounts are enabled)
-   - Added rendering logic for both desktop and mobile versions
+    - Added import for UsersSidebar in Layout.svelte
+    - Added "users" navigation item with Users icon to leftNav (conditionally enabled when accounts are enabled)
+    - Added rendering logic for both desktop and mobile versions
 
 2. ✅ **Conditional Display**
-   - Users sidebar only appears when `systemSettings.isAccountsEnabled` is true
-   - Uses Icons.Users for the sidebar icon
+    - Users sidebar only appears when `systemSettings.isAccountsEnabled` is true
+    - Uses Icons.Users for the sidebar icon
 
 3. ✅ **User Display Logic Fixed**
-   - Fixed redundant display of display name in UsersSidebar.svelte
-   - Now correctly shows:
-     - Username OR display name (if present) as main text
-     - If display name is shown, username appears as smaller text with @ prefix
-     - Admin badge for admin users
+    - Fixed redundant display of display name in UsersSidebar.svelte
+    - Now correctly shows:
+        - Username OR display name (if present) as main text
+        - If display name is shown, username appears as smaller text with @ prefix
+        - Admin badge for admin users
 
 4. ✅ **Admin Controls**
-   - Current admin restrictions already implemented in UsersSidebar:
-     - Only admins can create/edit users (`isCurrentUserAdmin` check)
-     - Users can't edit themselves
-     - Full CRUD operations for user management
+    - Current admin restrictions already implemented in UsersSidebar:
+        - Only admins can create/edit users (`isCurrentUserAdmin` check)
+        - Users can't edit themselves
+        - Full CRUD operations for user management
 
 5. ✅ **Search Functionality**
-   - Already implemented search by username and display name in UsersSidebar
-   - Filters users based on both username and displayName fields
+    - Already implemented search by username and display name in UsersSidebar
+    - Filters users based on both username and displayName fields
 
 ## How to Test:
 

@@ -17,28 +17,34 @@ interface SocketOptions {
  */
 async function getAuthToken(): Promise<string | null> {
 	try {
-		const response = await fetch('/api/socket-token', {
-			credentials: 'include' // Include cookies in request
+		const response = await fetch("/api/socket-token", {
+			credentials: "include" // Include cookies in request
 		})
-		
+
 		if (!response.ok) {
 			return null
 		}
-		
+
 		const data = await response.json()
 		return data.token || null
 	} catch (error) {
-		console.warn('Failed to get auth token:', error)
+		console.warn("Failed to get auth token:", error)
 		return null
 	}
 }
 
-export async function loadSocketsClient({ domain }: { domain: string }): Promise<void> {
+export async function loadSocketsClient({
+	domain
+}: {
+	domain: string
+}): Promise<void> {
 	try {
-		const res: AxiosResponse<SocketsEndpointResponse> = await axios.get("/api/sockets-endpoint")
+		const res: AxiosResponse<SocketsEndpointResponse> = await axios.get(
+			"/api/sockets-endpoint"
+		)
 		const serverUrl = new URL(res.data.endpoint)
 		const host = `${serverUrl.protocol}//${domain}:${serverUrl.port}`
-		
+
 		if (dev) {
 			console.log("Connecting to socket server at:", host)
 		}
@@ -52,11 +58,11 @@ export async function loadSocketsClient({ domain }: { domain: string }): Promise
 		}
 
 		// Add auth token to connection if available
-		const connectionOptions = authToken 
-			? { 
-				...socketOptions, 
-				auth: { token: authToken } 
-			}
+		const connectionOptions = authToken
+			? {
+					...socketOptions,
+					auth: { token: authToken }
+				}
 			: socketOptions
 
 		const io = await skio.setup(host, connectionOptions)
@@ -77,24 +83,27 @@ export async function loadSocketsClient({ domain }: { domain: string }): Promise
 
 			// Listen for successful connection
 			// @ts-ignore
-			io.on('connect', () => {
+			io.on("connect", () => {
 				clearTimeout(connectionTimeout)
 				if (dev) {
-					console.log("Socket client connected successfully", authToken ? "with auth token" : "without auth token")
+					console.log(
+						"Socket client connected successfully",
+						authToken ? "with auth token" : "without auth token"
+					)
 				}
 				resolve()
 			})
 
 			// Listen for connection errors
 			// @ts-ignore
-			io.on('connect_error', (error: any) => {
+			io.on("connect_error", (error: any) => {
 				clearTimeout(connectionTimeout)
 				console.error("Socket connection error:", error)
 				reject(error)
 			})
 
 			// @ts-ignore
-			io.on('disconnect', (reason: string) => {
+			io.on("disconnect", (reason: string) => {
 				if (dev) {
 					console.log("Socket disconnected:", reason)
 				}
@@ -107,7 +116,11 @@ export async function loadSocketsClient({ domain }: { domain: string }): Promise
 }
 
 // Re-export typed socket utilities for convenience
-export { createTypedSocket, useTypedSocket, type TypedSocket } from "./typedSocket"
+export {
+	createTypedSocket,
+	useTypedSocket,
+	type TypedSocket
+} from "./typedSocket"
 
 /**
  * Refresh authentication after login
@@ -117,7 +130,7 @@ export async function refreshAuthAfterLogin(): Promise<void> {
 	try {
 		// Get fresh auth token
 		const authToken = await getAuthToken()
-		
+
 		if (authToken) {
 			// Simple solution: reload the page to reinitialize everything with new auth
 			// This ensures the socket connection is properly reestablished with the new token

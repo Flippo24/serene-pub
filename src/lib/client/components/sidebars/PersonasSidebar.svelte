@@ -46,23 +46,29 @@
 
 	let filteredPersonas = $derived.by(() => {
 		if (!search) return personaList
-		
+
 		const searchLower = search.toLowerCase()
 		return personaList.filter((p) => {
 			// Search by name
 			if (p.name!.toLowerCase().includes(searchLower)) return true
-			
+
 			// Search by description
-			if (p.description && p.description.toLowerCase().includes(searchLower)) return true
-			
+			if (
+				p.description &&
+				p.description.toLowerCase().includes(searchLower)
+			)
+				return true
+
 			// Search by tags
 			if (p.personaTags) {
-				const tagMatch = p.personaTags.some((pt: any) => 
-					pt.tag && pt.tag.name.toLowerCase().includes(searchLower)
+				const tagMatch = p.personaTags.some(
+					(pt: any) =>
+						pt.tag &&
+						pt.tag.name.toLowerCase().includes(searchLower)
 				)
 				if (tagMatch) return true
 			}
-			
+
 			return false
 		})
 	})

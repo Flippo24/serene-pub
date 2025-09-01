@@ -48,7 +48,8 @@ export async function authenticate({
 	////
 
 	const userToken = await tx.query.userTokens.findFirst({
-		where: (t, { and, eq, gt }) => and(eq(t.id, tokenId), gt(t.expiresAt, new Date())),
+		where: (t, { and, eq, gt }) =>
+			and(eq(t.id, tokenId), gt(t.expiresAt, new Date())),
 		orderBy: (t, { desc }) => desc(t.createdAt),
 		with: {
 			user: true
@@ -71,7 +72,11 @@ export async function authenticate({
 		const browser = userAgent.browser.name || "Unknown"
 		const os = userAgent.os.name || "Unknown"
 
-		if (userToken.token !== token || userToken.browser !== browser || userToken.os !== os) {
+		if (
+			userToken.token !== token ||
+			userToken.browser !== browser ||
+			userToken.os !== os
+		) {
 			// If failure, expire the token and delete it from the client
 			await tx
 				.update(schema.userTokens)

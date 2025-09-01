@@ -9,6 +9,9 @@ import { registerChatHandlers } from "./chats"
 import { registerPromptConfigHandlers } from "./promptConfigs"
 import { registerUserHandlers } from "./users"
 import { registerLorebookHandlers } from "./lorebooks"
+import { registerWorldLoreEntryHandlers } from "./worldLoreEntries"
+import { registerCharacterLoreEntryHandlers } from "./characterLoreEntries"
+import { registerHistoryEntryHandlers } from "./historyEntries"
 import { registerTagHandlers } from "./tags"
 import { registerSystemSettingsHandlers } from "./systemSettings"
 import { registerUserSettingsHandlers } from "./userSettings"
@@ -27,7 +30,7 @@ export function connectSockets(io: {
 			socket.disconnect()
 			return
 		}
-		
+
 		// Attach io to socket for use in handlers
 		socket.io = io
 		socket.join("user_" + userId)
@@ -51,6 +54,9 @@ export function connectSockets(io: {
 		registerPromptConfigHandlers(socket, emitToUser, register)
 		registerChatHandlers(socket, emitToUser, register)
 		registerLorebookHandlers(socket, emitToUser, register)
+		registerWorldLoreEntryHandlers(socket, emitToUser, register)
+		registerCharacterLoreEntryHandlers(socket, emitToUser, register)
+		registerHistoryEntryHandlers(socket, emitToUser, register)
 		registerTagHandlers(socket, emitToUser, register)
 		console.log(`Socket connected: ${socket.id} for user ${userId}`)
 	})

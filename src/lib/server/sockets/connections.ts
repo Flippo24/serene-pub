@@ -7,15 +7,22 @@ import type { Handler } from "$lib/shared/events"
 
 // --- CONNECTIONS SOCKET HANDLERS ---
 
-export const connectionsList: Handler<Sockets.Connections.List.Params, Sockets.Connections.List.Response> = {
+export const connectionsList: Handler<
+	Sockets.Connections.List.Params,
+	Sockets.Connections.List.Response
+> = {
 	event: "connections:list",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage connections." }
+			const res = {
+				error: "Access denied. Only admin users can manage connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage connections.")
+			throw new Error(
+				"Access denied. Only admin users can manage connections."
+			)
 		}
-		
+
 		const connectionsList = await db.query.connections.findMany({
 			columns: {
 				id: true,
@@ -30,15 +37,22 @@ export const connectionsList: Handler<Sockets.Connections.List.Params, Sockets.C
 	}
 }
 
-export const connectionsGet: Handler<Sockets.Connections.Get.Params, Sockets.Connections.Get.Response> = {
+export const connectionsGet: Handler<
+	Sockets.Connections.Get.Params,
+	Sockets.Connections.Get.Response
+> = {
 	event: "connections:get",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage connections." }
+			const res = {
+				error: "Access denied. Only admin users can manage connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage connections.")
+			throw new Error(
+				"Access denied. Only admin users can manage connections."
+			)
 		}
-		
+
 		const connection = await db.query.connections.findFirst({
 			where: (c, { eq }) => eq(c.id, params.id)
 		})
@@ -53,23 +67,37 @@ export const connectionsGet: Handler<Sockets.Connections.Get.Params, Sockets.Con
 	}
 }
 
-export const connectionsCreate: Handler<Sockets.Connections.Create.Params, Sockets.Connections.Create.Response> = {
+export const connectionsCreate: Handler<
+	Sockets.Connections.Create.Params,
+	Sockets.Connections.Create.Response
+> = {
 	event: "connections:create",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage connections." }
+			const res = {
+				error: "Access denied. Only admin users can manage connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage connections.")
+			throw new Error(
+				"Access denied. Only admin users can manage connections."
+			)
 		}
-		
+
 		let data = { ...params.connection }
 		const Adapter = getConnectionAdapter(data.type)
 		data = { ...Adapter.connectionDefaults, ...data }
 		if ("id" in data) delete data.id
 		// Always remove id before insert to let DB auto-increment
 		if ("id" in data) delete data.id
-		const [conn] = await db.insert(schema.connections).values(data).returning()
-		await connectionsSetUserActive.handler(socket, { id: conn.id }, emitToUser)
+		const [conn] = await db
+			.insert(schema.connections)
+			.values(data)
+			.returning()
+		await connectionsSetUserActive.handler(
+			socket,
+			{ id: conn.id },
+			emitToUser
+		)
 		await connectionsList.handler(socket, {}, emitToUser)
 		const res: Sockets.Connections.Create.Response = { connection: conn }
 		emitToUser("connections:create", res)
@@ -77,15 +105,22 @@ export const connectionsCreate: Handler<Sockets.Connections.Create.Params, Socke
 	}
 }
 
-export const connectionsUpdate: Handler<Sockets.Connections.Update.Params, Sockets.Connections.Update.Response> = {
+export const connectionsUpdate: Handler<
+	Sockets.Connections.Update.Params,
+	Sockets.Connections.Update.Response
+> = {
 	event: "connections:update",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage connections." }
+			const res = {
+				error: "Access denied. Only admin users can manage connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage connections.")
+			throw new Error(
+				"Access denied. Only admin users can manage connections."
+			)
 		}
-		
+
 		const id = params.connection.id
 		if ("id" in params.connection) delete (params.connection as any).id
 		const [updated] = await db
@@ -102,27 +137,38 @@ export const connectionsUpdate: Handler<Sockets.Connections.Update.Params, Socke
 	}
 }
 
-export const connectionsDelete: Handler<Sockets.Connections.Delete.Params, Sockets.Connections.Delete.Response> = {
+export const connectionsDelete: Handler<
+	Sockets.Connections.Delete.Params,
+	Sockets.Connections.Delete.Response
+> = {
 	event: "connections:delete",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can manage connections." }
+			const res = {
+				error: "Access denied. Only admin users can manage connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can manage connections.")
+			throw new Error(
+				"Access denied. Only admin users can manage connections."
+			)
 		}
-		
+
 		const currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, socket.user!.id)
 		})
-		
+
 		// Check if this connection is the user's active connection
 		if (currentUser) {
 			const userSettings = await db.query.userSettings.findFirst({
 				where: (us, { eq }) => eq(us.userId, currentUser.id)
 			})
-			
+
 			if (userSettings?.activeConnectionId === params.id) {
-				await connectionsSetUserActive.handler(socket, { id: null }, emitToUser)
+				await connectionsSetUserActive.handler(
+					socket,
+					{ id: null },
+					emitToUser
+				)
 			}
 		}
 		await db
@@ -135,15 +181,22 @@ export const connectionsDelete: Handler<Sockets.Connections.Delete.Params, Socke
 	}
 }
 
-export const connectionsSetUserActive: Handler<Sockets.Connections.SetUserActive.Params, Sockets.Connections.SetUserActive.Response> = {
+export const connectionsSetUserActive: Handler<
+	Sockets.Connections.SetUserActive.Params,
+	Sockets.Connections.SetUserActive.Response
+> = {
 	event: "connections:setUserActive",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
-			const res = { error: "Access denied. Only admin users can set active connections." }
+			const res = {
+				error: "Access denied. Only admin users can set active connections."
+			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can set active connections.")
+			throw new Error(
+				"Access denied. Only admin users can set active connections."
+			)
 		}
-		
+
 		const currentUser = await db.query.users.findFirst({
 			where: (u, { eq }) => eq(u.id, socket.user!.id)
 		})
@@ -176,14 +229,18 @@ export const connectionsSetUserActive: Handler<Sockets.Connections.SetUserActive
 		// The user handler is not modularized yet, so call as in original
 		// @ts-ignore
 		await loadUser(socket, {}, emitToUser)
-		if (params.id) await connectionsGet.handler(socket, { id: params.id }, emitToUser)
+		if (params.id)
+			await connectionsGet.handler(socket, { id: params.id }, emitToUser)
 		const res: Sockets.Connections.SetUserActive.Response = { ok: true }
 		emitToUser("connections:setUserActive", res)
 		return res
 	}
 }
 
-export const connectionsTest: Handler<Sockets.Connections.Test.Params, Sockets.Connections.Test.Response> = {
+export const connectionsTest: Handler<
+	Sockets.Connections.Test.Params,
+	Sockets.Connections.Test.Response
+> = {
 	event: "connections:test",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
@@ -193,9 +250,11 @@ export const connectionsTest: Handler<Sockets.Connections.Test.Params, Sockets.C
 				models: []
 			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can test connections.")
+			throw new Error(
+				"Access denied. Only admin users can test connections."
+			)
 		}
-		
+
 		const { Adapter, testConnection, listModels } = getConnectionAdapter(
 			params.connection.type
 		)
@@ -246,7 +305,10 @@ export const connectionsTest: Handler<Sockets.Connections.Test.Params, Sockets.C
 	}
 }
 
-export const connectionsRefreshModels: Handler<Sockets.Connections.RefreshModels.Params, Sockets.Connections.RefreshModels.Response> = {
+export const connectionsRefreshModels: Handler<
+	Sockets.Connections.RefreshModels.Params,
+	Sockets.Connections.RefreshModels.Response
+> = {
 	event: "connections:refreshModels",
 	handler: async (socket, params, emitToUser) => {
 		if (!socket.user!.isAdmin) {
@@ -255,9 +317,11 @@ export const connectionsRefreshModels: Handler<Sockets.Connections.RefreshModels
 				models: []
 			}
 			emitToUser("error", res)
-			throw new Error("Access denied. Only admin users can refresh models.")
+			throw new Error(
+				"Access denied. Only admin users can refresh models."
+			)
 		}
-		
+
 		const { listModels } = getConnectionAdapter(params.connection.type)
 
 		try {
@@ -298,7 +362,11 @@ export const connectionsRefreshModels: Handler<Sockets.Connections.RefreshModels
 export function registerConnectionHandlers(
 	socket: any,
 	emitToUser: (event: string, data: any) => void,
-	register: (socket: any, handler: Handler<any, any>, emitToUser: (event: string, data: any) => void) => void
+	register: (
+		socket: any,
+		handler: Handler<any, any>,
+		emitToUser: (event: string, data: any) => void
+	) => void
 ) {
 	register(socket, connectionsList, emitToUser)
 	register(socket, connectionsGet, emitToUser)

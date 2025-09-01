@@ -66,14 +66,14 @@
 
 	function clearDownloadHistory() {
 		socket.emit(
-			"ollamaClearDownloadHistory",
+			"ollama:clearDownloadHistory",
 			{} as Sockets.OllamaClearDownloadHistory.Call
 		)
 	}
 
 	onMount(() => {
 		socket.on(
-			"ollamaPullProgress",
+			"ollama:pullProgress",
 			(message: Sockets.OllamaPullProgress.Response) => {
 				// Server sends the entire downloadingQuants object
 				downloadingQuants = message.downloadingQuants || {}
@@ -81,7 +81,7 @@
 		)
 
 		socket.on(
-			"ollamaClearDownloadHistory",
+			"ollama:clearDownloadHistory",
 			(message: Sockets.OllamaClearDownloadHistory.Response) => {
 				if (message.success) {
 					downloadingQuants = {}
@@ -94,8 +94,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollamaPullProgress")
-		socket.off("ollamaClearDownloadHistory")
+		socket.off("ollama:pullProgress")
+		socket.off("ollama:clearDownloadHistory")
 	})
 </script>
 
