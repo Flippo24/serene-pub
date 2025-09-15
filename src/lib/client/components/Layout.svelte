@@ -70,22 +70,20 @@
 			"users",
 			"settings"
 		],
-		rightNavOrder: [
-			"tags", "personas", "characters", "lorebooks", "chats"
-		],
+		rightNavOrder: ["tags", "personas", "characters", "lorebooks", "chats"],
 		getOrderedEntries: (nav: Record<string, any>, order: string[]) => {
-		// First, get entries that are in the order array
-		const orderedEntries = order
-			.filter((key) => key in nav)
-			.map((key) => [key, nav[key]] as const)
+			// First, get entries that are in the order array
+			const orderedEntries = order
+				.filter((key) => key in nav)
+				.map((key) => [key, nav[key]] as const)
 
-		// Then, append any entries not in the order array
-		const remainingEntries = Object.entries(nav).filter(
-			([key]) => !order.includes(key)
-		)
+			// Then, append any entries not in the order array
+			const remainingEntries = Object.entries(nav).filter(
+				([key]) => !order.includes(key)
+			)
 
-		return [...orderedEntries, ...remainingEntries]
-	}
+			return [...orderedEntries, ...remainingEntries]
+		}
 	})
 	let systemSettingsCtx: SystemSettingsCtx = $state({ settings: undefined })
 	let userSettingsCtx: UserSettingsCtx = $state({ settings: undefined })

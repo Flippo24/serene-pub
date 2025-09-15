@@ -11,9 +11,14 @@
 		CONNECTION_TYPES
 	} from "$lib/shared/constants/ConnectionTypes"
 	import LlamaCppForm from "$lib/client/connectionForms/LlamaCppForm.svelte"
+	import KoboldCppForm from "$lib/client/connectionForms/KoboldCppForm.svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { PromptFormats } from "$lib/shared/constants/PromptFormats"
 	import { TokenCounterOptions } from "$lib/shared/constants/TokenCounters"
+	import {
+		CONNECTION_DEFAULTS,
+		OPENAI_CHAT_PRESETS
+	} from "$lib/shared/utils/connectionDefaults"
 
 	interface Props {
 		onclose?: () => Promise<boolean> | undefined
@@ -26,204 +31,6 @@
 	let panelsCtx: PanelsCtx = getContext("panelsCtx")
 
 	const socket = useTypedSocket()
-
-	const OAIChatPresets: {
-		name: string
-		value: number
-		connectionDefaults: {
-			baseUrl: string
-			promptFormat?: string
-			tokenCounter?: string
-			extraJson: {
-				stream: boolean
-				prerenderPrompt: boolean
-				apiKey: string
-			}
-		}
-	}[] = [
-		{
-			name: "Empty",
-			value: 0,
-			connectionDefaults: {
-				baseUrl: "",
-				promptFormat: PromptFormats.VICUNA,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "Ollama",
-			value: 1,
-			connectionDefaults: {
-				baseUrl: "http://localhost:11434/v1/",
-				promptFormat: PromptFormats.VICUNA,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: "ollama"
-				}
-			}
-		},
-		// {
-		// 	name: "LM Studio",
-		// 	value: 2,
-		// 	connectionDefaults: {
-		// 		baseUrl: "http://localhost:1234/v1/",
-		// 		promptFormat: PromptFormats.VICUNA,
-		// 		tokenCounter: TokenCounterOptions.ESTIMATE,
-		// 		extraJson: {
-		// 			stream: true,
-		// 			prerenderPrompt: false,
-		// 			apiKey: "",
-		// 		}
-		// 	}
-		// }
-		{
-			name: "OpenRouter",
-			value: 3,
-			connectionDefaults: {
-				baseUrl: "https://openrouter.ai/api/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "OpenAI (Official)",
-			value: 4,
-			connectionDefaults: {
-				baseUrl: "https://api.openai.com/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.OPENAI_GPT4O,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "LocalAI",
-			value: 5,
-			connectionDefaults: {
-				baseUrl: "http://localhost:8080/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "AnyScale",
-			value: 6,
-			connectionDefaults: {
-				baseUrl: "https://api.endpoints.anyscale.com/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "Groq",
-			value: 7,
-			connectionDefaults: {
-				baseUrl: "https://api.groq.com/openai/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "Together AI",
-			value: 8,
-			connectionDefaults: {
-				baseUrl: "https://api.together.xyz/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "DeepInfra",
-			value: 9,
-			connectionDefaults: {
-				baseUrl: "https://api.deepinfra.com/v1/openai/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "Fireworks AI",
-			value: 10,
-			connectionDefaults: {
-				baseUrl: "https://api.fireworks.ai/inference/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "Perplexity AI",
-			value: 11,
-			connectionDefaults: {
-				baseUrl: "https://api.perplexity.ai/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		},
-		{
-			name: "KoboldCPP",
-			value: 12,
-			connectionDefaults: {
-				baseUrl: "http://localhost:5001/v1/",
-				promptFormat: PromptFormats.OPENAI,
-				tokenCounter: TokenCounterOptions.ESTIMATE,
-				extraJson: {
-					stream: true,
-					prerenderPrompt: false,
-					apiKey: ""
-				}
-			}
-		}
-	]
 
 	// --- State ---
 	let connectionsList: SelectConnection[] = $state([])
@@ -319,7 +126,7 @@
 			return
 		}
 		if (newConnectionType === CONNECTION_TYPE.OPENAI_CHAT) {
-			const preset = OAIChatPresets.find(
+			const preset = OPENAI_CHAT_PRESETS.find(
 				(p) => p.value === newConnectionOAIChatPreset
 			)
 			if (!preset) {
@@ -332,10 +139,10 @@
 			type: newConnectionType,
 			enabled: true,
 			...(newConnectionType === CONNECTION_TYPE.OPENAI_CHAT
-				? OAIChatPresets.find(
+				? OPENAI_CHAT_PRESETS.find(
 						(p) => p.value === newConnectionOAIChatPreset
 					)?.connectionDefaults
-				: {})
+				: CONNECTION_DEFAULTS[newConnectionType] || {})
 		}
 		socket.emit("connections:create", { connection: newConn })
 		showNewConnectionModal = false
@@ -600,6 +407,8 @@
 					<LmStudioForm bind:connection />
 				{:else if connection.type === CONNECTION_TYPE.LLAMACPP_COMPLETION}
 					<LlamaCppForm bind:connection />
+				{:else if connection.type === CONNECTION_TYPE.KOBOLDCPP}
+					<KoboldCppForm bind:connection />
 				{/if}
 			</section>
 		{/key}
@@ -732,7 +541,7 @@
 							bind:value={newConnectionOAIChatPreset}
 							aria-describedby="preset-help"
 						>
-							{#each OAIChatPresets as preset}
+							{#each OPENAI_CHAT_PRESETS as preset}
 								<option value={preset.value}>
 									{preset.name}
 								</option>

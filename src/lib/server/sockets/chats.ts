@@ -11,6 +11,10 @@ import { InterpolationEngine } from "../utils/promptBuilder"
 import { dev } from "$app/environment"
 import type { Handler } from "$lib/shared/events"
 import { getUserConfigurations } from "../utils/getUserConfigurations"
+import {
+	broadcastToChatUsers,
+	createChatBroadcaster
+} from "./utils/broadcastHelpers"
 
 // ===== SECURITY HELPERS =====
 
@@ -124,26 +128,31 @@ async function processChatTags(
 	})
 
 	// Filter to only tags that belong to this user
-	const userChatTags = existingChatTags.filter(ct => ct.tag.userId === userId)
-	const existingTagNames = userChatTags.map(ct => ct.tag.name)
-	
+	const userChatTags = existingChatTags.filter(
+		(ct) => ct.tag.userId === userId
+	)
+	const existingTagNames = userChatTags.map((ct) => ct.tag.name)
+
 	// Normalize tag names for comparison
-	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
-	
+	const normalizedNewTags = (tagNames || [])
+		.map((t) => t.trim())
+		.filter((t) => t.length > 0)
+
 	// Find tags to remove (exist in DB but not in new list)
-	const tagsToRemove = userChatTags.filter(ct => 
-		!normalizedNewTags.includes(ct.tag.name)
+	const tagsToRemove = userChatTags.filter(
+		(ct) => !normalizedNewTags.includes(ct.tag.name)
 	)
-	
+
 	// Find tags to add (exist in new list but not in DB)
-	const tagsToAdd = normalizedNewTags.filter(tagName => 
-		!existingTagNames.includes(tagName)
+	const tagsToAdd = normalizedNewTags.filter(
+		(tagName) => !existingTagNames.includes(tagName)
 	)
-	
+
 	// Remove tags that are no longer in the list
 	if (tagsToRemove.length > 0) {
-		const tagIdsToRemove = tagsToRemove.map(ct => ct.tagId)
-		await db.delete(schema.chatTags)
+		const tagIdsToRemove = tagsToRemove.map((ct) => ct.tagId)
+		await db
+			.delete(schema.chatTags)
 			.where(
 				and(
 					eq(schema.chatTags.chatId, chatId),
@@ -151,7 +160,7 @@ async function processChatTags(
 				)
 			)
 	}
-	
+
 	// Add new tags
 	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user
@@ -258,7 +267,7 @@ export const chatsListHandler: Handler<
 			canEdit: chat.userId === userId // User can edit only if they own the chat
 		}))
 
-		const response = { chatList: chatsWithEditPermission as any }
+		const response = { chatList: chatsWithEditPermission }
 		emitToUser("chats:list", response)
 		return response
 	}
@@ -393,8 +402,14 @@ async function getChatFromDB(
 	limit?: number,
 	offset?: number
 ) {
+	// Check if user has access (owner or guest)
+	const chatAccess = await checkChatAccess(chatId, userId)
+	if (!chatAccess.hasAccess) {
+		return null
+	}
+
 	const res = db.query.chats.findFirst({
-		where: (c, { eq, and }) => and(eq(c.id, chatId), eq(c.userId, userId)),
+		where: (c, { eq }) => eq(c.id, chatId),
 		with: {
 			chatPersonas: {
 				with: { persona: true },
@@ -409,6 +424,11 @@ async function getChatFromDB(
 			chatTags: {
 				with: {
 					tag: true
+				}
+			},
+			chatGuests: {
+				with: {
+					user: true
 				}
 			}
 		}
@@ -444,8 +464,14 @@ async function getChatFromDB(
 
 // Returns complete chat data for prompt compilation
 async function getPromptChatFromDb(chatId: number, userId: number) {
+	// Check if user has access (owner or guest)
+	const chatAccess = await checkChatAccess(chatId, userId)
+	if (!chatAccess.hasAccess) {
+		return null
+	}
+
 	const chat = await db.query.chats.findFirst({
-		where: (c, { eq, and }) => and(eq(c.id, chatId), eq(c.userId, userId)),
+		where: (c, { eq }) => eq(c.id, chatId),
 		with: {
 			chatMessages: {
 				where: (cm, { eq }) => eq(cm.isHidden, false),
@@ -637,6 +663,398 @@ export const chatsUpdateHandler: Handler<
 	}
 }
 
+export const chatsAddPersonaHandler: Handler<
+	Sockets.Chats.AddPersona.Params,
+	Sockets.Chats.AddPersona.Response
+> = {
+	event: "chats:addPersona",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = socket.user!.id
+			const { chatId, personaId } = params
+
+			// Check if user has access to this chat
+			const chatAccess = await checkChatAccess(chatId, userId)
+			if (!chatAccess.hasAccess) {
+				const res: Sockets.Chats.AddPersona.Response = {
+					success: false,
+					error: "Access denied. Chat not found or no permission to access."
+				}
+				emitToUser("chats:addPersona", res)
+				return res
+			}
+
+			// Check if user owns the persona they're trying to add
+			const ownsPersona = await checkPersonaOwnership(personaId, userId)
+			if (!ownsPersona) {
+				const res: Sockets.Chats.AddPersona.Response = {
+					success: false,
+					error: "Access denied. You can only add personas you own."
+				}
+				emitToUser("chats:addPersona", res)
+				return res
+			}
+
+			// Check if persona is already in the chat
+			const existingChatPersona = await db.query.chatPersonas.findFirst({
+				where: and(
+					eq(schema.chatPersonas.chatId, chatId),
+					eq(schema.chatPersonas.personaId, personaId)
+				)
+			})
+
+			if (existingChatPersona) {
+				const res: Sockets.Chats.AddPersona.Response = {
+					success: false,
+					error: "This persona is already in the chat."
+				}
+				emitToUser("chats:addPersona", res)
+				return res
+			}
+
+			// Get the next position
+			const maxPosition = await db
+				.select({ maxPos: schema.chatPersonas.position })
+				.from(schema.chatPersonas)
+				.where(eq(schema.chatPersonas.chatId, chatId))
+				.orderBy(desc(schema.chatPersonas.position))
+				.limit(1)
+
+			const nextPosition = maxPosition[0]?.maxPos
+				? maxPosition[0].maxPos + 1
+				: 0
+
+			// Add persona to chat
+			await db.insert(schema.chatPersonas).values({
+				chatId,
+				personaId,
+				position: nextPosition
+			})
+
+			// Broadcast updated chat to all participants
+			const updatedChat = await getChatFromDB(chatId, userId)
+			if (updatedChat) {
+				await broadcastToChatUsers(socket.io, chatId, "chats:get", {
+					chat: updatedChat as any,
+					messages: (updatedChat as any).chatMessages || null
+				})
+			}
+
+			const res: Sockets.Chats.AddPersona.Response = {
+				success: true
+			}
+			emitToUser("chats:addPersona", res)
+			return res
+		} catch (error: any) {
+			console.error("Error adding persona to chat:", error)
+			const res: Sockets.Chats.AddPersona.Response = {
+				success: false,
+				error: "Failed to add persona to chat"
+			}
+			emitToUser("chats:addPersona:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatsAddGuestHandler: Handler<
+	Sockets.Chats.AddGuest.Params,
+	Sockets.Chats.AddGuest.Response
+> = {
+	event: "chats:addGuest",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = socket.user!.id
+			const { chatId, guestUserId } = params
+
+			// Only chat owner can add guests
+			const chatAccess = await checkChatAccess(chatId, userId)
+			if (!chatAccess.isOwner) {
+				const res: Sockets.Chats.AddGuest.Response = {
+					success: false,
+					error: "Access denied. Only chat owners can add guests."
+				}
+				emitToUser("chats:addGuest", res)
+				return res
+			}
+
+			// Check if guest is already in the chat
+			const existingGuest = await db.query.chatGuests.findFirst({
+				where: and(
+					eq(schema.chatGuests.chatId, chatId),
+					eq(schema.chatGuests.userId, guestUserId)
+				)
+			})
+
+			if (existingGuest) {
+				const res: Sockets.Chats.AddGuest.Response = {
+					success: false,
+					error: "This user is already a guest in the chat."
+				}
+				emitToUser("chats:addGuest", res)
+				return res
+			}
+
+			// Add guest to chat
+			await db.insert(schema.chatGuests).values({
+				chatId,
+				userId: guestUserId,
+				isPlayer: true
+			})
+
+			// Broadcast updated chat to all participants
+			const updatedChat = await getChatFromDB(chatId, userId)
+			if (updatedChat) {
+				await broadcastToChatUsers(socket.io, chatId, "chats:get", {
+					chat: updatedChat as any,
+					messages: (updatedChat as any).chatMessages || null
+				})
+			}
+
+			const res: Sockets.Chats.AddGuest.Response = {
+				success: true
+			}
+			emitToUser("chats:addGuest", res)
+			return res
+		} catch (error: any) {
+			console.error("Error adding guest to chat:", error)
+			const res: Sockets.Chats.AddGuest.Response = {
+				success: false,
+				error: "Failed to add guest to chat"
+			}
+			emitToUser("chats:addGuest:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatsRemoveGuestHandler: Handler<
+	Sockets.Chats.RemoveGuest.Params,
+	Sockets.Chats.RemoveGuest.Response
+> = {
+	event: "chats:removeGuest",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = socket.user!.id
+			const { chatId, guestUserId } = params
+
+			// Only chat owner can remove guests
+			const chatAccess = await checkChatAccess(chatId, userId)
+			if (!chatAccess.isOwner) {
+				const res: Sockets.Chats.RemoveGuest.Response = {
+					success: false,
+					error: "Access denied. Only chat owners can remove guests."
+				}
+				emitToUser("chats:removeGuest", res)
+				return res
+			}
+
+			// Remove guest from chat
+			await db
+				.delete(schema.chatGuests)
+				.where(
+					and(
+						eq(schema.chatGuests.chatId, chatId),
+						eq(schema.chatGuests.userId, guestUserId)
+					)
+				)
+
+			// Broadcast updated chat to all remaining participants
+			const updatedChat = await getChatFromDB(chatId, userId)
+			if (updatedChat) {
+				await broadcastToChatUsers(socket.io, chatId, "chats:get", {
+					chat: updatedChat as any,
+					messages: (updatedChat as any).chatMessages || null
+				})
+			}
+
+			// Also notify the removed guest that they've been removed
+			socket.io.to(`user_${guestUserId}`).emit("chats:removedAsGuest", {
+				chatId
+			})
+
+			const res: Sockets.Chats.RemoveGuest.Response = {
+				success: true
+			}
+			emitToUser("chats:removeGuest", res)
+			return res
+		} catch (error: any) {
+			console.error("Error removing guest from chat:", error)
+			const res: Sockets.Chats.RemoveGuest.Response = {
+				success: false,
+				error: "Failed to remove guest from chat"
+			}
+			emitToUser("chats:removeGuest:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatsBranchHandler: Handler<
+	Sockets.Chats.Branch.Params,
+	Sockets.Chats.Branch.Response
+> = {
+	event: "chats:branch",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = socket.user!.id
+			const { chatId, messageId, title } = params
+
+			// Check if user has access to this chat
+			const chatAccess = await checkChatAccess(chatId, userId)
+			if (!chatAccess.hasAccess) {
+				const res: Sockets.Chats.Branch.Response = {
+					error: "Access denied. Chat not found or no permission to access."
+				}
+				emitToUser("chats:branch", res)
+				return res
+			}
+
+			// Get the original chat with all relations
+			const originalChat = await db.query.chats.findFirst({
+				where: eq(schema.chats.id, chatId),
+				with: {
+					chatCharacters: {
+						orderBy: asc(schema.chatCharacters.position)
+					},
+					chatPersonas: {
+						orderBy: asc(schema.chatPersonas.position)
+					},
+					chatGuests: true,
+					chatTags: true
+				}
+			})
+
+			if (!originalChat) {
+				const res: Sockets.Chats.Branch.Response = {
+					error: "Original chat not found"
+				}
+				emitToUser("chats:branch", res)
+				return res
+			}
+
+			// Verify the message exists and get its position
+			const branchMessage = await db.query.chatMessages.findFirst({
+				where: and(
+					eq(schema.chatMessages.id, messageId),
+					eq(schema.chatMessages.chatId, chatId)
+				)
+			})
+
+			if (!branchMessage) {
+				const res: Sockets.Chats.Branch.Response = {
+					error: "Branch message not found"
+				}
+				emitToUser("chats:branch", res)
+				return res
+			}
+
+			// Create the new chat with only the properties that exist in the schema
+			const newChatData: InsertChat = {
+				name: title,
+				scenario: originalChat.scenario,
+				userId: originalChat.userId,
+				isGroup: originalChat.isGroup,
+				groupReplyStrategy: originalChat.groupReplyStrategy,
+				metadata: originalChat.metadata,
+				lorebookId: originalChat.lorebookId
+			}
+
+			const [newChat] = await db
+				.insert(schema.chats)
+				.values(newChatData)
+				.returning()
+
+			// Copy chat characters
+			for (const chatCharacter of (originalChat as any).chatCharacters) {
+				await db.insert(schema.chatCharacters).values({
+					chatId: newChat.id,
+					characterId: chatCharacter.characterId,
+					position: chatCharacter.position,
+					isActive: chatCharacter.isActive,
+					visibility: chatCharacter.visibility
+				})
+			}
+
+			// Copy chat personas
+			for (const chatPersona of (originalChat as any).chatPersonas) {
+				await db.insert(schema.chatPersonas).values({
+					chatId: newChat.id,
+					personaId: chatPersona.personaId,
+					position: chatPersona.position
+				})
+			}
+
+			// Copy chat guests
+			for (const chatGuest of (originalChat as any).chatGuests) {
+				await db.insert(schema.chatGuests).values({
+					chatId: newChat.id,
+					userId: chatGuest.userId
+				})
+			}
+
+			// Copy chat tags
+			for (const chatTag of (originalChat as any).chatTags) {
+				await db.insert(schema.chatTags).values({
+					chatId: newChat.id,
+					tagId: chatTag.tagId
+				})
+			}
+
+			// Get all messages up to and including the branch message
+			const allMessages = await db.query.chatMessages.findMany({
+				where: eq(schema.chatMessages.chatId, chatId),
+				orderBy: asc(schema.chatMessages.id)
+			})
+
+			// Filter messages up to and including the branch message
+			const messagesToCopy = allMessages.filter(
+				msg => msg.id <= messageId
+			)
+
+			// Copy messages
+			for (const message of messagesToCopy) {
+				const newMessageData: InsertChatMessage = {
+					chatId: newChat.id,
+					userId: message.userId,
+					personaId: message.personaId,
+					characterId: message.characterId,
+					role: message.role,
+					content: message.content,
+					isHidden: message.isHidden,
+					isGenerating: false, // Always set to false for copied messages
+					metadata: message.metadata
+				}
+
+				await db.insert(schema.chatMessages).values(newMessageData)
+			}
+
+			// Fetch the complete new chat with messages
+			const branchedChat = await getChatFromDB(newChat.id, userId)
+			if (!branchedChat) {
+				throw new Error("Failed to fetch branched chat")
+			}
+
+			// Refresh chat list
+			await chatsListHandler.handler(socket, {}, emitToUser)
+
+			const res: Sockets.Chats.Branch.Response = {
+				chat: branchedChat as any
+			}
+			emitToUser("chats:branch", res)
+			return res
+
+		} catch (error: any) {
+			console.error("Error branching chat:", error)
+			const res: Sockets.Chats.Branch.Response = {
+				error: "Failed to branch chat"
+			}
+			emitToUser("chats:branch:error", res)
+			throw error
+		}
+	}
+}
+
 export const chatMessagesSendPersonaMessageHandler: Handler<
 	Sockets.ChatMessages.SendPersonaMessage.Params,
 	Sockets.ChatMessages.SendPersonaMessage.Response
@@ -705,11 +1123,19 @@ export const chatMessagesSendPersonaMessageHandler: Handler<
 			}
 			emitToUser("chatMessages:sendPersonaMessage", res)
 
-			// Emit chatMessage to notify listeners of new message
-			await chatMessage(socket, { chatMessage: inserted }, emitToUser)
+			// Broadcast chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				inserted.chatId,
+				"chatMessage",
+				{ chatMessage: inserted }
+			)
 
 			// Check if this is a 1-on-1 chat (not a group chat)
 			if (!chat.isGroup) {
+				console.log(
+					`[sendPersonaMessage] Triggering single character response for 1:1 chat ${chatId}`
+				)
 				// Trigger character response generation
 				await triggerGenerateMessageHandler.handler(
 					socket,
@@ -767,8 +1193,13 @@ export const chatMessagesUpdateHandler: Handler<
 			}
 			emitToUser("chatMessages:update", res)
 
-			// Emit chatMessage to notify listeners of updated message
-			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+			// Broadcast chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				updated.chatId,
+				"chatMessage",
+				{ chatMessage: updated }
+			)
 
 			return res
 		} catch (error: any) {
@@ -896,8 +1327,13 @@ export const chatMessagesRegenerateHandler: Handler<
 			}
 			emitToUser("chatMessages:regenerate", res)
 
-			// Emit chatMessage to notify listeners that regeneration has started
-			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+			// Broadcast chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				updated.chatId,
+				"chatMessage",
+				{ chatMessage: updated }
+			)
 
 			// Start generating the response
 			await generateResponse({
@@ -1046,8 +1482,13 @@ export const chatMessagesSwipeLeftHandler: Handler<
 			}
 			emitToUser("chatMessages:swipeLeft", res)
 
-			// Emit chatMessage to notify listeners
-			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+			// Broadcast chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				updated.chatId,
+				"chatMessage",
+				{ chatMessage: updated }
+			)
 
 			return res
 		} catch (error: any) {
@@ -1167,13 +1608,23 @@ export const chatMessagesSwipeRightHandler: Handler<
 			emitToUser("chatMessages:swipeRight", res)
 
 			if (!updated.isGenerating) {
-				// If the message is not generating, emit the updated chatMessage
-				await chatMessage(socket, { chatMessage: updated }, emitToUser)
+				// If the message is not generating, broadcast the updated chatMessage
+				await broadcastToChatUsers(
+					socket.io,
+					updated.chatId,
+					"chatMessage",
+					{ chatMessage: updated }
+				)
 				return res
 			}
 
 			// If the message is generating, we need to start generating a response
-			await chatMessage(socket, { chatMessage: updated }, emitToUser)
+			await broadcastToChatUsers(
+				socket.io,
+				updated.chatId,
+				"chatMessage",
+				{ chatMessage: updated }
+			)
 
 			await generateResponse({
 				socket,
@@ -1209,7 +1660,8 @@ export const chatsGetResponseOrderHandler: Handler<
 			if (!chat) {
 				const res: Sockets.Chats.GetResponseOrder.Response = {
 					chatId: params.chatId,
-					characterId: null
+					nextCharacterId: null,
+					characterIds: []
 				}
 				emitToUser("chats:getResponseOrder", res)
 				return res
@@ -1232,16 +1684,20 @@ export const chatsGetResponseOrderHandler: Handler<
 			)
 
 			const res: Sockets.Chats.GetResponseOrder.Response = {
-				characterId: nextCharacterId
+				chatId: params.chatId,
+				nextCharacterId: nextCharacterId,
+				characterIds: [] // Empty array for now, can be populated later if needed
 			}
 			emitToUser("chats:getResponseOrder", res)
 			return res
 		} catch (error: any) {
 			console.error("Error getting chat response order:", error)
 			const res: Sockets.Chats.GetResponseOrder.Response = {
-				characterId: null
+				chatId: params.chatId,
+				nextCharacterId: null,
+				characterIds: []
 			}
-			emitToUser("chats:getResponseOrder:error", res)
+			emitToUser("chats:getResponseOrder", res)
 			throw error
 		}
 	}
@@ -1254,7 +1710,7 @@ export const chatMessagesCancelHandler: Handler<
 	event: "chatMessages:cancel",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const userId = 1
+			const userId = socket.user!.id
 
 			// Find messages being generated for this chat
 			const generatingMessages = await db.query.chatMessages.findMany({
@@ -1268,6 +1724,22 @@ export const chatMessagesCancelHandler: Handler<
 
 			// Stop generation for all messages in this chat
 			for (const message of generatingMessages) {
+				// If there's an active adapter, try to abort it FIRST
+				if (message.adapterId) {
+					const adapter = activeAdapters.get(message.adapterId)
+					if (adapter) {
+						try {
+							adapter.abort()
+							// Remove adapter from active adapters map
+							activeAdapters.delete(message.adapterId)
+						} catch (e) {
+							// Silent fail for abort
+							console.warn("Failed to abort adapter:", e)
+						}
+					}
+				}
+
+				// Then update the database
 				await db
 					.update(schema.chatMessages)
 					.set({
@@ -1275,19 +1747,6 @@ export const chatMessagesCancelHandler: Handler<
 						adapterId: null
 					})
 					.where(eq(schema.chatMessages.id, message.id))
-
-				// If there's an active adapter, try to abort it
-				if (message.adapterId) {
-					const adapter = activeAdapters.get(message.adapterId)
-					if (adapter) {
-						try {
-							adapter.abort()
-						} catch (e) {
-							// Silent fail for abort
-							console.warn("Failed to abort adapter:", e)
-						}
-					}
-				}
 			}
 
 			const res: Sockets.ChatMessages.Cancel.Response = {
@@ -1498,12 +1957,12 @@ export const promptTokenCountHandler: Handler<
 		try {
 			const userId = socket.user!.id
 
-			// Only admin users can get prompt token count
-			if (!socket.user!.isAdmin) {
-				return {
-					error: "Access denied. Only admin users can get prompt token count."
-				}
-			}
+			// // Only admin users can get prompt token count
+			// if (!socket.user!.isAdmin) {
+			// 	return {
+			// 		error: "Access denied. Only admin users can get prompt token count."
+			// 	}
+			// }
 
 			// Check if user has access to this chat
 			const chatAccess = await checkChatAccess(params.chatId, userId)
@@ -1613,8 +2072,13 @@ export const triggerGenerateMessageHandler: Handler<
 			const userId = socket.user!.id
 			const msgLimit = 10
 			let currentMsg = 1
-			let triggered = true
+			let triggered =
+				params.triggered !== undefined ? params.triggered : false
 			let ok = true
+
+			console.log(
+				`[triggerGenerateMessage] Starting generation for chat ${params.chatId}, once: ${params.once}, characterId: ${params.characterId}, triggered: ${triggered}`
+			)
 
 			while (currentMsg <= msgLimit && ok) {
 				let chat = await getPromptChatFromDb(params.chatId, userId)
@@ -1635,26 +2099,65 @@ export const triggerGenerateMessageHandler: Handler<
 					break
 				}
 
-				// Find the next character who should reply (using triggered: true)
+				// Get active characters
+				const activeCharacters = chat.chatCharacters.filter(
+					(cc) => cc.character !== null && cc.isActive
+				)
+
+				// Find the next character who should reply
 				const nextCharacterId =
 					params.characterId ||
 					getNextCharacterTurn(
 						{
 							chatMessages: chat.chatMessages,
-							chatCharacters: chat.chatCharacters
-								.filter(
-									(cc) => cc.character !== null && cc.isActive
-								)
-								.sort(
-									(a, b) =>
-										(a.position ?? 0) - (b.position ?? 0)
-								) as any,
+							chatCharacters: activeCharacters.sort(
+								(a, b) => (a.position ?? 0) - (b.position ?? 0)
+							) as any,
 							chatPersonas: chat.chatPersonas.filter(
 								(cp) => cp.persona !== null
 							) as any
 						},
 						{ triggered }
 					)
+
+				// Check if this is a triggered response when all characters have already responded
+				if (triggered && nextCharacterId) {
+					// Check with triggered: false to see if any character needs a normal turn
+					const normalTurnCharacterId = getNextCharacterTurn(
+						{
+							chatMessages: chat.chatMessages,
+							chatCharacters: activeCharacters.sort(
+								(a, b) => (a.position ?? 0) - (b.position ?? 0)
+							) as any,
+							chatPersonas: chat.chatPersonas.filter(
+								(cp) => cp.persona !== null
+							) as any
+						},
+						{ triggered: false }
+					)
+
+					if (!normalTurnCharacterId) {
+						// All characters have had their normal turn
+						// For triggered mode, we should only generate ONE response
+						console.log(
+							`[triggerGenerateMessage] Triggered mode: All characters have responded, allowing ONE triggered response`
+						)
+
+						// After generating this ONE message, we need to ensure the loop stops
+						// We'll do this by setting params.once = true for triggered responses
+						if (!params.once) {
+							params.once = true
+							console.log(
+								`[triggerGenerateMessage] Setting once=true to prevent triggered response loop`
+							)
+						}
+					} else {
+						// Some characters still need their normal turn
+						console.log(
+							`[triggerGenerateMessage] Normal turn mode: Character ${normalTurnCharacterId} needs to respond`
+						)
+					}
+				}
 
 				if (!nextCharacterId) {
 					break
@@ -1683,12 +2186,13 @@ export const triggerGenerateMessageHandler: Handler<
 						.returning()
 
 					if (emitToUser) {
-						await chatMessage(
-							socket,
-							{ chatMessage: generatingMessage },
-							emitToUser
+						await broadcastToChatUsers(
+							socket.io,
+							generatingMessage.chatId,
+							"chatMessage",
+							{ chatMessage: generatingMessage }
 						)
-						// chatMessage was already emitted above, no need for duplicate emission
+						// chatMessage was already broadcasted above, no need for duplicate emission
 					}
 
 					ok = await generateResponse({
@@ -1706,13 +2210,56 @@ export const triggerGenerateMessageHandler: Handler<
 						)
 						break
 					}
+
+					console.log(
+						`[triggerGenerateMessage] Message ${currentMsg}/${msgLimit} generated successfully=${ok}, once: ${params.once}`
+					)
 				}
-				currentMsg++
 
 				// If once is true, exit after the first message
 				if (params.once) {
-					break
+					// Re-fetch chat to get updated message list
+					const updatedChat = await getPromptChatFromDb(
+						params.chatId,
+						userId
+					)
+					if (!updatedChat) break
+
+					// Check if we're in triggered mode with all characters having responded
+					const updatedActiveCharacters =
+						updatedChat.chatCharacters.filter(
+							(cc) => cc.character !== null && cc.isActive
+						)
+					const normalTurnCharacterId = getNextCharacterTurn(
+						{
+							chatMessages: updatedChat.chatMessages,
+							chatCharacters: updatedActiveCharacters.sort(
+								(a, b) => (a.position ?? 0) - (b.position ?? 0)
+							) as any,
+							chatPersonas: updatedChat.chatPersonas.filter(
+								(cp) => cp.persona !== null
+							) as any
+						},
+						{ triggered: false }
+					)
+
+					if (triggered && !normalTurnCharacterId) {
+						// In triggered mode with all characters responded - stop after one
+						console.log(
+							`[triggerGenerateMessage] Breaking loop due to once=true in triggered mode`
+						)
+						break
+					} else if (!triggered) {
+						// In normal mode with once=true - also stop after one
+						console.log(
+							`[triggerGenerateMessage] Breaking loop due to once=true parameter`
+						)
+						break
+					}
+					// Otherwise, continue to let all characters take their normal turn
 				}
+
+				currentMsg++
 			}
 
 			return { success: true }
@@ -1915,6 +2462,10 @@ export function registerChatHandlers(
 	register(socket, chatsDeleteHandler, emitToUser)
 	register(socket, chatsGetHandler, emitToUser)
 	register(socket, chatsUpdateHandler, emitToUser)
+	register(socket, chatsAddPersonaHandler, emitToUser)
+	register(socket, chatsAddGuestHandler, emitToUser)
+	register(socket, chatsRemoveGuestHandler, emitToUser)
+	register(socket, chatsBranchHandler, emitToUser)
 	register(socket, chatMessagesSendPersonaMessageHandler, emitToUser)
 	register(socket, chatMessagesUpdateHandler, emitToUser)
 	register(socket, chatMessagesDeleteHandler, emitToUser)

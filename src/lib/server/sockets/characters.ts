@@ -22,26 +22,31 @@ async function processCharacterTags(
 	})
 
 	// Filter to only tags that belong to this user
-	const userCharacterTags = existingCharacterTags.filter(ct => ct.tag.userId === userId)
-	const existingTagNames = userCharacterTags.map(ct => ct.tag.name)
-	
+	const userCharacterTags = existingCharacterTags.filter(
+		(ct) => ct.tag.userId === userId
+	)
+	const existingTagNames = userCharacterTags.map((ct) => ct.tag.name)
+
 	// Normalize tag names for comparison
-	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
-	
+	const normalizedNewTags = (tagNames || [])
+		.map((t) => t.trim())
+		.filter((t) => t.length > 0)
+
 	// Find tags to remove (exist in DB but not in new list)
-	const tagsToRemove = userCharacterTags.filter(ct => 
-		!normalizedNewTags.includes(ct.tag.name)
+	const tagsToRemove = userCharacterTags.filter(
+		(ct) => !normalizedNewTags.includes(ct.tag.name)
 	)
-	
+
 	// Find tags to add (exist in new list but not in DB)
-	const tagsToAdd = normalizedNewTags.filter(tagName => 
-		!existingTagNames.includes(tagName)
+	const tagsToAdd = normalizedNewTags.filter(
+		(tagName) => !existingTagNames.includes(tagName)
 	)
-	
+
 	// Remove tags that are no longer in the list
 	if (tagsToRemove.length > 0) {
-		const tagIdsToRemove = tagsToRemove.map(ct => ct.tagId)
-		await db.delete(schema.characterTags)
+		const tagIdsToRemove = tagsToRemove.map((ct) => ct.tagId)
+		await db
+			.delete(schema.characterTags)
 			.where(
 				and(
 					eq(schema.characterTags.characterId, characterId),
@@ -49,7 +54,7 @@ async function processCharacterTags(
 				)
 			)
 	}
-	
+
 	// Add new tags
 	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user

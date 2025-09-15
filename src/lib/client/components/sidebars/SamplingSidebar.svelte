@@ -34,6 +34,9 @@
 	let showDeleteModal = $state(false)
 	let confirmCloseSidebarResolve: ((v: boolean) => void) | null = null
 	let editingField: string | null = $state(null)
+	let supportedSamplers: string[] = $state([])
+	let unsupportedSamplersMap: Record<string, string> = $state({})
+	let connectionType: string | undefined = $state()
 
 	// Computed property for getting the active sampling config ID
 	let activeConfigId = $derived(
@@ -305,6 +308,18 @@
 		)
 	}
 
+	// Check if a sampler is supported by the current connection
+	function isSamplerSupported(key: string): boolean {
+		return supportedSamplers.includes(key)
+	}
+
+	// Get the reason why a sampler is not supported
+	function getUnsupportedReason(key: string): string {
+		return (
+			unsupportedSamplersMap[key] || "Not supported by current connection"
+		)
+	}
+
 	function getFieldMax(key: string): number {
 		// Check if the field is contextTokens or responseTokens
 		if (
@@ -504,6 +519,19 @@
 						)
 					}
 				}
+				// Request supported samplers when connection changes
+				socket.emit("samplingConfigs:getSupportedSamplers", {})
+			}
+		)
+
+		socket.on(
+			"samplingConfigs:getSupportedSamplers",
+			(
+				message: Sockets.SamplingConfigs.GetSupportedSamplers.Response
+			) => {
+				supportedSamplers = message.supportedSamplers
+				unsupportedSamplersMap = message.unsupportedSamplers
+				connectionType = message.connectionType
 			}
 		)
 
@@ -511,6 +539,8 @@
 			id: userSettingsCtx.settings?.activeSamplingConfigId
 		})
 		socket.emit("samplingConfigs:list", {})
+		// Request supported samplers on mount
+		socket.emit("samplingConfigs:getSupportedSamplers", {})
 	})
 
 	onDestroy(() => {
@@ -520,6 +550,7 @@
 		socket.off("samplingConfigs:update")
 		socket.off("samplingConfigs:create")
 		socket.off("samplingConfigs:setUserActive")
+		socket.off("samplingConfigs:getSupportedSamplers")
 	})
 </script>
 
@@ -543,8 +574,15 @@
 				{#each Object.entries(fieldMeta) as [key, meta]}
 					{#if meta.type === "number" || meta.type === "boolean" || meta.type === "array" || meta.type === "object"}
 						<label
-							class="hover:bg-muted flex items-center gap-2 rounded p-2 transition"
+							class="hover:bg-muted flex items-center gap-2 rounded p-2 transition {!isSamplerSupported(
+								key
+							)
+								? 'opacity-60'
+								: ''}"
 							for="{key}Enabled"
+							title={!isSamplerSupported(key)
+								? getUnsupportedReason(key)
+								: ""}
 						>
 							<input
 								id="{key}Enabled"
@@ -564,6 +602,12 @@
 								] === undefined}
 							/>
 							<span class="font-medium">{meta.label}</span>
+							{#if !isSamplerSupported(key)}
+								<Icons.AlertCircle
+									size={14}
+									class="text-warning-500"
+								/>
+							{/if}
 						</label>
 					{/if}
 				{/each}
@@ -663,10 +707,24 @@
 			</div>
 			{#each Object.entries(fieldMeta) as [key, meta]}
 				{#if isFieldVisible(key)}
-					<div class="flex flex-col gap-1">
-						<label class="font-semibold" for={key}>
-							{meta?.label ?? key}
-						</label>
+					<div
+						class="flex flex-col gap-1 {!isSamplerSupported(key)
+							? 'opacity-60'
+							: ''}"
+					>
+						<div class="flex items-center gap-2">
+							<label class="font-semibold" for={key}>
+								{meta?.label ?? key}
+							</label>
+							{#if !isSamplerSupported(key)}
+								<span title={getUnsupportedReason(key)}>
+									<Icons.AlertCircle
+										size={14}
+										class="text-warning-500"
+									/>
+								</span>
+							{/if}
+						</div>
 						{#if meta?.description}
 							<p class="text-muted-foreground mb-1 text-xs">
 								{meta.description}

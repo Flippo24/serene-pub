@@ -244,16 +244,26 @@ declare global {
 			namespace List {
 				interface Params {}
 				interface Response {
-					chatList: Partial<SelectChat>[]
+					chatList: (Partial<SelectChat> & { canEdit: boolean })[]
 				}
 			}
 			namespace Get {
 				interface Params {
 					id: number
+					limit?: number
+					offset?: number
 				}
 				interface Response {
-					chat: SelectChat | null
-					messages: SelectChatMessage[] | null
+					chat: (SelectChat & {
+						chatMessages: SelectChatMessage[]
+						chatCharacters: (SelectChatCharacter & { character: SelectCharacter })[]
+						chatPersonas: (SelectChatPersona & { persona: SelectPersona })[]
+						chatTags?: { tag: { name: string } }[]
+						chatGuests?: { user: any }[]
+						tags?: string[]
+					}) | null
+					messages?: SelectChatMessage[] | null // Legacy field
+					pagination?: any
 				}
 			}
 			namespace Create {
@@ -274,6 +284,36 @@ declare global {
 				}
 				interface Response {
 					chat: SelectChat
+				}
+			}
+			namespace AddPersona {
+				interface Params {
+					chatId: number
+					personaId: number
+				}
+				interface Response {
+					success?: boolean
+					error?: string
+				}
+			}
+			namespace AddGuest {
+				interface Params {
+					chatId: number
+					guestUserId: number
+				}
+				interface Response {
+					success?: boolean
+					error?: string
+				}
+			}
+			namespace RemoveGuest {
+				interface Params {
+					chatId: number
+					guestUserId: number
+				}
+				interface Response {
+					success?: boolean
+					error?: string
 				}
 			}
 			namespace Delete {
@@ -300,7 +340,9 @@ declare global {
 				}
 				interface Response {
 					chatId: number
-					characterId: number | null
+					characterId?: number | null // Legacy field for backward compatibility
+					nextCharacterId: number | null // Actually used field
+					characterIds: number[] // Array of character IDs in order
 				}
 			}
 			namespace ToggleChatCharacterActive {
@@ -337,10 +379,29 @@ declare global {
 				}
 				interface Response {
 					prompt?: string
-					tokenCount?: number
-					characterLimit?: number
-					tokenLimit?: number
-					percentFull?: number
+					messages?: any[]
+					meta: {
+						promptFormat: string
+						templateName: string | null
+						timestamp: string
+						truncationReason: string | null
+						currentTurnCharacterId: number
+						tokenCounts: {
+							total: number
+							limit: number
+						}
+						chatMessages: {
+							included: number
+							total: number
+							includedIds: number[]
+							excludedIds: number[]
+						}
+						sources: {
+							characters: any[]
+							personas: any[]
+							scenario: string | null
+						}
+					}
 					error?: string
 				}
 			}
@@ -349,9 +410,21 @@ declare global {
 					chatId: number
 					characterId?: number
 					once?: boolean
+					triggered?: boolean
 				}
 				interface Response {
 					success?: boolean
+					error?: string
+				}
+			}
+			namespace Branch {
+				interface Params {
+					chatId: number
+					messageId: number
+					title: string
+				}
+				interface Response {
+					chat?: SelectChat
 					error?: string
 				}
 			}
@@ -404,6 +477,7 @@ declare global {
 					id: number
 				}
 				interface Response {
+					id: number // ID of the deleted message
 					success?: string
 					error?: string
 				}
@@ -746,6 +820,14 @@ declare global {
 				}
 				interface Response {
 					user: SelectUser
+				}
+			}
+			namespace GetSupportedSamplers {
+				interface Params {}
+				interface Response {
+					connectionType: string
+					supportedSamplers: string[]
+					unsupportedSamplers: Record<string, string>
 				}
 			}
 		}
@@ -1357,14 +1439,6 @@ declare global {
 		}
 		spec: string
 		spec_version: string
-	}
-
-	export interface CompiledPrompt {
-		meta: {
-			description: string
-			promptFormat: string
-		}
-		prompt: ChatCompletionMessageParam[]
 	}
 
 	export interface ConnectionSummary {

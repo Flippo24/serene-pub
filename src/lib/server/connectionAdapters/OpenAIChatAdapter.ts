@@ -12,6 +12,8 @@ import type {
 	ChatCompletionMessageParam
 } from "../../../../node_modules/openai/src/resources/chat/completions/completions"
 import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
+import { openAISamplingKeyMap } from "$lib/shared/utils/samplerMappings"
+import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
 
 export class OpenAIChatAdapter extends BaseConnectionAdapter {
 	constructor({
@@ -69,7 +71,9 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 		isAborted: boolean
 	}> {
 		const apiKey = this.connection.extraJson?.apiKey
-		const baseURL = this.connection.baseUrl || connectionDefaults.baseUrl
+		const baseURL =
+			this.connection.baseUrl ||
+			CONNECTION_DEFAULTS[CONNECTION_TYPE.OPENAI_CHAT].baseUrl
 		const model = this.connection.model || "gpt-3.5-turbo"
 		const stream = this.connection.extraJson?.stream || false
 		const compiledPrompt: CompiledPrompt = await this.compilePrompt({})
@@ -174,8 +178,8 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 			if (key.endsWith("Enabled")) continue
 			const enabledKey = key + "Enabled"
 			if ((this.sampling as any)[enabledKey] === false) continue
-			if (samplingKeyMap[key]) {
-				result[samplingKeyMap[key]] = value
+			if (openAISamplingKeyMap[key]) {
+				result[openAISamplingKeyMap[key]] = value
 			}
 		}
 		return result
@@ -187,50 +191,14 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 	}
 }
 
-const connectionDefaults = {
-	type: CONNECTION_TYPE.OPENAI_CHAT,
-	baseUrl: "",
-	promptFormat: PromptFormats.VICUNA,
-	tokenCounter: TokenCounterOptions.ESTIMATE,
-	extraJson: {
-		stream: true,
-		prerenderPrompt: false,
-		apiKey: ""
-	}
-}
-
-// Only include samplers that OpenAI's API actually supports
-const samplingKeyMap: Record<string, string> = {
-	// Core sampling parameters
-	temperature: "temperature",
-	topP: "top_p",
-	seed: "seed",
-
-	// Penalty parameters
-	frequencyPenalty: "frequency_penalty",
-	presencePenalty: "presence_penalty",
-
-	// Generation control
-	responseTokens: "max_tokens",
-	logitBias: "logit_bias"
-
-	// Note: OpenAI does NOT support:
-	// - top_k
-	// - repetition_penalty
-	// - min_p, typical_p, tfs
-	// - XTC (xtc_threshold, xtc_probability)
-	// - DRY (dry_multiplier, etc.)
-	// - Mirostat
-	// - Dynamic temperature
-	// - Most other advanced samplers
-}
-
 async function listModels(
 	connection: SelectConnection
 ): Promise<{ models: any[]; error?: string }> {
 	try {
 		const apiKey = connection.extraJson?.apiKey
-		const baseURL = connection.baseUrl || connectionDefaults.baseUrl
+		const baseURL =
+			connection.baseUrl ||
+			CONNECTION_DEFAULTS[CONNECTION_TYPE.OPENAI_CHAT].baseUrl
 		const openai = new OpenAI({
 			apiKey,
 			baseURL: baseURL || undefined
@@ -255,7 +223,9 @@ async function testConnection(
 ): Promise<{ ok: boolean; error?: string }> {
 	try {
 		const apiKey = connection.extraJson?.apiKey
-		const baseURL = connection.baseUrl || connectionDefaults.baseUrl
+		const baseURL =
+			connection.baseUrl ||
+			CONNECTION_DEFAULTS[CONNECTION_TYPE.OPENAI_CHAT].baseUrl
 		const openai = new OpenAI({
 			apiKey,
 			baseURL: baseURL || undefined
@@ -285,8 +255,8 @@ const exports: AdapterExports = {
 	Adapter: OpenAIChatAdapter,
 	listModels,
 	testConnection,
-	connectionDefaults,
-	samplingKeyMap
+	connectionDefaults: CONNECTION_DEFAULTS[CONNECTION_TYPE.OPENAI_CHAT],
+	samplingKeyMap: openAISamplingKeyMap
 }
 
 export default exports

@@ -7,7 +7,7 @@
 	interface Props {
 		markdown: string
 		classes?: string
-		compiledPrompt?: CompiledPrompt
+		compiledPrompt?: Sockets.Chats.PromptTokenCount.Response
 		leftControls?: Snippet
 		rightControls?: Snippet
 		extraTabs?: {

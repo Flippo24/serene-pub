@@ -1,24 +1,33 @@
 <script lang="ts">
 	import { page } from "$app/state"
+	import { goto } from "$app/navigation"
 	import { Modal, Popover } from "@skeletonlabs/skeleton-svelte"
 	import * as skio from "sveltekit-io"
 	import * as Icons from "@lucide/svelte"
 	import MessageComposer from "$lib/client/components/chatMessages/MessageComposer.svelte"
+	import ChatContainer from "$lib/client/components/chatMessages/ChatContainer.svelte"
+	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
+	import NextCharacterBlock from "$lib/client/components/chatMessages/NextCharacterBlock.svelte"
+	import ChatComposer from "$lib/client/components/chatMessages/ChatComposer.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount } from "svelte"
 	import Avatar from "$lib/client/components/Avatar.svelte"
+	import PersonaSelectModal from "$lib/client/components/modals/PersonaSelectModal.svelte"
+	import BranchChatModal from "$lib/client/components/modals/BranchChatModal.svelte"
+	import { toaster } from "$lib/client/utils/toaster"
 
-	let chat: Sockets.Chat.Response["chat"] | undefined = $state()
-	let pagination: Sockets.Chat.Response["pagination"] | undefined = $state()
+	let chat: Sockets.Chats.Get.Response["chat"] | undefined = $state()
+	let pagination: Sockets.Chats.Get.Response["pagination"] | undefined = $state()
 	let newMessage = $state("")
 	const socket = skio.get()
 	let showDeleteMessageModal = $state(false)
 	let deleteChatMessage: SelectChatMessage | undefined = $state()
 	let editChatMessage: SelectChatMessage | undefined = $state()
-	let draftCompiledPrompt: CompiledPrompt | undefined = $state()
+	let draftCompiledPrompt: Sockets.Chats.PromptTokenCount.Response | undefined = $state()
 	let userCtx: UserCtx = getContext("userCtx")
 	let panelsCtx: PanelsCtx = getContext("panelsCtx")
 	let promptTokenCountTimeout: ReturnType<typeof setTimeout> | null = null
+	let autoTriggerTimeout: ReturnType<typeof setTimeout> | null = null
 	let loadingOlderMessages = $state(false)
 	let messagesContainer: HTMLElement | undefined = $state()
 	let contextExceeded = $derived(
@@ -31,8 +40,13 @@
 	let showDraftCompiledPromptModal = $state(false)
 	let showTriggerCharacterMessageModal = $state(false)
 	let triggerCharacterSearch = $state("")
-	let chatResponseOrder: Sockets.GetChatResponseOrder.Response | undefined =
+	let showAddPersonaModal = $state(false)
+	let showBranchChatModal = $state(false)
+	let branchFromMessage: SelectChatMessage | undefined = $state()
+	let chatResponseOrder: Sockets.Chats.GetResponseOrder.Response | undefined =
 		$state()
+	let availablePersonas: Sockets.Personas.List.Response["personaList"] =
+		$state([])
 
 	// Get chat id from route params
 	let chatId: number = $derived.by(() => Number(page.params.id))
@@ -100,6 +114,39 @@
 		return foundCharacter
 	})
 
+	// Check if current user is a guest (not the chat owner)
+	let isGuest: boolean = $derived.by(() => {
+		if (!chat || !userCtx.user?.id) return false
+		const isGuest = chat.userId !== userCtx.user.id
+		console.log("Guest check:", {
+			chatUserId: chat.userId,
+			currentUserId: userCtx.user.id,
+			isGuest
+		})
+		return isGuest
+	})
+
+	// Check if current user has a persona in this chat
+	let userHasPersonaInChat: boolean = $derived.by(() => {
+		if (!chat?.chatPersonas || !userCtx.user?.id) return false
+		return chat.chatPersonas.some(
+			(cp) => cp.persona?.userId === userCtx.user?.id
+		)
+	})
+
+	// Determine if we should show the add persona CTA
+	let showAddPersonaCTA: boolean = $derived.by(() => {
+		return isGuest && !userHasPersonaInChat
+	})
+
+	// Get the current user's persona in this chat
+	let currentUserPersona: SelectChatPersona | undefined = $derived.by(() => {
+		if (!chat?.chatPersonas || !userCtx.user?.id) return undefined
+		return chat.chatPersonas.find(
+			(cp) => cp.persona?.userId === userCtx.user?.id
+		)
+	})
+
 	// Get ordered characters from chat data using the response order
 	let orderedCharacters: SelectCharacter[] = $derived.by(() => {
 		if (!chatResponseOrder?.characterIds || !chat?.chatCharacters) return []
@@ -112,16 +159,167 @@
 			.filter((char) => char !== undefined) as SelectCharacter[]
 	})
 
+	// Check if current user can edit/control a specific message
+	let canControlMessage = (msg: SelectChatMessage): boolean => {
+		if (!isGuest) return true // Chat owner can control all messages
+		if (!userCtx.user?.id) return false
+
+		// Guest can only control messages from their own personas
+		if (msg.personaId) {
+			return (
+				chat?.chatPersonas?.some(
+					(cp) =>
+						cp.personaId === msg.personaId &&
+						cp.persona?.userId === userCtx.user?.id
+				) ?? false
+			)
+		}
+
+		return false
+	}
+
+	// Check if all personas have responded after last character message
+	let allPersonasHaveResponded = $derived.by(() => {
+		if (
+			!chat?.isGroup ||
+			!chat?.chatMessages?.length ||
+			!chat?.chatPersonas?.length
+		)
+			return true
+
+		// Find the last character (assistant) message
+		let lastCharacterMsgIndex = -1
+		for (let i = chat.chatMessages.length - 1; i >= 0; i--) {
+			if (
+				chat.chatMessages[i].role === "assistant" &&
+				chat.chatMessages[i].characterId
+			) {
+				lastCharacterMsgIndex = i
+				break
+			}
+		}
+
+		// If no character messages, all personas should respond
+		if (lastCharacterMsgIndex === -1) return false
+
+		// Get messages after the last character message
+		const messagesAfterLastCharacter = chat.chatMessages.slice(
+			lastCharacterMsgIndex + 1
+		)
+
+		// Check if each persona has sent a message after the last character message
+		const personaIds = chat.chatPersonas.map((cp) => cp.personaId)
+		const respondedPersonaIds = new Set(
+			messagesAfterLastCharacter
+				.filter((msg) => msg.role === "user" && msg.personaId)
+				.map((msg) => msg.personaId)
+		)
+
+		// All personas have responded if every persona ID is in the responded set
+		return personaIds.every((id) => respondedPersonaIds.has(id))
+	})
+
 	function handleSend() {
 		if (!newMessage.trim()) return
-		// TODO: Implement send message socket call
+
+		// Use the current user's persona if they have one, otherwise use the first persona (for chat owner)
+		const personaId =
+			currentUserPersona?.personaId || chat?.chatPersonas?.[0]?.personaId
+
+		if (!personaId) {
+			toaster.error({ title: "No persona selected for this chat" })
+			return
+		}
+
 		const msg: Sockets.ChatMessages.SendPersonaMessage.Params = {
 			chatId,
-			personaId: chat?.chatPersonas?.[0]?.personaId,
+			personaId,
 			content: newMessage
 		}
 		socket.emit("chatMessages:sendPersonaMessage", msg)
 		newMessage = ""
+
+		// In group chats, check if this message will complete all persona responses
+		if (chat?.isGroup && chat?.chatPersonas?.length > 1) {
+			// We need to check if sending this message will mean all personas have responded
+			// This is a bit complex because we need to account for the message we just sent
+
+			// Find the last character message
+			let lastCharacterMsgIndex = -1
+			for (let i = chat.chatMessages.length - 1; i >= 0; i--) {
+				if (
+					chat.chatMessages[i].role === "assistant" &&
+					chat.chatMessages[i].characterId
+				) {
+					lastCharacterMsgIndex = i
+					break
+				}
+			}
+
+			console.log(
+				"Checking persona responses after character at index:",
+				lastCharacterMsgIndex
+			)
+
+			if (lastCharacterMsgIndex >= 0) {
+				// Get messages after the last character message
+				const messagesAfterLastCharacter = chat.chatMessages.slice(
+					lastCharacterMsgIndex + 1
+				)
+
+				// Get persona IDs that have already responded
+				const respondedPersonaIds = new Set(
+					messagesAfterLastCharacter
+						.filter((msg) => msg.role === "user" && msg.personaId)
+						.map((msg) => msg.personaId)
+				)
+
+				// Add the persona that just sent a message
+				respondedPersonaIds.add(personaId)
+
+				// Check if all personas have now responded
+				const allPersonaIds = chat.chatPersonas.map(
+					(cp) => cp.personaId
+				)
+				const allResponded = allPersonaIds.every((id) =>
+					respondedPersonaIds.has(id)
+				)
+
+				console.log("Persona turn tracking:", {
+					allPersonaIds,
+					respondedPersonaIds: Array.from(respondedPersonaIds),
+					currentPersonaId: personaId,
+					allResponded,
+					messagesAfterChar: messagesAfterLastCharacter.map((m) => ({
+						role: m.role,
+						personaId: m.personaId,
+						characterId: m.characterId
+					}))
+				})
+
+				if (allResponded) {
+					console.log(
+						"All personas have responded, triggering character responses..."
+					)
+					// Clear any existing timeout
+					if (autoTriggerTimeout) {
+						clearTimeout(autoTriggerTimeout)
+					}
+					// Small delay to ensure the message is processed before triggering responses
+					autoTriggerTimeout = setTimeout(() => {
+						socket.emit("chats:triggerGenerateMessage", { chatId })
+						autoTriggerTimeout = null
+					}, 500)
+				} else {
+					console.log(
+						"Not all personas have responded yet, waiting..."
+					)
+				}
+			} else {
+				console.log("No character messages found in chat yet")
+			}
+		}
+
 		// Refresh response order after sending message
 		socket.emit("chats:getResponseOrder", { chatId })
 	}
@@ -165,6 +363,23 @@
 	function onDeleteMessageCancel() {
 		deleteChatMessage = undefined
 		showDeleteMessageModal = false
+	}
+
+	function onBranchChatConfirm(title: string) {
+		if (branchFromMessage && chat) {
+			socket.emit("chats:branch", {
+				chatId,
+				messageId: branchFromMessage.id,
+				title
+			})
+		}
+		branchFromMessage = undefined
+		showBranchChatModal = false
+	}
+
+	function onBranchChatCancel() {
+		branchFromMessage = undefined
+		showBranchChatModal = false
 	}
 
 	function handleEditMessageClick(message: SelectChatMessage) {
@@ -326,7 +541,18 @@
 	function handleAbortMessage(e: Event, msg: SelectChatMessage) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
+		// Clear any pending auto-trigger timeout
+		if (autoTriggerTimeout) {
+			clearTimeout(autoTriggerTimeout)
+			autoTriggerTimeout = null
+		}
 		socket.emit("chatMessages:cancel", { id: msg.id, chatId })
+	}
+	function handleBranchMessage(e: Event, msg: SelectChatMessage) {
+		e.stopPropagation()
+		openMobileMsgControls = undefined
+		branchFromMessage = msg
+		showBranchChatModal = true
 	}
 	function handleSendButton(e: Event) {
 		e.stopPropagation()
@@ -335,13 +561,18 @@
 	function handleAbortLastMessage(e: Event) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
+		// Clear any pending auto-trigger timeout
+		if (autoTriggerTimeout) {
+			clearTimeout(autoTriggerTimeout)
+			autoTriggerTimeout = null
+		}
 		if (lastMessage)
 			socket.emit("chatMessages:cancel", { id: lastMessage.id, chatId })
 	}
 	function handleTriggerContinueConversation(e: Event) {
 		e.stopPropagation()
 		openMobileMsgControls = undefined
-		socket.emit("chats:triggerGenerateMessage", { chatId })
+		socket.emit("chats:triggerGenerateMessage", { chatId, triggered: true })
 	}
 	function handleTriggerCharacterMessage(e: Event) {
 		e.stopPropagation()
@@ -377,6 +608,15 @@
 
 	function handleChooseDifferentCharacter() {
 		showTriggerCharacterMessageModal = true
+	}
+
+	function handleAddPersona(personaId: number) {
+		const req: Sockets.Chats.AddPersona.Params = {
+			chatId,
+			personaId
+		}
+		socket.emit("chats:addPersona", req)
+		showAddPersonaModal = false
 	}
 
 	function handleCharacterNameClick(msg: SelectChatMessage): void {
@@ -475,6 +715,13 @@
 	}
 
 	onMount(() => {
+		// Fetch available personas for guest users
+		socket.emit("personas:list", {})
+
+		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
+			availablePersonas = msg.personaList
+		})
+
 		socket.on("chats:get", (msg: Sockets.Chats.Get.Response) => {
 			if (msg.chat.id === Number.parseInt(page.params.id)) {
 				if (chat && loadingOlderMessages) {
@@ -595,7 +842,7 @@
 
 		socket.on(
 			"chats:promptTokenCount",
-			(msg: Sockets.PromptTokenCount.Response) => {
+			(msg: Sockets.Chats.PromptTokenCount.Response) => {
 				draftCompiledPrompt = msg
 			}
 		)
@@ -632,19 +879,58 @@
 					}
 
 					// Refresh response order after deletion
-					socket.emit("getChatResponseOrder", { chatId })
+					socket.emit("chats:getResponseOrder", { chatId })
 				}
 			}
 		)
 
 		socket.on(
-			"getChatResponseOrder",
+			"chats:getResponseOrder",
 			(msg: Sockets.Chats.GetResponseOrder.Response) => {
 				if (msg.chatId === chatId) {
 					chatResponseOrder = msg
 				}
 			}
 		)
+
+		socket.on(
+			"chats:addPersona",
+			(msg: Sockets.Chats.AddPersona.Response) => {
+				if (msg.success) {
+					toaster.success({
+						title: "Persona added to chat successfully"
+					})
+				} else if (msg.error) {
+					toaster.error({ title: msg.error })
+				}
+			}
+		)
+
+		socket.on(
+			"chats:branch",
+			(msg: Sockets.Chats.Branch.Response) => {
+				if (msg.chat) {
+					toaster.success({
+						title: "Chat branched successfully"
+					})
+					// Navigate to the new branched chat
+					goto(`/chats/${msg.chat.id}`)
+				} else if (msg.error) {
+					toaster.error({ title: msg.error })
+				}
+			}
+		)
+
+		// Cleanup function
+		return () => {
+			// Clear any pending timeouts
+			if (promptTokenCountTimeout) {
+				clearTimeout(promptTokenCountTimeout)
+			}
+			if (autoTriggerTimeout) {
+				clearTimeout(autoTriggerTimeout)
+			}
+		}
 	})
 
 	let showAvatarModal = $state(false)
@@ -667,381 +953,81 @@
 </svelte:head>
 
 <div class="relative flex h-full flex-col">
-	<div
-		id="chat-history"
-		class="flex flex-1 flex-col gap-3 overflow-auto"
-		bind:this={chatMessagesContainer}
-		onscroll={handleScroll}
-		role="log"
-		aria-label="Chat messages"
-		aria-live="polite"
-		aria-atomic="false"
+	<ChatContainer
+		{chat}
+		{pagination}
+		{loadingOlderMessages}
+		bind:chatMessagesContainer
+		onScroll={handleScroll}
+		{getMessageCharacter}
+		{canControlMessage}
+		{showSwipeControls}
+		{canSwipeRight}
+		{canRegenerateLastMessage}
+		onSwipeLeft={swipeLeft}
+		onSwipeRight={swipeRight}
+		onEditMessage={handleEditMessage}
+		onDeleteMessage={handleDeleteMessage}
+		onHideMessage={handleHideMessage}
+		onRegenerateMessage={handleRegenerateMessage}
+		onAbortMessage={handleAbortMessage}
+		onBranchMessage={handleBranchMessage}
+		{editChatMessage}
+		{isGuest}
 	>
-		<div class="p-2">
-			{#if !chat || chat.chatMessages.length === 0}
-				<div class="text-muted mt-8 text-center">No messages yet.</div>
-			{:else}
-				<!-- Loading indicator for older messages -->
-				{#if loadingOlderMessages}
-					<div class="text-muted py-2 text-center">
-						<div class="inline-flex items-center gap-2">
-							<div
-								class="h-4 w-4 animate-spin rounded-full border-b-2 border-current"
-							></div>
-							Loading older messages...
-						</div>
-					</div>
-				{/if}
-
-				<ul
-					class="flex flex-1 flex-col gap-3"
-					bind:this={messagesContainer}
-					role="group"
-					aria-label="Chat conversation with {chat.chatMessages
-						.length} messages"
-				>
-					{#each chat.chatMessages as msg, index (msg.id)}
-						{@const character = getMessageCharacter(msg)}
-						{@const isGreeting = !!msg.metadata?.isGreeting}
-						{@const isLastMessage =
-							index === chat.chatMessages.length - 1}
-						<li
-							id="message-{msg.id}"
-							class="preset-filled-primary-50-950 flex flex-col rounded-lg p-2"
-							class:opacity-50={msg.isHidden &&
-								editChatMessage?.id !== msg.id}
-							tabindex="-1"
-							role="article"
-							aria-label="Message {index + 1} of {chat
-								.chatMessages
-								.length} from {character?.nickname ||
-								character?.name ||
-								'Unknown'}: {msg.content.slice(0, 100)}{msg
-								.content.length > 100
-								? '...'
-								: ''}"
-							onkeydown={(e) => {
-								if (e.key === "Enter") {
-									e.preventDefault()
-									// Focus first available action button
-									const messageEl = e.currentTarget
-									const firstButton = messageEl.querySelector(
-										"button:not([disabled])"
-									)
-									if (firstButton) firstButton.focus()
-								} else if (e.key === "ArrowUp" && index > 0) {
-									e.preventDefault()
-									const prevMessage = document.getElementById(
-										`message-${chat.chatMessages[index - 1].id}`
-									)
-									if (prevMessage) prevMessage.focus()
-								} else if (
-									e.key === "ArrowDown" &&
-									index < chat.chatMessages.length - 1
-								) {
-									e.preventDefault()
-									const nextMessage = document.getElementById(
-										`message-${chat.chatMessages[index + 1].id}`
-									)
-									if (nextMessage) nextMessage.focus()
-								}
-							}}
-						>
-							<div class="flex justify-between gap-2">
-								<div class="group flex gap-2">
-									<span>
-										<!-- Make avatar clickable -->
-										<button
-											class="m-0 w-fit p-0"
-											onclick={() =>
-												handleAvatarClick(character)}
-											title="View Avatar"
-										>
-											<Avatar char={character} />
-										</button>
-									</span>
-									<div class="flex flex-col">
-										<span class="flex gap-1">
-											<button
-												class="funnel-display mx-0 inline-block w-fit px-0 text-[1.1em] font-bold hover:underline"
-												onclick={(e) =>
-													handleCharacterNameClick(
-														msg
-													)}
-												title="Edit"
-											>
-												<span class="text-nowrap">
-													{character?.nickname ||
-														character?.name ||
-														"Unknown"}
-												</span>
-											</button>
-											{#if isGreeting}
-												<span
-													class="text-muted mt-1 text-xs opacity-50"
-													title="Greeting message"
-												>
-													<Icons.Handshake
-														size={16}
-													/>
-												</span>
-											{/if}
-										</span>
-									</div>
-								</div>
-
-								{#if editChatMessage && editChatMessage.id === msg.id}
-									<div class="flex gap-2">
-										<button
-											class="btn btn-sm msg-cntrl-icon preset-filled-surface-500"
-											title="Cancel Edit"
-											onclick={handleCancelEditMessage}
-										>
-											<Icons.X size={16} />
-										</button>
-										<button
-											class="btn btn-sm msg-cntrl-icon preset-filled-success-500"
-											title="Save"
-											onclick={handleSaveEditMessage}
-										>
-											<Icons.Save
-												size={16}
-												class="mx-4"
-											/>
-										</button>
-									</div>
-								{:else}
-									<div class="flex w-full flex-col gap-2">
-										<div
-											class="ml-auto hidden gap-2 lg:flex"
-										>
-											{@render messageControls(msg)}
-										</div>
-										<div class="ml-auto lg:hidden">
-											<Popover
-												open={openMobileMsgControls ===
-													msg.id}
-												onOpenChange={(e) =>
-													(openMobileMsgControls =
-														e.open
-															? msg.id
-															: undefined)}
-												positioning={{
-													placement: "bottom"
-												}}
-												triggerBase="btn btn-sm hover:bg-primary-600-400 {openMobileMsgControls ===
-												msg.id
-													? 'bg-primary-600-400'
-													: ''}"
-												contentBase="card bg-primary-200-800 p-4 space-y-4 max-w-[320px]"
-												arrow
-												arrowBackground="!bg-primary-200 dark:!bg-primary-800"
-												zIndex="1000"
-											>
-												{#snippet trigger()}
-													<Icons.EllipsisVertical
-														size={20}
-													/>
-												{/snippet}
-												{#snippet content()}
-													<header
-														class="flex justify-between"
-													>
-														<p
-															class="text-xl font-bold"
-														>
-															Popover Example
-														</p>
-													</header>
-													<article
-														class="flex flex-col gap-4"
-													>
-														{@render messageControls(
-															msg
-														)}
-													</article>
-												{/snippet}
-											</Popover>
-										</div>
-										{#if showSwipeControls(msg, isGreeting)}
-											<div class="ml-auto flex gap-6">
-												{#if ![null, undefined].includes(msg.metadata?.swipes?.currentIdx) && msg.metadata?.swipes?.history && msg.metadata?.swipes.history.length > 1}
-													<button
-														class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
-														title="Swipe Left"
-														onclick={() =>
-															swipeLeft(msg)}
-														disabled={!msg.metadata
-															.swipes
-															.currentIdx ||
-															msg.metadata.swipes
-																.history
-																.length <= 1 ||
-															msg.isGenerating}
-													>
-														<Icons.ChevronLeft
-															size={24}
-														/>
-													</button>
-													<span
-														class="text-surface-700-300 mt-[0.2rem] h-fit select-none"
-													>
-														{msg.metadata.swipes
-															.currentIdx +
-															1}/{msg.metadata
-															.swipes.history
-															.length}
-													</span>
-												{/if}
-												<button
-													class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
-													title="Swipe Right"
-													onclick={() =>
-														swipeRight(msg)}
-													disabled={!canSwipeRight(
-														msg,
-														isGreeting
-													)}
-												>
-													<Icons.ChevronRight
-														size={24}
-													/>
-												</button>
-											</div>
-										{/if}
-									</div>
-								{/if}
-							</div>
-
-							<div class="flex h-fit rounded p-2 text-left">
-								{#if msg.content === "" && msg.isGenerating}
-									{@render generatingAnimation()}
-								{:else if editChatMessage && editChatMessage.id === msg.id}
-									<div
-										class="chat-input-bar bg-surface-100-900 w-full rounded-xl p-2 pb-2 align-middle lg:pb-4"
-									>
-										<MessageComposer
-											bind:markdown={
-												editChatMessage.content
-											}
-											onSend={handleMessageUpdate}
-										/>
-									</div>
-								{:else}
-									<div class="rendered-chat-message-content">
-										{@html renderMarkdownWithQuotedText(
-											msg.content
-										)}
-									</div>
-								{/if}
-							</div>
-						</li>
-
-						<!-- Show next character block after the last message -->
-						{#if isLastMessage && shouldShowNextCharacterBlock && nextCharacter}
-							<li
-								class="preset-tonal-surface-100-900 border-surface-300-700 my-2 flex items-center justify-between rounded-full px-4"
-							>
-								<div class="flex items-center gap-3">
-									<Avatar char={nextCharacter} />
-									<div class="flex flex-col">
-										<span
-											class="text-surface-700-300 text-sm font-medium"
-										>
-											{nextCharacter.nickname ||
-												nextCharacter.name}
-										</span>
-										<span class="text-surface-500 text-xs">
-											ready to continue
-										</span>
-									</div>
-								</div>
-								<div class="flex gap-2">
-									<button
-										class="btn btn-sm preset-filled-primary-500"
-										onclick={handleContinueWithNextCharacter}
-										title="Continue with {nextCharacter.nickname ||
-											nextCharacter.name}"
-									>
-										<Icons.Play size={16} />
-										Continue
-									</button>
-									<button
-										class="btn btn-sm preset-tonal-surface-500"
-										onclick={handleChooseDifferentCharacter}
-										title="Choose a different character"
-									>
-										<Icons.Users size={16} />
-									</button>
-								</div>
-							</li>
-						{/if}
-					{/each}
-				</ul>
+		{#snippet MessageComponent(props)}
+			<ChatMessage
+				{...props}
+				onCharacterNameClick={handleCharacterNameClick}
+				onAvatarClick={handleAvatarClick}
+				onCancelEditMessage={handleCancelEditMessage}
+				onSaveEditMessage={handleSaveEditMessage}
+				bind:openMobileMsgControls
+				{lastPersonaMessage}
+			/>
+		{/snippet}
+		{#snippet ComposerComponent()}
+			<ChatComposer
+				bind:newMessage
+				onSend={handleSend}
+				{draftCompiledPrompt}
+				{currentUserPersona}
+				{chat}
+				{lastMessage}
+				{editChatMessage}
+				{isGuest}
+				{showAddPersonaCTA}
+				onAddPersonaClick={() => { showAddPersonaModal = true }}
+				onAbortLastMessage={handleAbortLastMessage}
+				extraTabs={isGuest
+					? []
+					: [
+							{
+								value: "extraControls",
+								title: "Extra Controls",
+								control: extraControlsButton,
+								content: extraControlsContent
+							},
+							{
+								value: "statistics",
+								title: "Statistics",
+								control: statisticsButton,
+								content: statisticsContent
+							}
+						]}
+			/>
+		{/snippet}
+		{#snippet NextCharacterComponent()}
+			{#if shouldShowNextCharacterBlock}
+				<NextCharacterBlock
+					{nextCharacter}
+					shouldShow={shouldShowNextCharacterBlock}
+					onContinueWithNextCharacter={handleContinueWithNextCharacter}
+					onChooseDifferentCharacter={handleChooseDifferentCharacter}
+				/>
 			{/if}
-		</div>
-	</div>
-
-	<div
-		class="chat-input-bar preset-tonal-surface gap-4 pb-2 align-middle lg:rounded-t-lg lg:pb-4"
-		class:hidden={!!editChatMessage}
-	>
-		<MessageComposer
-			bind:markdown={newMessage}
-			onSend={handleSend}
-			compiledPrompt={draftCompiledPrompt}
-			classes=""
-			extraTabs={[
-				{
-					value: "extraControls",
-					title: "Extra Controls",
-					control: extraControlsButton,
-					content: extraControlsContent
-				},
-				{
-					value: "statistics",
-					title: "Statistics",
-					control: statisticsButton,
-					content: statisticsContent
-				}
-			]}
-		>
-			{#snippet leftControls()}
-				{#if chat?.chatPersonas?.[0]?.persona}
-					{@const persona = chat?.chatPersonas?.[0]?.persona}
-					<div class="hidden flex-col lg:ml-2 lg:flex lg:gap-2">
-						<span class="ml-1">
-							<Avatar char={persona} />
-						</span>
-					</div>
-					<div class="lg:hidden"></div>
-				{/if}
-			{/snippet}
-			{#snippet rightControls()}
-				{#if !lastMessage?.isGenerating && !editChatMessage}
-					<button
-						class="hover:preset-tonal-success mr-3 rounded-lg text-center lg:block lg:h-auto lg:p-3"
-						type="button"
-						disabled={!newMessage.trim() ||
-							lastMessage?.isGenerating}
-						title="Send"
-						onclick={handleSendButton}
-					>
-						<Icons.Send size={24} class="mx-auto" />
-					</button>
-				{:else if lastMessage?.isGenerating}
-					<button
-						title="Stop Generation"
-						class="text-error-500 hover:preset-tonal-error mr-3 rounded-lg text-center lg:h-auto lg:p-3"
-						type="button"
-						onclick={handleAbortLastMessage}
-					>
-						<Icons.Square size={24} class="mx-auto" />
-					</button>
-				{/if}
-			{/snippet}
-		</MessageComposer>
-	</div>
+		{/snippet}
+	</ChatContainer>
 </div>
 
 <Modal
@@ -1283,6 +1269,23 @@
 	{/snippet}
 </Modal>
 
+<PersonaSelectModal
+	open={showAddPersonaModal}
+	onclose={() => (showAddPersonaModal = false)}
+	onSelect={handleAddPersona}
+	personas={availablePersonas}
+	title="Add Persona to Chat"
+	description="Select a persona to add to this chat. You'll be able to send messages as this persona."
+/>
+
+<BranchChatModal
+	open={showBranchChatModal}
+	onOpenChange={(e) => (showBranchChatModal = e.open)}
+	onConfirm={onBranchChatConfirm}
+	onCancel={onBranchChatCancel}
+	initialTitle={chat?.name}
+/>
+
 {#snippet generatingAnimation()}
 	<div class="wrapper">
 		<div class="circle"></div>
@@ -1291,70 +1294,6 @@
 		<div class="shadow"></div>
 		<div class="shadow"></div>
 		<div class="shadow"></div>
-	</div>
-{/snippet}
-
-{#snippet messageControls(msg: SelectChatMessage)}
-	<div role="group" aria-label="Message actions">
-		<button
-			class="btn btn-sm msg-cntrl-icon hover:preset-filled-secondary-500"
-			class:preset-filled-secondary-500={msg.isHidden}
-			title={msg.isHidden ? "Unhide Message" : "Hide Message"}
-			aria-label={msg.isHidden
-				? "Unhide this message"
-				: "Hide this message"}
-			disabled={lastMessage?.isGenerating || !!editChatMessage}
-			onclick={(e) => handleHideMessage(e, msg)}
-		>
-			<Icons.Ghost size={16} aria-hidden="true" />
-			<span class="lg:hidden">
-				{msg.isHidden ? "Unhide Message" : "Hide Message"}
-			</span>
-		</button>
-		<button
-			class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
-			title="Edit Message"
-			aria-label="Edit this message"
-			disabled={lastMessage?.isGenerating ||
-				!!editChatMessage ||
-				msg.isGenerating ||
-				msg.isHidden}
-			onclick={(e) => handleEditMessage(e, msg)}
-		>
-			<Icons.Edit size={16} aria-hidden="true" />
-			<span class="lg:hidden">Edit Message</span>
-		</button>
-		<button
-			class="btn btn-sm msg-cntrl-icon hover:preset-filled-error-500"
-			title="Delete Message"
-			aria-label="Delete this message"
-			disabled={lastMessage?.isGenerating || !!editChatMessage}
-			onclick={(e) => handleDeleteMessage(e, msg)}
-		>
-			<Icons.Trash2 size={16} aria-hidden="true" />
-			<span class="lg:hidden">Delete Message</span>
-		</button>
-		{#if !!msg.characterId && msg.id === lastMessage?.id && !msg.isGenerating}
-			<button
-				class="btn btn-sm msg-cntrl-icon hover:preset-filled-warning-500"
-				title="Regenerate Response"
-				disabled={!canRegenerateLastMessage}
-				onclick={(e) => handleRegenerateMessage(e, msg)}
-			>
-				<Icons.RefreshCw size={16} />
-				<span class="lg:hidden">Regenerate Response</span>
-			</button>
-		{/if}
-		{#if msg.isGenerating}
-			<button
-				class="btn btn-sm msg-cntrl-icon preset-filled-error-500"
-				title="Stop Generation"
-				onclick={(e) => handleAbortMessage(e, msg)}
-			>
-				<Icons.Square size={16} />
-				<span class="lg:hidden">Stop Generation</span>
-			</button>
-		{/if}
 	</div>
 {/snippet}
 
@@ -1436,13 +1375,6 @@
 <style lang="postcss">
 	@reference "tailwindcss";
 
-	/* .chat-messages {
-		overflow-y: auto;
-		flex: 1 1 0%;
-		padding-bottom: 0.5rem;
-	} */
-	.chat-input-bar {
-	}
 	/* Loader styles from Uiverse.io by mobinkakei */
 	.wrapper {
 		width: 66px;
@@ -1545,9 +1477,5 @@
 		margin-top: 1em;
 		margin-bottom: 1em;
 		min-height: 1.5em;
-	}
-
-	.msg-cntrl-icon {
-		@apply h-min w-min px-2 text-[1em] disabled:opacity-25;
 	}
 </style>

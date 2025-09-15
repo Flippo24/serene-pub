@@ -17,6 +17,8 @@ import {
 	type OngoingPrediction
 } from "@lmstudio/sdk"
 import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
+import { lmStudioSamplingKeyMap } from "$lib/shared/utils/samplerMappings"
+import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
 
 class LMStudioAdapter extends BaseConnectionAdapter {
 	private _client?: LMStudioClient
@@ -66,13 +68,13 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 			if (key.endsWith("Enabled")) continue
 			const enabledKey = key + "Enabled"
 			if ((this.sampling as any)[enabledKey] === false) continue
-			if (samplingKeyMap[key]) {
+			if (lmStudioSamplingKeyMap[key]) {
 				if (key === "streaming") continue
 				// Defensive: skip if value is undefined or not a primitive (unless you expect an object)
 				if (value === undefined) continue
 				// If you expect only primitives, skip objects:
 				if (typeof value === "object" && value !== null) continue
-				result[samplingKeyMap[key]] = value
+				result[lmStudioSamplingKeyMap[key]] = value
 			}
 		}
 		return result
@@ -162,7 +164,9 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 			)
 		}
 
-		const modelName = this.connection.model ?? connectionDefaults.baseUrl
+		const modelName =
+			this.connection.model ??
+			CONNECTION_DEFAULTS[CONNECTION_TYPE.LM_STUDIO].baseUrl
 		const stream = this.connection!.extraJson?.stream || false
 		if (typeof modelName !== "string")
 			throw new Error("LMStudioAdapter: model must be a string")
@@ -331,52 +335,6 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 	}
 }
 
-const connectionDefaults = {
-	type: CONNECTION_TYPE.LM_STUDIO,
-	baseUrl: "ws://localhost:1234",
-	promptFormat: PromptFormats.VICUNA,
-	tokenCounter: TokenCounterOptions.ESTIMATE, // Use Gemma tokenizer for better accuracy with Gemma models
-	extraJson: {
-		useChat: true, // Use chat (response api)
-		stream: true,
-		ttl: 60
-	}
-}
-
-// --- SamplingConfig mapping ---
-// Only include samplers that LM Studio's SDK actually supports
-const samplingKeyMap: Record<string, string> = {
-	// Core sampling parameters
-	temperature: "temperature",
-	topP: "topPSampling",
-	topK: "topKSampling",
-	seed: "seed",
-
-	// Repetition control
-	repetitionPenalty: "repeatPenalty",
-
-	// Min-P sampling
-	minP: "minPSampling",
-
-	// XTC (Exclude Top Choices) sampling
-	xtcProbability: "xtcProbability",
-	xtcThreshold: "xtcThreshold",
-
-	// Generation limits
-	responseTokens: "maxTokens"
-
-	// Note: LM Studio uses llama.cpp under the hood but exposes limited parameters through its SDK
-	// The following are NOT exposed via the LM Studio SDK:
-	// - DRY sampling (dryMultiplier, dryBase, etc.)
-	// - Dynamic temperature (dynatemp)
-	// - Mirostat
-	// - Typical sampling (typical_p)
-	// - TFS (tail free sampling)
-	// - Frequency/presence penalties
-	// - Logit bias
-	// - Most other advanced samplers
-}
-
 async function testConnection(
 	connection: SelectConnection
 ): Promise<{ ok: boolean; error?: string }> {
@@ -456,8 +414,8 @@ const exports: AdapterExports = {
 	Adapter: LMStudioAdapter,
 	testConnection,
 	listModels,
-	connectionDefaults,
-	samplingKeyMap
+	connectionDefaults: CONNECTION_DEFAULTS[CONNECTION_TYPE.LM_STUDIO],
+	samplingKeyMap: lmStudioSamplingKeyMap
 }
 
 export default exports

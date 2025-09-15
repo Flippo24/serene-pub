@@ -109,7 +109,7 @@
 		</div>
 	{/snippet}
 	{#snippet controls()}
-		{#if showControls && (onEdit || onDelete)}
+		{#if showControls && chat.canEdit && (onEdit || onDelete)}
 			<div class="ml-auto flex flex-col gap-4">
 				{#if onEdit}
 					<button

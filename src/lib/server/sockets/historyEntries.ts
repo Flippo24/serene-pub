@@ -2,7 +2,10 @@ import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq, desc } from "drizzle-orm"
 import type { Handler } from "$lib/shared/events"
-import type { InsertHistoryEntry, SelectHistoryEntry } from "$lib/server/db/types"
+import type {
+	InsertHistoryEntry,
+	SelectHistoryEntry
+} from "$lib/server/db/types"
 import { lorebookBindingListHandler } from "./lorebooks"
 
 export const historyEntryListHandler: Handler<

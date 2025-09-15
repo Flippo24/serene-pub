@@ -2,7 +2,10 @@ import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq, inArray } from "drizzle-orm"
 import type { Handler } from "$lib/shared/events"
-import type { InsertCharacterLoreEntry, SelectCharacterLoreEntry } from "$lib/server/db/types"
+import type {
+	InsertCharacterLoreEntry,
+	SelectCharacterLoreEntry
+} from "$lib/server/db/types"
 import { lorebookBindingListHandler } from "./lorebooks"
 import { syncLorebookBindings } from "./lorebooks"
 

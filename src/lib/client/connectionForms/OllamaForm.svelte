@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { PromptFormats } from "$lib/shared/constants/PromptFormats"
 	import { TokenCounterOptions } from "$lib/shared/constants/TokenCounters"
+	import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
+	import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
 	import { Switch } from "@skeletonlabs/skeleton-svelte"
 	import { onMount, onDestroy } from "svelte"
 	import { useTypedSocket } from "$lib/client/sockets/typedSocket"
@@ -41,13 +43,8 @@
 	let { connection = $bindable() } = $props()
 
 	const socket = useTypedSocket()
-	const defaultExtraJson = {
-		stream: false,
-		raw: false,
-		think: false,
-		keepAlive: "300ms",
-		useChat: true
-	}
+	const defaultExtraJson =
+		CONNECTION_DEFAULTS[CONNECTION_TYPE.OLLAMA].extraJson
 
 	let availableOllamaModels: any[] = $state([])
 	let ollamaFields: ExtraFieldData | undefined = $state()

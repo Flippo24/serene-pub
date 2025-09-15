@@ -100,7 +100,7 @@
 
 		// Emit the pull request to Ollama
 		socket.emit("ollama:pullModel", {
-			modelName: model.name
+			modelName: pullOption.pull
 		} as Sockets.OllamaPullModel.Call) // Close modal and switch to downloads tab
 		closeHuggingFaceModal()
 		onDownloadStart?.(pullOption.pull)
@@ -139,7 +139,7 @@
 
 		// Emit the pull request to Ollama
 		socket.emit("ollama:pullModel", {
-			modelName: model
+			modelName: cleanedModelName
 		} as Sockets.OllamaPullModel.Call) // Close modal and switch to downloads tab
 		closeOllamaManualPullModal()
 		onDownloadStart?.(cleanedModelName)
@@ -228,6 +228,7 @@
 		<button
 			class="btn preset-filled-primary-500 flex-1"
 			onclick={() => {
+				selectedModelForDownload = ""
 				showOllamaManualPullModal = true
 			}}
 			aria-label="Open manual download modal"

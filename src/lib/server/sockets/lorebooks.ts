@@ -3,7 +3,11 @@ import * as schema from "$lib/server/db/schema"
 import { and, eq } from "drizzle-orm"
 import { CharacterBook } from "@lenml/char-card-reader"
 import type { Handler } from "$lib/shared/events"
-import type { SelectTag, SelectLorebookTag, InsertHistoryEntry } from "$lib/server/db/types"
+import type {
+	SelectTag,
+	SelectLorebookTag,
+	InsertHistoryEntry
+} from "$lib/server/db/types"
 
 // Helper function to process tags for lorebook creation/update
 async function processLorebookTags(
@@ -291,7 +295,11 @@ export const lorebooksDeleteHandler: Handler<
 	}
 }
 
-export async function syncLorebookBindings({ lorebookId }: { lorebookId: number }) {
+export async function syncLorebookBindings({
+	lorebookId
+}: {
+	lorebookId: number
+}) {
 	const queries: (() => Promise<any>)[] = []
 	// Query all lorebook bindings for the given lorebook
 	const existingBindings = await db.query.lorebookBindings.findMany({
@@ -497,9 +505,6 @@ export const updateLorebookBindingHandler: Handler<
 		}
 	}
 }
-
-
-
 
 /**
  * ====================================================================

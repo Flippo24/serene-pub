@@ -6,6 +6,7 @@ import { activeAdapters, chatMessage } from "../sockets/chats"
 import { getConnectionAdapter } from "./getConnectionAdapter"
 import { TokenCounters } from "$lib/server/utils/TokenCounterManager"
 import { getUserConfigurations } from "./getUserConfigurations"
+import { broadcastToChatUsers } from "../sockets/utils/broadcastHelpers"
 
 export async function generateResponse({
 	socket,
@@ -38,7 +39,12 @@ export async function generateResponse({
 		}
 	}
 
-	await chatMessage(socket, req, emitToUser)
+	await broadcastToChatUsers(
+		socket.io,
+		generatingMessage.chatId,
+		"chatMessage",
+		req
+	)
 
 	const chat = await db.query.chats.findFirst({
 		where: (c, { eq }) => eq(c.id, chatId),
@@ -165,12 +171,22 @@ export async function generateResponse({
 					const chatMsgReq: Sockets.ChatMessage.Call = {
 						chatMessage: updatedChatMsg
 					}
-					await chatMessage(socket, chatMsgReq, emitToUser)
+					await broadcastToChatUsers(
+						socket.io,
+						generatingMessage.chatId,
+						"chatMessage",
+						chatMsgReq
+					)
 				} else {
 					const chatMsgReq: Sockets.ChatMessage.Call = {
 						id: generatingMessage.id
 					}
-					await chatMessage(socket, chatMsgReq, emitToUser)
+					await broadcastToChatUsers(
+						socket.io,
+						generatingMessage.chatId,
+						"chatMessage",
+						chatMsgReq
+					)
 					console.warn(
 						"[generateResponse] Generating terminated early",
 						generatingMessage.id
@@ -198,9 +214,11 @@ export async function generateResponse({
 				activeAdapters.delete(adapterId)
 				return false
 			}
-			// Instead of getChat, emit the chatMessage
-			await chatMessage(
-				socket,
+			// Broadcast the chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				generatingMessage.chatId,
+				"chatMessage",
 				{
 					chatMessage: {
 						...generatingMessage,
@@ -208,8 +226,7 @@ export async function generateResponse({
 						isGenerating: false,
 						adapterId: null
 					}
-				},
-				emitToUser
+				}
 			)
 		} else {
 			content = completionResult.replace(startString, "").trim()
@@ -264,8 +281,10 @@ export async function generateResponse({
 				activeAdapters.delete(adapterId)
 				return false
 			}
-			await chatMessage(
-				socket,
+			await broadcastToChatUsers(
+				socket.io,
+				generatingMessage.chatId,
+				"chatMessage",
 				{
 					chatMessage: {
 						...generatingMessage,
@@ -276,8 +295,7 @@ export async function generateResponse({
 							? { metadata: updateData.metadata }
 							: {})
 					}
-				},
-				emitToUser
+				}
 			)
 		}
 	} finally {
@@ -292,7 +310,9 @@ export async function generateResponse({
 		chatMessage: updatedMsg!
 	}
 	socket.io.to("user_" + userId).emit("personaMessageReceived", response)
-	// Instead of getChat, emit the chatMessage
-	await chatMessage(socket, { chatMessage: updatedMsg! }, emitToUser)
+	// Broadcast the chatMessage to all chat participants
+	await broadcastToChatUsers(socket.io, updatedMsg!.chatId, "chatMessage", {
+		chatMessage: updatedMsg!
+	})
 	return !isAborted // Whether there were no interruptions
 }

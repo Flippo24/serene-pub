@@ -11,6 +11,8 @@ import {
 	type BaseChat
 } from "./BaseConnectionAdapter"
 import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
+import { ollamaSamplingKeyMap } from "$lib/shared/utils/samplerMappings"
+import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
 
 class OllamaAdapter extends BaseConnectionAdapter {
 	private _client?: Ollama
@@ -55,9 +57,9 @@ class OllamaAdapter extends BaseConnectionAdapter {
 			if (key.endsWith("Enabled")) continue
 			const enabledKey = key + "Enabled"
 			if ((this.sampling as any)[enabledKey] === false) continue
-			if (samplingKeyMap[key]) {
+			if (ollamaSamplingKeyMap[key]) {
 				if (key === "streaming") continue
-				result[samplingKeyMap[key]] = value
+				result[ollamaSamplingKeyMap[key]] = value
 			}
 		}
 		return result
@@ -100,7 +102,9 @@ class OllamaAdapter extends BaseConnectionAdapter {
 		compiledPrompt: CompiledPrompt
 		isAborted: boolean
 	}> {
-		const model = this.connection.model ?? connectionDefaults.baseUrl
+		const model =
+			this.connection.model ??
+			CONNECTION_DEFAULTS[CONNECTION_TYPE.OLLAMA].baseUrl
 		const stream = this.connection!.extraJson?.stream || false
 		const think = this.connection!.extraJson?.think || false
 		const keep_alive = this.connection!.extraJson?.keepAlive || "300ms"
@@ -292,63 +296,6 @@ class OllamaAdapter extends BaseConnectionAdapter {
 	}
 }
 
-const connectionDefaults = {
-	type: CONNECTION_TYPE.OLLAMA,
-	baseUrl: "http://localhost:11434/",
-	promptFormat: PromptFormats.VICUNA,
-	tokenCounter: TokenCounterOptions.ESTIMATE,
-	extraJson: {
-		stream: true,
-		think: false,
-		keepAlive: "300ms",
-		raw: true,
-		useChat: true
-	}
-}
-
-// --- SamplingConfig mapping ---
-// Only include samplers that Ollama's API actually supports
-const samplingKeyMap: Record<string, string> = {
-	// Core sampling parameters
-	temperature: "temperature",
-	topP: "top_p",
-	topK: "top_k",
-	seed: "seed",
-
-	// Repetition control
-	repetitionPenalty: "repeat_penalty",
-	repeatLastN: "repeat_last_n",
-	penalizeNewline: "penalize_newline",
-
-	// Min-P sampling
-	minP: "min_p",
-
-	// Tail Free Sampling
-	tfs: "tfs_z",
-
-	// Typical sampling
-	typicalP: "typical_p",
-
-	// Mirostat sampling
-	mirostat: "mirostat",
-	mirostatTau: "mirostat_tau",
-	mirostatEta: "mirostat_eta",
-
-	// Generation limits
-	responseTokens: "num_predict",
-	contextTokens: "num_ctx"
-
-	// Note: The following are NOT yet supported by Ollama but may be in the future:
-	// - XTC (xtcThreshold, xtcProbability)
-	// - DRY (dryMultiplier, dryBase, dryAllowedLength, dryPenaltyLastN)
-	// - Dynamic temperature (dynatemp, minTemp, maxTemp, dynatempExponent)
-	// - Smoothing (smoothingFactor, smoothingCurve)
-	// - Frequency/presence penalties
-	// - Logit bias
-	// - Guidance scale
-	// - Advanced penalties (penaltyAlpha, etaCutoff, epsilonCutoff, etc.)
-}
-
 async function listModels(
 	connection: SelectConnection
 ): Promise<{ models: any[]; error?: string }> {
@@ -399,8 +346,8 @@ const exports: AdapterExports = {
 	Adapter: OllamaAdapter,
 	listModels,
 	testConnection,
-	connectionDefaults,
-	samplingKeyMap
+	connectionDefaults: CONNECTION_DEFAULTS[CONNECTION_TYPE.OLLAMA],
+	samplingKeyMap: ollamaSamplingKeyMap
 }
 
 export default exports

@@ -2,11 +2,12 @@
 	import * as skio from "sveltekit-io"
 	import CharacterSelectModal from "../modals/CharacterSelectModal.svelte"
 	import PersonaSelectModal from "../modals/PersonaSelectModal.svelte"
+	import UserSelectModal from "../modals/UserSelectModal.svelte"
 	import Avatar from "../Avatar.svelte"
 	import * as Icons from "@lucide/svelte"
 	import { dndzone } from "svelte-dnd-action"
 	import RemoveFromChatModal from "../modals/RemoveFromChatModal.svelte"
-	import { onDestroy, onMount } from "svelte"
+	import { onDestroy, onMount, getContext } from "svelte"
 	import { Switch } from "@skeletonlabs/skeleton-svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { GroupReplyStrategies } from "$lib/shared/constants/GroupReplyStrategies"
@@ -67,6 +68,7 @@
 				}
 				characterIds: number[]
 				personaIds: number[]
+				guestIds: number[]
 				characterPositions: Record<number, number>
 		  }
 		| undefined = $state()
@@ -83,6 +85,7 @@
 				}
 				characterIds: number[]
 				personaIds: number[]
+				guestIds: number[]
 				characterPositions: Record<number, number>
 		  }
 		| undefined = $state()
@@ -96,17 +99,17 @@
 	// MODALS
 	let showCharacterModal = $state(false)
 	let showPersonaModal = $state(false)
+	let showGuestModal = $state(false)
 
 	// FORM SUBMIT STATE
 	let isDirty: boolean = $derived(
 		JSON.stringify(data) !== JSON.stringify(originalData)
 	)
 	let canSave: boolean = $derived(
-		(!!editChatId && isDirty) ||
-			(!editChatId &&
-				data?.chat.name.trim() &&
-				data?.characterIds.length > 0 &&
-				data?.personaIds.length > 0)
+		// Always allow saving if we have basic requirements
+		data?.chat.name.trim() &&
+			data?.characterIds.length > 0 &&
+			data?.personaIds.length > 0
 	)
 
 	// Sync hasChanges with isDirty
@@ -117,11 +120,14 @@
 	// SELECTED CHARACTERS AND PERSONAS
 	let selectedCharacters: SelectCharacter[] = $state([])
 	let selectedPersonas: SelectPersona[] = $state([])
+	let selectedGuests: SelectChatGuest[] = $state([])
 	let showRemoveModal = $state(false)
-	let removeType: "character" | "persona" = $state("character")
+	let removeType: "character" | "persona" | "guest" = $state("character")
 	let removeName = $state("")
 	let removeId: number | null = $state(null)
 	let validationErrors: ValidationErrors = $state({})
+	let userCtx: UserCtx = getContext("userCtx")
+	let systemSettingsCtx: SystemSettingsCtx = getContext("systemSettingsCtx")
 
 	// Filtered tags for suggestions
 	let filteredTags = $derived.by(() => {
@@ -179,6 +185,7 @@
 		const _groupReplyStrategy = groupReplyStrategy || "ordered"
 		const _selectedCharacters = selectedCharacters
 		const _selectedPersonas = selectedPersonas
+		const _selectedGuests = selectedGuests
 		const _lorebookId = lorebookId || null
 		const _tags = selectedTags
 		data = {
@@ -192,6 +199,7 @@
 			},
 			characterIds: _selectedCharacters.map((cc) => cc.id),
 			personaIds: _selectedPersonas.map((cp) => cp.id),
+			guestIds: _selectedGuests.map((g) => g.userId),
 			characterPositions: Object.fromEntries(
 				_selectedCharacters.map((cc, i) => [cc.id, i])
 			)
@@ -227,6 +235,28 @@
 
 	function handleRemovePersona(id: number) {
 		selectedPersonas = selectedPersonas.filter((p) => p.id !== id)
+	}
+
+	function handleAddGuests(userIds: number[]) {
+		if (!chat?.id) return
+
+		// Add each guest via socket
+		userIds.forEach((userId) => {
+			socket.emit("chats:addGuest", {
+				chatId: chat.id,
+				guestUserId: userId
+			} as Sockets.Chats.AddGuest.Params)
+		})
+		showGuestModal = false
+	}
+
+	function handleRemoveGuest(userId: number) {
+		if (!chat?.id) return
+
+		socket.emit("chats:removeGuest", {
+			chatId: chat.id,
+			guestUserId: userId
+		} as Sockets.Chats.RemoveGuest.Params)
 	}
 
 	function handleSave() {
@@ -268,9 +298,17 @@
 		showRemoveModal = true
 	}
 
+	function confirmRemoveGuest(userId: number, username: string) {
+		removeType = "guest"
+		removeName = username
+		removeId = userId
+		showRemoveModal = true
+	}
+
 	function handleRemoveConfirm() {
 		if (removeType === "character") handleRemoveCharacter(removeId!)
 		else if (removeType === "persona") handleRemovePersona(removeId!)
+		else if (removeType === "guest") handleRemoveGuest(removeId!)
 		showRemoveModal = false
 		removeId = null
 		removeName = ""
@@ -320,6 +358,7 @@
 					chat.chatCharacters?.map((cc) => cc.character) || []
 				selectedPersonas =
 					chat.chatPersonas?.map((cp) => cp.persona) || []
+				selectedGuests = chat.chatGuests || []
 				lorebookId = chat.lorebookId || null
 				selectedTags = chat.tags || []
 				// Reset originalData to null so it gets re-initialized with the loaded data
@@ -379,6 +418,31 @@
 			})
 			showEditChatForm = false
 		})
+		socket.on("chats:addGuest", (res: Sockets.Chats.AddGuest.Response) => {
+			if (res.success) {
+				toaster.success({ title: "Guest added successfully" })
+				// Request updated chat data
+				if (editChatId) {
+					socket.emit("chats:get", { id: editChatId })
+				}
+			} else if (res.error) {
+				toaster.error({ title: res.error })
+			}
+		})
+		socket.on(
+			"chats:removeGuest",
+			(res: Sockets.Chats.RemoveGuest.Response) => {
+				if (res.success) {
+					toaster.success({ title: "Guest removed successfully" })
+					// Request updated chat data
+					if (editChatId) {
+						socket.emit("chats:get", { id: editChatId })
+					}
+				} else if (res.error) {
+					toaster.error({ title: res.error })
+				}
+			}
+		)
 		socket.emit("characters:list", {})
 		socket.emit("personas:list", {})
 		socket.emit("lorebooks:list", {})
@@ -395,6 +459,8 @@
 		socket.off("updateChatCharacterVisibility")
 		socket.off("createChat")
 		socket.off("updateChat")
+		socket.off("chats:addGuest")
+		socket.off("chats:removeGuest")
 	})
 
 	function toggleCharacterActive(
@@ -702,6 +768,58 @@
 				</button>
 			</div>
 		</div>
+
+		{#if editChatId && systemSettingsCtx?.settings.isAccountsEnabled}
+			<!-- Guests Section (only show in edit mode and when accounts are enabled) -->
+			<div>
+				<label class="mb-3 flex items-center justify-between">
+					<span class="font-semibold">Guests</span>
+					<button
+						class="btn btn-sm preset-filled-primary-500 flex items-center gap-1"
+						onclick={() => (showGuestModal = true)}
+					>
+						<Icons.UserPlus size={16} /> Add Guests
+					</button>
+				</label>
+				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+					{#if selectedGuests.length === 0}
+						<div
+							class="text-surface-500 col-span-full text-center text-sm"
+						>
+							No guests added
+						</div>
+					{/if}
+					{#each selectedGuests as guest}
+						<div class="preset-tonal-surface card p-3">
+							<div class="flex flex-col gap-2">
+								<div class="flex items-center justify-between">
+									<div class="flex items-center gap-2">
+										<Icons.User size={20} />
+										<span class="font-semibold">
+											{guest.user?.username ||
+												"Unknown User"}
+										</span>
+									</div>
+									<button
+										class="hover:preset-filled-error-500 rounded p-1"
+										onclick={() =>
+											confirmRemoveGuest(
+												guest.userId,
+												guest.user?.username ||
+													"Unknown User"
+											)}
+										title="Remove guest"
+									>
+										<Icons.X size={16} />
+									</button>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		{#if selectedCharacters.length > 1}
 			<div>
 				<label class="font-semibold" for="groupReplyStrategy">
@@ -844,6 +962,7 @@
 		)}
 		onOpenChange={(e) => (showPersonaModal = e.open)}
 		onSelect={handleAddPersona}
+		returnFullPersona={true}
 	/>
 	<RemoveFromChatModal
 		open={showRemoveModal}
@@ -852,5 +971,18 @@
 		onCancel={handleRemoveCancel}
 		name={removeName}
 		type={removeType}
+	/>
+	<UserSelectModal
+		open={showGuestModal}
+		excludeUserIds={[
+			...(chat?.userId ? [chat.userId] : []),
+			...selectedGuests.map((g) => g.userId)
+		]}
+		onclose={() => (showGuestModal = false)}
+		onSelect={() => {}}
+		multiSelect={true}
+		onMultiSelect={handleAddGuests}
+		title="Add Guests to Chat"
+		description="Select users to add as guests. Guests can view and participate in the chat."
 	/>
 {/if}

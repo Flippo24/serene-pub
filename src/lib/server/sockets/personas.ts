@@ -19,26 +19,31 @@ async function processPersonaTags(
 	})
 
 	// Filter to only tags that belong to this user
-	const userPersonaTags = existingPersonaTags.filter(pt => pt.tag.userId === userId)
-	const existingTagNames = userPersonaTags.map(pt => pt.tag.name)
-	
+	const userPersonaTags = existingPersonaTags.filter(
+		(pt) => pt.tag.userId === userId
+	)
+	const existingTagNames = userPersonaTags.map((pt) => pt.tag.name)
+
 	// Normalize tag names for comparison
-	const normalizedNewTags = (tagNames || []).map(t => t.trim()).filter(t => t.length > 0)
-	
+	const normalizedNewTags = (tagNames || [])
+		.map((t) => t.trim())
+		.filter((t) => t.length > 0)
+
 	// Find tags to remove (exist in DB but not in new list)
-	const tagsToRemove = userPersonaTags.filter(pt => 
-		!normalizedNewTags.includes(pt.tag.name)
+	const tagsToRemove = userPersonaTags.filter(
+		(pt) => !normalizedNewTags.includes(pt.tag.name)
 	)
-	
+
 	// Find tags to add (exist in new list but not in DB)
-	const tagsToAdd = normalizedNewTags.filter(tagName => 
-		!existingTagNames.includes(tagName)
+	const tagsToAdd = normalizedNewTags.filter(
+		(tagName) => !existingTagNames.includes(tagName)
 	)
-	
+
 	// Remove tags that are no longer in the list
 	if (tagsToRemove.length > 0) {
-		const tagIdsToRemove = tagsToRemove.map(pt => pt.tagId)
-		await db.delete(schema.personaTags)
+		const tagIdsToRemove = tagsToRemove.map((pt) => pt.tagId)
+		await db
+			.delete(schema.personaTags)
 			.where(
 				and(
 					eq(schema.personaTags.personaId, personaId),
@@ -46,7 +51,7 @@ async function processPersonaTags(
 				)
 			)
 	}
-	
+
 	// Add new tags
 	for (const tagName of tagsToAdd) {
 		// Check if tag exists for this user

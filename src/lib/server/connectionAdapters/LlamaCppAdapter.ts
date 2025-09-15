@@ -11,6 +11,8 @@ import {
 import axios from "axios"
 import { Readable } from "stream"
 import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
+import { llamaCppSamplingKeyMap } from "$lib/shared/utils/samplerMappings"
+import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
 
 // GET /health
 export type HealthResponse =
@@ -273,8 +275,8 @@ class LlamaCppAdapter extends BaseConnectionAdapter {
 			if (key.endsWith("Enabled")) continue
 			const enabledKey = key + "Enabled"
 			if ((this.sampling as any)[enabledKey] === false) continue
-			if (samplingKeyMap[key]) {
-				result[samplingKeyMap[key]] = value
+			if (llamaCppSamplingKeyMap[key]) {
+				result[llamaCppSamplingKeyMap[key]] = value
 			}
 		}
 		return result
@@ -436,75 +438,6 @@ class LlamaCppAdapter extends BaseConnectionAdapter {
 	}
 }
 
-const connectionDefaults = {
-	type: CONNECTION_TYPE.LLAMACPP_COMPLETION,
-	baseUrl: "http://localhost:8080/",
-	promptFormat: PromptFormats.VICUNA,
-	tokenCounter: TokenCounterOptions.ESTIMATE,
-	extraJson: {
-		stream: true
-	}
-}
-
-const samplingKeyMap: Record<string, string> = {
-	// Core sampling parameters
-	temperature: "temperature",
-	topP: "top_p",
-	topK: "top_k",
-	minP: "min_p",
-	seed: "seed",
-
-	// Dynamic temperature
-	dynatemp: "dynatemp_range",
-	dynatempExponent: "dynatemp_exponent",
-
-	// Typical sampling
-	typicalP: "typical_p",
-
-	// Repetition control
-	repetitionPenalty: "repeat_penalty",
-	repeatLastN: "repeat_last_n",
-	presencePenalty: "presence_penalty",
-	frequencyPenalty: "frequency_penalty",
-
-	// DRY (Don't Repeat Yourself) sampling
-	dryMultiplier: "dry_multiplier",
-	dryBase: "dry_base",
-	dryAllowedLength: "dry_allowed_length",
-	dryPenaltyLastN: "dry_penalty_last_n",
-
-	// XTC (Exclude Top Choices) sampling
-	xtcProbability: "xtc_probability",
-	xtcThreshold: "xtc_threshold",
-
-	// Mirostat sampling
-	mirostat: "mirostat",
-	mirostatTau: "mirostat_tau",
-	mirostatEta: "mirostat_eta",
-
-	// Generation limits and control
-	responseTokens: "n_predict",
-	contextTokens: "n_ctx",
-	nKeep: "n_keep",
-	ignoreEos: "ignore_eos",
-
-	// Advanced features
-	logitBias: "logit_bias",
-	grammar: "grammar",
-	jsonSchema: "json_schema",
-
-	// Special tokens handling
-	addBosToken: "add_bos_token",
-	banEosToken: "ban_eos_token"
-
-	// Note: llama.cpp also supports but not yet mapped:
-	// - n_probs (token probabilities)
-	// - min_keep (minimum tokens to keep)
-	// - t_max_predict_ms (max prediction time)
-	// - samplers (custom sampler order)
-	// - timings_per_token, post_sampling_probs
-}
-
 async function testConnection(
 	connection: SelectConnection
 ): Promise<{ ok: boolean; error?: string }> {
@@ -558,8 +491,9 @@ const exports: AdapterExports = {
 	Adapter: LlamaCppAdapter,
 	testConnection,
 	listModels,
-	connectionDefaults,
-	samplingKeyMap
+	connectionDefaults:
+		CONNECTION_DEFAULTS[CONNECTION_TYPE.LLAMACPP_COMPLETION],
+	samplingKeyMap: llamaCppSamplingKeyMap
 }
 
 export default exports
