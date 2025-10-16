@@ -8,8 +8,9 @@ import { TokenCounters } from "../utils/TokenCounterManager"
 import {
 	BaseConnectionAdapter,
 	type AdapterExports,
-	type BaseChat
+	type BasePromptChat
 } from "./BaseConnectionAdapter"
+import { type CompiledPrompt } from "../utils/promptBuilder"
 import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
 import { ollamaSamplingKeyMap } from "$lib/shared/utils/samplerMappings"
 import { CONNECTION_DEFAULTS } from "$lib/shared/utils/connectionDefaults"
@@ -24,14 +25,22 @@ class OllamaAdapter extends BaseConnectionAdapter {
 		contextConfig,
 		promptConfig,
 		chat,
-		currentCharacterId
+		currentCharacterId,
+		tokenCounter,
+		tokenLimit,
+		contextThresholdPercent,
+		isAssistantMode
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
 		contextConfig: SelectContextConfig
 		promptConfig: SelectPromptConfig
-		chat: BaseChat
-		currentCharacterId: number
+		chat: BasePromptChat
+		currentCharacterId: number | null
+		tokenCounter?: TokenCounters
+		tokenLimit?: number
+		contextThresholdPercent?: number
+		isAssistantMode?: boolean
 	}) {
 		super({
 			connection,
@@ -40,14 +49,15 @@ class OllamaAdapter extends BaseConnectionAdapter {
 			promptConfig,
 			chat,
 			currentCharacterId,
-			tokenCounter: new TokenCounters(
+			tokenCounter: tokenCounter || new TokenCounters(
 				connection.tokenCounter || TokenCounterOptions.ESTIMATE
 			),
-			tokenLimit:
-				typeof sampling.contextTokens === "number"
+			tokenLimit: tokenLimit ||
+				(typeof sampling.contextTokens === "number"
 					? sampling.contextTokens
-					: 2048,
-			contextThresholdPercent: 0.9
+					: 2048),
+			contextThresholdPercent: contextThresholdPercent || 0.9,
+			isAssistantMode
 		})
 	}
 
@@ -118,7 +128,7 @@ class OllamaAdapter extends BaseConnectionAdapter {
 			characters:
 				this.chat.chatCharacters?.map((cc) => cc.character) || [],
 			personas: this.chat.chatPersonas?.map((cp) => cp.persona) || [],
-			currentCharacterId: this.currentCharacterId
+			currentCharacterId: this.currentCharacterId ?? undefined
 		})
 		const characterName =
 			this.chat.chatCharacters?.[0]?.character?.nickname ||

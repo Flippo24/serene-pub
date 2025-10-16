@@ -147,6 +147,16 @@ export const lorebooksCreateHandler: Handler<
 				await processLorebookTags(newBook.id, tags, userId)
 			}
 
+			// Refresh lorebook list
+			if (emitToUser) {
+				const lorebookListResult = await lorebooksListHandler.handler(
+					socket,
+					{},
+					emitToUser
+				)
+				emitToUser("lorebooks:list", lorebookListResult)
+			}
+
 			return { lorebook: newBook }
 		} catch (error) {
 			console.error("Error creating lorebook:", error)
@@ -391,7 +401,7 @@ export const lorebookBindingListHandler: Handler<
 	Sockets.Lorebooks.BindingList.Response
 > = {
 	event: "lorebooks:bindingList",
-	handler: async (socket, params) => {
+	handler: async (socket, params, emitToUser) => {
 		const userId = socket.user!.id
 
 		const book = await db.query.lorebooks.findFirst({
@@ -412,10 +422,16 @@ export const lorebookBindingListHandler: Handler<
 
 		if (!book) throw new Error("Lorebook not found.")
 
-		return {
+		const res: Sockets.Lorebooks.BindingList.Response = {
 			lorebookId: book.id,
 			lorebookBindingList: book.lorebookBindings
 		}
+		
+		if (emitToUser) {
+			emitToUser("lorebooks:bindingList", res)
+		}
+		
+		return res
 	}
 }
 
@@ -455,9 +471,15 @@ export const createLorebookBindingHandler: Handler<
 			emitToUser("lorebooks:bindingList", listResult)
 		}
 
-		return {
+		const res: Sockets.Lorebooks.CreateBinding.Response = {
 			lorebookBinding: binding
 		}
+		
+		if (emitToUser) {
+			emitToUser("lorebooks:createBinding", res)
+		}
+
+		return res
 	}
 }
 
@@ -480,8 +502,17 @@ export const updateLorebookBindingHandler: Handler<
 			}
 		})
 
-		if (!existingBinding || existingBinding.lorebook.userId !== userId) {
-			throw new Error("Lorebook binding not found or access denied.")
+		if (!existingBinding) {
+			throw new Error("Lorebook binding not found.")
+		}
+
+		// Type assertion to work around TypeScript limitation
+		const bindingWithLorebook = existingBinding as typeof existingBinding & {
+			lorebook: { userId: number }
+		}
+
+		if (bindingWithLorebook.lorebook.userId !== userId) {
+			throw new Error("Access denied.")
 		}
 
 		const [updatedBinding] = await db
@@ -500,9 +531,15 @@ export const updateLorebookBindingHandler: Handler<
 			emitToUser("lorebooks:bindingList", listResult)
 		}
 
-		return {
+		const res: Sockets.Lorebooks.UpdateBinding.Response = {
 			lorebookBinding: updatedBinding
 		}
+		
+		if (emitToUser) {
+			emitToUser("lorebooks:updateBinding", res)
+		}
+
+		return res
 	}
 }
 

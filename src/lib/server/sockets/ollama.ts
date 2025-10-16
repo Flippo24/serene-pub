@@ -388,6 +388,10 @@ export const ollamaPullModelHandler: Handler<
 				success: "Model downloaded successfully"
 			}
 			emitToUser("ollama:pullModel", res)
+			
+			// Automatically emit updated models list
+			await ollamaModelsList.handler(socket, {}, emitToUser)
+			
 			return res
 		} catch (error: any) {
 			console.error("Ollama pull model error:", error)

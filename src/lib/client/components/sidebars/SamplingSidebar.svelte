@@ -872,15 +872,16 @@
 									placeholder="Enter comma-separated values"
 									oninput={(e) => {
 										if (sampling) {
-											const value = ((
+											const value = (
 												e.target as HTMLInputElement
-											).value(sampling as any)[key] =
+											).value;
+											(sampling as any)[key] =
 												value
 													.split(",")
 													.map((s) => s.trim())
 													.filter(
 														(s) => s.length > 0
-													))
+													)
 										}
 									}}
 									class="input"
@@ -895,15 +896,16 @@
 									placeholder="Enter one sequence per line"
 									oninput={(e) => {
 										if (sampling) {
-											const value = ((
+											const value = (
 												e.target as HTMLTextAreaElement
-											).value(sampling as any)[key] =
+											).value;
+											(sampling as any)[key] =
 												value
 													.split("\n")
 													.map((s) => s.trim())
 													.filter(
 														(s) => s.length > 0
-													))
+													)
 										}
 									}}
 									class="textarea resize-none"

@@ -242,7 +242,9 @@ declare global {
 		// Chats namespace
 		namespace Chats {
 			namespace List {
-				interface Params {}
+				interface Params {
+					chatType?: string
+				}
 				interface Response {
 					chatList: (Partial<SelectChat> & { canEdit: boolean })[]
 				}
@@ -426,6 +428,31 @@ declare global {
 				interface Response {
 					chat?: SelectChat
 					error?: string
+				}
+			}
+			// Assistant chat specific handlers
+			namespace CreateAssistant {
+				interface Params {}
+				interface Response {
+					chat?: SelectChat
+					error?: string
+				}
+			}
+			namespace SendAssistantMessage {
+				interface Params {
+					chatId: number
+					content: string
+				}
+				interface Response {
+					userMessage?: SelectChatMessage
+					assistantMessage?: SelectChatMessage
+					error?: string
+				}
+			}
+			namespace TitleGenerated {
+				interface Call {
+					chatId: number
+					title: string
 				}
 			}
 		}

@@ -43,7 +43,7 @@ export type CompiledPrompt = {
 		templateName: string | null
 		timestamp: string
 		truncationReason: string | null
-		currentTurnCharacterId: number
+		currentTurnCharacterId: number | null
 		tokenCounts: {
 			total: number
 			limit: number

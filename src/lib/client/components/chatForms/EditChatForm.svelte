@@ -170,14 +170,7 @@
 		selectedTags = selectedTags.filter((tag) => tag !== tagName)
 	}
 
-	function handleTagInputKeydown(e: KeyboardEvent) {
-		if (e.key === "Enter" && tagSearchInput.trim()) {
-			e.preventDefault()
-			addTag(tagSearchInput)
-		} else if (e.key === "Escape") {
-			showTagSuggestions = false
-		}
-	}
+
 
 	$effect(() => {
 		const _name = name.trim()
@@ -347,102 +340,150 @@
 		showEditChatForm = false
 	}
 
+	// Socket event handlers - defined as named functions for proper cleanup
+	const handleChatsGet = (msg: Sockets.Chats.Get.Response) => {
+		console.log("handleChatsGet received", msg.chat?.id, "editChatId:", editChatId)
+		if (msg.chat && msg.chat.id === editChatId) {
+			console.log("Updating chat data", msg.chat)
+			// Create new object reference to ensure reactivity
+			chat = { ...msg.chat, chatCharacters: [...(msg.chat.chatCharacters || [])] }
+			name = chat.name || ""
+			scenario = chat.scenario || ""
+			groupReplyStrategy = chat.groupReplyStrategy || "ordered"
+			selectedCharacters =
+				chat.chatCharacters?.map((cc: any) => cc.character) || []
+			selectedPersonas =
+				chat.chatPersonas?.map((cp: any) => cp.persona) || []
+			selectedGuests = chat.chatGuests || []
+			lorebookId = chat.lorebookId || null
+			selectedTags = chat.tags || []
+			// Reset originalData to null so it gets re-initialized with the loaded data
+			originalData = undefined
+		}
+	}
+
+	const handleCharactersList = (msg: Sockets.Characters.List.Response) => {
+		characters = msg.characterList || []
+	}
+
+	const handlePersonasList = (msg: Sockets.Personas.List.Response) => {
+		personas = msg.personaList || []
+	}
+
+	const handleLorebooksList = (msg: Sockets.Lorebooks.List.Response) => {
+		lorebookList = msg.lorebookList || []
+	}
+
+	const handleTagsList = (msg: any) => {
+		tagsList = msg.tagsList || []
+	}
+
+	const handleToggleChatCharacterActive = (
+		msg: Sockets.Chats.ToggleChatCharacterActive.Response
+	) => {
+		if (msg.error) {
+			toaster.error({
+				title: "Error toggling character",
+				description: msg.error
+			})
+			return
+		}
+		if (chat && chat.id === msg.chatId) {
+			toaster.success({
+				title: `Character ${msg.isActive ? "activated" : "deactivated"}`
+			})
+			// Refresh chat data to get updated state
+			socket.emit("chats:get", { id: chat.id })
+		}
+	}
+
+	const handleUpdateChatCharacterVisibility = (
+		msg: Sockets.Chats.UpdateChatCharacterVisibility.Response
+	) => {
+		if (msg.error) {
+			toaster.error({
+				title: "Error updating visibility",
+				description: msg.error
+			})
+			return
+		}
+		if (chat && chat.id === msg.chatId) {
+			const visibilityLabel =
+				ChatCharacterVisibility.options.find(
+					(opt) => opt.value === msg.visibility
+				)?.label || msg.visibility
+			toaster.success({
+				title: `Character visibility set to ${visibilityLabel}`
+			})
+			// Optimistically update local state immediately
+			if (chat.chatCharacters) {
+				const updatedChatCharacters = chat.chatCharacters.map((cc: SelectChatCharacter) => 
+					cc.characterId === msg.characterId
+						? { ...cc, visibility: msg.visibility }
+						: cc
+				)
+				chat = { ...chat, chatCharacters: updatedChatCharacters }
+			}
+			// Also refresh from server to ensure consistency
+			socket.emit("chats:get", { id: chat.id })
+		}
+	}
+
+	const handleChatsCreate = (res: any) => {
+		toaster.success({
+			title: "Chat Created",
+			description: `Chat "${res.chat.name || "Unnamed Chat"}" created successfully.`
+		})
+		showEditChatForm = false
+	}
+
+	const handleChatsUpdate = (res: any) => {
+		toaster.success({
+			title: "Chat Updated",
+			description: `Chat "${res.chat.name || "Unnamed Chat"}" updated successfully.`
+		})
+		showEditChatForm = false
+	}
+
+	const handleChatsAddGuest = (res: Sockets.Chats.AddGuest.Response) => {
+		if (res.success) {
+			toaster.success({ title: "Guest added successfully" })
+			// Request updated chat data
+			if (editChatId) {
+				socket.emit("chats:get", { id: editChatId })
+			}
+		} else if (res.error) {
+			toaster.error({ title: res.error })
+		}
+	}
+
+	const handleChatsRemoveGuest = (res: Sockets.Chats.RemoveGuest.Response) => {
+		if (res.success) {
+			toaster.success({ title: "Guest removed successfully" })
+			// Request updated chat data
+			if (editChatId) {
+				socket.emit("chats:get", { id: editChatId })
+			}
+		} else if (res.error) {
+			toaster.error({ title: res.error })
+		}
+	}
+
 	onMount(() => {
-		socket.on("chats:get", (msg: Sockets.Chats.Get.Response) => {
-			if (msg.chat && msg.chat.id === editChatId) {
-				chat = msg.chat
-				name = chat.name || ""
-				scenario = chat.scenario || ""
-				groupReplyStrategy = chat.groupReplyStrategy || "ordered"
-				selectedCharacters =
-					chat.chatCharacters?.map((cc) => cc.character) || []
-				selectedPersonas =
-					chat.chatPersonas?.map((cp) => cp.persona) || []
-				selectedGuests = chat.chatGuests || []
-				lorebookId = chat.lorebookId || null
-				selectedTags = chat.tags || []
-				// Reset originalData to null so it gets re-initialized with the loaded data
-				originalData = undefined
-			}
-		})
-		socket.on(
-			"characters:list",
-			(msg: Sockets.Characters.List.Response) => {
-				characters = msg.characterList || []
-			}
-		)
-		socket.on("personas:list", (msg: Sockets.Personas.List.Response) => {
-			personas = msg.personaList || []
-		})
-		socket.on("lorebooks:list", (msg: Sockets.Lorebooks.List.Response) => {
-			lorebookList = msg.lorebookList || []
-		})
-		socket.on("tags:list", (msg: any) => {
-			tagsList = msg.tagsList || []
-		})
-		socket.on(
-			"toggleChatCharacterActive",
-			(msg: Sockets.ToggleChatCharacterActive.Response) => {
-				if (chat && chat.id === msg.chatId) {
-					toaster.success({
-						title: `Character ${msg.isActive ? "activated" : "deactivated"}`
-					})
-				}
-			}
-		)
-		socket.on(
-			"updateChatCharacterVisibility",
-			(msg: Sockets.UpdateChatCharacterVisibility.Response) => {
-				if (chat && chat.id === msg.chatId) {
-					const visibilityLabel =
-						ChatCharacterVisibility.options.find(
-							(opt) => opt.value === msg.visibility
-						)?.label || msg.visibility
-					toaster.success({
-						title: `Character visibility set to ${visibilityLabel}`
-					})
-				}
-			}
-		)
-		socket.on("chats:create", (res: any) => {
-			toaster.success({
-				title: "Chat Created",
-				description: `Chat "${res.chat.name || "Unnamed Chat"}" created successfully.`
-			})
-			showEditChatForm = false
-		})
-		socket.on("chats:update", (res: any) => {
-			toaster.success({
-				title: "Chat Updated",
-				description: `Chat "${res.chat.name || "Unnamed Chat"}" updated successfully.`
-			})
-			showEditChatForm = false
-		})
-		socket.on("chats:addGuest", (res: Sockets.Chats.AddGuest.Response) => {
-			if (res.success) {
-				toaster.success({ title: "Guest added successfully" })
-				// Request updated chat data
-				if (editChatId) {
-					socket.emit("chats:get", { id: editChatId })
-				}
-			} else if (res.error) {
-				toaster.error({ title: res.error })
-			}
-		})
-		socket.on(
-			"chats:removeGuest",
-			(res: Sockets.Chats.RemoveGuest.Response) => {
-				if (res.success) {
-					toaster.success({ title: "Guest removed successfully" })
-					// Request updated chat data
-					if (editChatId) {
-						socket.emit("chats:get", { id: editChatId })
-					}
-				} else if (res.error) {
-					toaster.error({ title: res.error })
-				}
-			}
-		)
+		// Register all socket event handlers
+		socket.on("chats:get", handleChatsGet)
+		socket.on("characters:list", handleCharactersList)
+		socket.on("personas:list", handlePersonasList)
+		socket.on("lorebooks:list", handleLorebooksList)
+		socket.on("tags:list", handleTagsList)
+		socket.on("chats:toggleChatCharacterActive", handleToggleChatCharacterActive)
+		socket.on("chats:updateChatCharacterVisibility", handleUpdateChatCharacterVisibility)
+		socket.on("chats:create", handleChatsCreate)
+		socket.on("chats:update", handleChatsUpdate)
+		socket.on("chats:addGuest", handleChatsAddGuest)
+		socket.on("chats:removeGuest", handleChatsRemoveGuest)
+
+		// Request initial data
 		socket.emit("characters:list", {})
 		socket.emit("personas:list", {})
 		socket.emit("lorebooks:list", {})
@@ -450,40 +491,49 @@
 	})
 
 	onDestroy(() => {
-		socket.off("chats:get")
-		socket.off("characters:list")
-		socket.off("personas:list")
-		socket.off("lorebooks:list")
-		socket.off("tags:list")
-		socket.off("toggleChatCharacterActive")
-		socket.off("updateChatCharacterVisibility")
-		socket.off("createChat")
-		socket.off("updateChat")
-		socket.off("chats:addGuest")
-		socket.off("chats:removeGuest")
+		// Properly remove event handlers by passing the function references
+		socket.off("chats:get", handleChatsGet)
+		socket.off("characters:list", handleCharactersList)
+		socket.off("personas:list", handlePersonasList)
+		socket.off("lorebooks:list", handleLorebooksList)
+		socket.off("tags:list", handleTagsList)
+		socket.off("chats:toggleChatCharacterActive", handleToggleChatCharacterActive)
+		socket.off("chats:updateChatCharacterVisibility", handleUpdateChatCharacterVisibility)
+		socket.off("chats:create", handleChatsCreate)
+		socket.off("chats:update", handleChatsUpdate)
+		socket.off("chats:addGuest", handleChatsAddGuest)
+		socket.off("chats:removeGuest", handleChatsRemoveGuest)
 	})
 
 	function toggleCharacterActive(
 		e: { checked: boolean },
 		c: SelectCharacter
 	): void {
-		const req: Sockets.ToggleChatCharacterActive.Call = {
-			chatId: chat!.id,
+		if (!chat?.id) {
+			console.error("No chat ID available")
+			return
+		}
+		const req: Sockets.Chats.ToggleChatCharacterActive.Params = {
+			chatId: chat.id,
 			characterId: c.id
 		}
-		socket.emit("chats:toggleCharacterActive", req)
+		socket.emit("chats:toggleChatCharacterActive", req)
 	}
 
 	function updateCharacterVisibility(
 		c: SelectCharacter,
 		visibility: string
 	): void {
-		const req: Sockets.UpdateChatCharacterVisibility.Call = {
-			chatId: chat!.id,
+		if (!chat?.id) {
+			console.error("No chat ID available")
+			return
+		}
+		const req: Sockets.Chats.UpdateChatCharacterVisibility.Params = {
+			chatId: chat.id,
 			characterId: c.id,
 			visibility
 		}
-		socket.emit("chats:updateCharacterVisibility", req)
+		socket.emit("chats:updateChatCharacterVisibility", req)
 	}
 
 	function getVisibilityIcon(visibility: string) {
@@ -893,7 +943,6 @@
 					onfocus={() => (showTagSuggestions = true)}
 					onblur={() =>
 						setTimeout(() => (showTagSuggestions = false), 200)}
-					onkeydown={handleTagInputKeydown}
 				/>
 
 				<!-- Tag suggestions dropdown -->

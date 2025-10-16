@@ -22,7 +22,11 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 		contextConfig,
 		promptConfig,
 		chat,
-		currentCharacterId
+		currentCharacterId,
+		tokenCounter,
+		tokenLimit,
+		contextThresholdPercent,
+		isAssistantMode
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
@@ -35,7 +39,11 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 			chatPersonas?: (SelectChatPersona & { persona: SelectPersona })[]
 			chatMessages: SelectChatMessage[]
 		}
-		currentCharacterId: number
+		currentCharacterId?: number | null
+		tokenCounter?: TokenCounters
+		tokenLimit?: number
+		contextThresholdPercent?: number
+		isAssistantMode?: boolean
 	}) {
 		super({
 			connection,
@@ -43,19 +51,28 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 			contextConfig,
 			promptConfig,
 			chat,
-			currentCharacterId,
-			tokenCounter: new TokenCounters(
-				connection.tokenCounter || TokenCounterOptions.ESTIMATE
-			),
+			currentCharacterId: currentCharacterId ?? null,
+			tokenCounter:
+				tokenCounter ||
+				new TokenCounters(
+					connection.tokenCounter || TokenCounterOptions.ESTIMATE
+				),
 			tokenLimit:
-				typeof sampling.contextTokens === "number"
+				tokenLimit ||
+				(typeof sampling.contextTokens === "number"
 					? sampling.contextTokens
-					: 4096,
-			contextThresholdPercent: 0.9
+					: 4096),
+			contextThresholdPercent: contextThresholdPercent || 0.9,
+			isAssistantMode
 		})
 	}
 
 	compilePrompt(args: {}) {
+		// Use assistant mode compilation if enabled
+		if (this.isAssistantMode) {
+			return this.compileAssistantPrompt(args)
+		}
+		
 		let useChatFormat = true
 		if (this.connection.extraJson?.prerenderPrompt) {
 			useChatFormat = false

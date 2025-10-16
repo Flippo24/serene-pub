@@ -6,6 +6,7 @@
 	import OllamaIcon from "$lib/client/components/icons/OllamaIcon.svelte"
 	import * as Icons from "@lucide/svelte"
 	import { getContext, onMount, onDestroy } from "svelte"
+	import { goto } from "$app/navigation"
 	import { useTypedSocket } from "$lib/client/sockets/loadSockets.client"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
@@ -141,6 +142,11 @@
 		}
 	}
 
+	function openAssistantChat() {
+		// Navigate to assistant page - shows chat list or creates new chat
+		goto("/assistant")
+	}
+
 	function connectToOllamaModel(modelName: string) {
 		socket.emit("ollama:connectModel", { modelName: modelName })
 	}
@@ -246,8 +252,7 @@
 		// Handle successful character creation
 		socket.on("characters:create", (res) => {
 			if (res.character) {
-				// Refresh character list to update hasCharacter
-				socket.emit("characters:list", {})
+				// Server automatically emits updated list
 				if (showWizard) {
 					nextWizardStep()
 				}
@@ -257,8 +262,7 @@
 		// Handle successful persona creation
 		socket.on("personas:create", (res) => {
 			if (res.persona) {
-				// Refresh persona list to update hasPersona
-				socket.emit("personas:list", {})
+				// Server automatically emits updated list
 				if (showWizard) {
 					nextWizardStep()
 				}
@@ -368,22 +372,20 @@
 					{/if}
 				</div>
 
-				<!-- Quick Start -->
-				<div class="mb-6">
-					<button
-						class="btn preset-filled-primary-500 btn-lg mb-4 px-8 py-4 text-lg"
-						onclick={handleQuickSetup}
-					>
-						<Icons.Zap size={20} />
-						{#if isBasicSetup}
-							Create First Chat
-						{:else}
-							Quick Start (5 minutes)
-						{/if}
-					</button>
-				</div>
-
-				<!-- Advanced Option -->
+			<!-- Quick Start -->
+			<div class="mb-6">
+				<button
+					class="btn preset-filled-primary-500 btn-lg mb-4 px-8 py-4 text-lg"
+					onclick={handleQuickSetup}
+				>
+					<Icons.Zap size={20} />
+					{#if isBasicSetup}
+						Create First Chat
+					{:else}
+						Quick Start (5 minutes)
+					{/if}
+				</button>
+			</div>				<!-- Advanced Option -->
 				<details class="mt-6">
 					<summary
 						class="cursor-pointer text-sm opacity-60 hover:opacity-100"
@@ -848,7 +850,7 @@
 			<p class="text-muted-foreground mb-6 text-center">
 				You can now start chatting with your characters.
 			</p>
-			<div class="flex justify-center">
+			<div class="flex flex-col items-center gap-3">
 				<button
 					class="btn preset-filled-primary-500"
 					onclick={() =>
@@ -856,6 +858,13 @@
 					disabled={panelsCtx.rightPanel == "chats"}
 				>
 					Start Chatting
+				</button>
+				<button
+					class="btn preset-tonal-primary-500"
+					onclick={openAssistantChat}
+				>
+					<Icons.MessageCircleQuestion size={20} />
+					Ask the Assistant
 				</button>
 			</div>
 		</div>

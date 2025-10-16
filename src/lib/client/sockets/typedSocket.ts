@@ -157,6 +157,10 @@ type SocketEventMap = {
 		params: Sockets.Chats.Create.Params
 		response: Sockets.Chats.Create.Response
 	}
+	"chats:createAssistant": {
+		params: Sockets.Chats.CreateAssistant.Params
+		response: Sockets.Chats.CreateAssistant.Response
+	}
 	"chats:update": {
 		params: Sockets.Chats.Update.Params
 		response: Sockets.Chats.Update.Response
@@ -164,6 +168,14 @@ type SocketEventMap = {
 	"chats:delete": {
 		params: Sockets.Chats.Delete.Params
 		response: Sockets.Chats.Delete.Response
+	}
+	"chats:toggleChatCharacterActive": {
+		params: Sockets.Chats.ToggleChatCharacterActive.Params
+		response: Sockets.Chats.ToggleChatCharacterActive.Response
+	}
+	"chats:updateChatCharacterVisibility": {
+		params: Sockets.Chats.UpdateChatCharacterVisibility.Params
+		response: Sockets.Chats.UpdateChatCharacterVisibility.Response
 	}
 
 	// Chat Message events
@@ -174,6 +186,10 @@ type SocketEventMap = {
 	"chatMessages:sendCharacterMessage": {
 		params: Sockets.ChatMessages.SendCharacterMessage.Params
 		response: Sockets.ChatMessages.SendCharacterMessage.Response
+	}
+	"chatMessages:sendAssistantMessage": {
+		params: Sockets.Chats.SendAssistantMessage.Params
+		response: Sockets.Chats.SendAssistantMessage.Response
 	}
 	"chatMessages:update": {
 		params: Sockets.ChatMessages.Update.Params

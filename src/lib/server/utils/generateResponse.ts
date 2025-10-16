@@ -7,6 +7,8 @@ import { getConnectionAdapter } from "./getConnectionAdapter"
 import { TokenCounters } from "$lib/server/utils/TokenCounterManager"
 import { getUserConfigurations } from "./getUserConfigurations"
 import { broadcastToChatUsers } from "../sockets/utils/broadcastHelpers"
+import { ChatTypes } from "$lib/shared/constants/ChatTypes"
+import { generateChatTitle } from "./generateChatTitle"
 
 export async function generateResponse({
 	socket,
@@ -77,29 +79,37 @@ export async function generateResponse({
 	const tokenLimit = 4096
 	const contextThresholdPercent = 0.8
 
+	// Detect assistant mode
+	const isAssistantMode = chat?.chatType === ChatTypes.ASSISTANT
+
 	const adapter = new Adapter({
 		chat,
 		connection: connection,
 		sampling: sampling,
 		contextConfig: contextConfig,
 		promptConfig: promptConfig,
-		currentCharacterId: generatingMessage.characterId!,
+		currentCharacterId: isAssistantMode
+			? null
+			: generatingMessage.characterId!,
 		tokenCounter,
 		tokenLimit,
-		contextThresholdPercent
+		contextThresholdPercent,
+		isAssistantMode
 	})
 	// Store adapter in global map
 	activeAdapters.set(adapterId, adapter)
 
+	// For assistant mode, no character name prefix
 	const currentCharacter = chat?.chatCharacters?.find(
 		(cc) => cc.character?.id === adapter.currentCharacterId
 	)
 
-	const charName =
-		currentCharacter?.character?.nickname ||
-		currentCharacter?.character?.name ||
-		""
-	const startString = `${charName}:`
+	const charName = isAssistantMode
+		? ""
+		: currentCharacter?.character?.nickname ||
+		  currentCharacter?.character?.name ||
+		  ""
+	const startString = charName ? `${charName}:` : ""
 
 	// Generate completion
 	let { completionResult, compiledPrompt, isAborted } =
@@ -314,5 +324,86 @@ export async function generateResponse({
 	await broadcastToChatUsers(socket.io, updatedMsg!.chatId, "chatMessage", {
 		chatMessage: updatedMsg!
 	})
+
+	// ASYNC: Generate chat title if this is the first assistant message in an assistant chat
+	if (isAssistantMode && chat && !isAborted) {
+		// Don't await - run this asynchronously to not block the response
+		generateChatTitleIfNeeded(
+			chatId,
+			userId,
+			socket.io,
+			connection,
+			sampling
+		).catch((error) => {
+			console.error("Background title generation failed:", error)
+		})
+	}
+
 	return !isAborted // Whether there were no interruptions
+}
+
+/**
+ * Generate a title for a new assistant chat after the first exchange
+ * This runs asynchronously and doesn't block the main response
+ */
+async function generateChatTitleIfNeeded(
+	chatId: number,
+	userId: number,
+	io: any,
+	connection: any,
+	sampling: any
+) {
+	try {
+		// Check if this is the first assistant message
+		const assistantMessages = await db.query.chatMessages.findMany({
+			where: (cm, { eq, and }) =>
+				and(eq(cm.chatId, chatId), eq(cm.role, "assistant"))
+		})
+
+		// Only generate title if this is the first assistant response
+		if (assistantMessages.length !== 1) {
+			return
+		}
+
+		// Get the first user message
+		const userMessage = await db.query.chatMessages.findFirst({
+			where: (cm, { eq, and }) =>
+				and(eq(cm.chatId, chatId), eq(cm.role, "user")),
+			orderBy: (cm, { asc }) => asc(cm.id)
+		})
+
+		if (!userMessage || !userMessage.content) {
+			return
+		}
+
+		const assistantMessage = assistantMessages[0]
+		if (!assistantMessage.content) {
+			return
+		}
+
+		// Generate the title
+		const title = await generateChatTitle({
+			userMessage: userMessage.content,
+			assistantMessage: assistantMessage.content,
+			connection,
+			sampling
+		})
+
+		// Update the chat with the new title
+		await db
+			.update(schema.chats)
+			.set({ name: title })
+			.where(eq(schema.chats.id, chatId))
+
+		// Broadcast the updated chat name to the user
+		io.to("user_" + userId).emit("chats:titleGenerated", {
+			chatId,
+			title
+		})
+
+		console.log(`Generated title for chat ${chatId}: "${title}"`)
+	} catch (error) {
+		console.error("Error in generateChatTitleIfNeeded:", error)
+		// Don't throw - this is a background task
+	}
 }

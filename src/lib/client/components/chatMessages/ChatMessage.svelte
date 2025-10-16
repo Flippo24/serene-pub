@@ -95,23 +95,6 @@
 	tabindex="-1"
 	role="article"
 	aria-label="Message {index + 1} of {chat.chatMessages.length} from {(character as any)?.nickname || character?.name || 'Unknown'}: {msg.content.slice(0, 100)}{msg.content.length > 100 ? '...' : ''}"
-	onkeydown={(e) => {
-		if (e.key === "Enter") {
-			e.preventDefault()
-			// Focus first available action button
-			const messageEl = e.currentTarget
-			const firstButton = messageEl.querySelector("button:not([disabled])")
-			if (firstButton) (firstButton as HTMLButtonElement).focus()
-		} else if (e.key === "ArrowUp" && index > 0) {
-			e.preventDefault()
-			const prevMessage = document.getElementById(`message-${chat.chatMessages[index - 1].id}`)
-			if (prevMessage) prevMessage.focus()
-		} else if (e.key === "ArrowDown" && index < chat.chatMessages.length - 1) {
-			e.preventDefault()
-			const nextMessage = document.getElementById(`message-${chat.chatMessages[index + 1].id}`)
-			if (nextMessage) nextMessage.focus()
-		}
-	}}
 >
 	<div class="flex justify-between gap-2">
 		<div class="group flex gap-2">
@@ -193,7 +176,7 @@
 							placement: "bottom"
 						}}
 						triggerBase="btn btn-sm hover:bg-primary-600-400 {openMobileMsgControls === msg.id ? 'bg-primary-600-400' : ''}"
-						contentBase="card bg-primary-200-800 p-4 space-y-4 max-w-[320px]"
+						contentBase="card bg-primary-200-800 p-4 space-y-4 w-[min(90vw,320px)]"
 						arrow
 						arrowBackground="!bg-primary-200 dark:!bg-primary-800"
 						zIndex="1000"
@@ -203,9 +186,9 @@
 						{/snippet}
 						{#snippet content()}
 							<header class="flex justify-between">
-								<p class="text-xl font-bold">Popover Example</p>
+								<p class="text-xl font-bold">Message Options</p>
 							</header>
-							<article class="flex flex-col gap-4">
+							<article class="flex flex-col gap-2">
 								{#if messageControls}
 									{@render messageControls(msg)}
 								{:else}

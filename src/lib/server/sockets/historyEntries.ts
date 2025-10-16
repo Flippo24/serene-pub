@@ -244,8 +244,8 @@ export const iterateNextHistoryEntryHandler: Handler<
 		// Create new entry data
 		const data: InsertHistoryEntry = {
 			lorebookId: existingEntry.lorebookId,
-			keys: existingEntry.keys,
-			content: existingEntry.content,
+			keys: "", // Blank keys for new entry
+			content: "", // Blank content for new entry
 			useRegex: existingEntry.useRegex,
 			caseSensitive: existingEntry.caseSensitive,
 			year,

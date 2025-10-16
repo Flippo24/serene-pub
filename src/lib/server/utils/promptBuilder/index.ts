@@ -38,10 +38,11 @@ export class PromptBuilder {
 	contextConfig: SelectContextConfig
 	promptConfig: SelectPromptConfig
 	chat: BasePromptChat
-	currentCharacterId: number
+	currentCharacterId: number | null
 	tokenCounter: TokenCounters
 	tokenLimit: number
 	contextThresholdPercent: number
+	isAssistantMode: boolean
 
 	// Legacy properties (gradually being moved to modules)
 	assistantCharacters: any[] = []
@@ -64,17 +65,19 @@ export class PromptBuilder {
 		currentCharacterId,
 		tokenCounter,
 		tokenLimit,
-		contextThresholdPercent
+		contextThresholdPercent,
+		isAssistantMode = false
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
 		contextConfig: SelectContextConfig
 		promptConfig: SelectPromptConfig
 		chat: BasePromptChat
-		currentCharacterId: number
+		currentCharacterId: number | null
 		tokenCounter: TokenCounters
 		tokenLimit: number
 		contextThresholdPercent: number
+		isAssistantMode?: boolean
 	}) {
 		this.connection = connection
 		this.sampling = sampling
@@ -86,6 +89,7 @@ export class PromptBuilder {
 		this.tokenCounter = tokenCounter
 		this.tokenLimit = tokenLimit
 		this.contextThresholdPercent = contextThresholdPercent
+		this.isAssistantMode = isAssistantMode
 
 		// Initialize the interpolation engine with the same handlebars instance
 		this.interpolationEngine = new InterpolationEngine(this.handlebars)
@@ -527,7 +531,7 @@ export class PromptBuilder {
 		}) =>
 			this.characterLoreEntryIteratorWithVisibility({
 				...params,
-				currentCharacterId: this.currentCharacterId
+				currentCharacterId: this.currentCharacterId || 0
 			})
 
 		if (matchingStrategyConfig) {

@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core"
 import { GroupReplyStrategies } from "../../shared/constants/GroupReplyStrategies"
 import { ChatCharacterVisibility } from "../../shared/constants/ChatCharacterVisibility"
+import { ChatTypes } from "../../shared/constants/ChatTypes"
 
 export const users = pgTable("users", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
@@ -739,6 +740,7 @@ export const chats = pgTable("chats", {
 	id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
 	name: text("name"), // Optional chat/group name
 	isGroup: boolean("is_group").notNull(), // 1 for group chat, 0 for 1:1
+	chatType: text("chat_type").notNull().default(ChatTypes.ROLEPLAY), // "roleplay" | "assistant"
 	userId: integer("user_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),

@@ -217,7 +217,21 @@
 	}
 
 	function onClickIterateNextEntry() {
-		const req: Sockets.IterateNextHistoryEntry.Call = { lorebookId }
+		// Find the entry with the highest date to iterate from
+		if (filteredEntries.length === 0) {
+			toaster.error({
+				title: "No entries found",
+				description: "Create at least one entry before using Next Date."
+			})
+			return
+		}
+		
+		// Get the entry with the highest date value
+		const latestEntry = filteredEntries.reduce((max, entry) => {
+			return getEntryDateValue(entry) > getEntryDateValue(max) ? entry : max
+		}, filteredEntries[0])
+		
+		const req: Sockets.HistoryEntries.IterateNext.Params = { id: latestEntry.id }
 		socket.emit("historyEntries:iterateNext", req)
 	}
 

@@ -7,6 +7,7 @@ import type { BaseConnectionAdapter } from "../connectionAdapters/BaseConnection
 import { getConnectionAdapter } from "../utils/getConnectionAdapter"
 import { TokenCounters } from "$lib/server/utils/TokenCounterManager"
 import { GroupReplyStrategies } from "$lib/shared/constants/GroupReplyStrategies"
+import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 import { InterpolationEngine } from "../utils/promptBuilder"
 import { dev } from "$app/environment"
 import type { Handler } from "$lib/shared/events"
@@ -202,7 +203,8 @@ export const chatsListHandler: Handler<
 	event: "chats:list",
 	async handler(socket, params, emitToUser) {
 		const userId = socket.user!.id
-		console.log("Fetching chats for user:", userId)
+		const chatType = params.chatType || ChatTypes.ROLEPLAY
+		console.log("Fetching chats for user:", userId, "chatType:", chatType)
 
 		// First, find all chats where the current user is a guest
 		const guestChats = await db.query.chatGuests.findMany({
@@ -216,10 +218,14 @@ export const chatsListHandler: Handler<
 		console.log("User is guest in chat IDs:", guestChatIds)
 
 		// Build the where clause: user owns the chat OR user is a guest in the chat
-		const whereCondition = (c, { or, eq, inArray }) =>
+		// AND filter by chat type
+		const whereCondition = (c, { or, eq, inArray, and }) =>
 			guestChatIds.length > 0
-				? or(eq(c.userId, userId), inArray(c.id, guestChatIds))
-				: eq(c.userId, userId)
+				? and(
+						or(eq(c.userId, userId), inArray(c.id, guestChatIds)),
+						eq(c.chatType, chatType)
+				  )
+				: and(eq(c.userId, userId), eq(c.chatType, chatType))
 
 		const chatsList = await db.query.chats.findMany({
 			with: {
@@ -1131,10 +1137,14 @@ export const chatMessagesSendPersonaMessageHandler: Handler<
 				{ chatMessage: inserted }
 			)
 
-			// Check if this is a 1-on-1 chat (not a group chat)
-			if (!chat.isGroup) {
+			// Check if this is effectively a 1-on-1 chat (only 1 active character)
+			const activeCharacterCount = chat.chatCharacters.filter(
+				(cc: any) => cc.isActive
+			).length
+			
+			if (activeCharacterCount === 1) {
 				console.log(
-					`[sendPersonaMessage] Triggering single character response for 1:1 chat ${chatId}`
+					`[sendPersonaMessage] Triggering single character response for 1:1 chat ${chatId} (${activeCharacterCount} active character)`
 				)
 				// Trigger character response generation
 				await triggerGenerateMessageHandler.handler(
@@ -2041,15 +2051,9 @@ export const promptTokenCountHandler: Handler<
 
 			const promptResult = await adapter.compilePrompt({})
 
-			// Map CompiledPrompt to expected Ack format
-			// Note: adapter.compilePrompt returns the app.d.ts CompiledPrompt format
-			return {
-				prompt: JSON.stringify(promptResult.prompt),
-				tokenCount: undefined, // Not available in adapter CompiledPrompt format
-				characterLimit: undefined, // Not available in adapter CompiledPrompt format
-				tokenLimit: undefined, // Not available in adapter CompiledPrompt format
-				percentFull: undefined // Not available in adapter CompiledPrompt format
-			}
+			// Return the compiled prompt in the correct format
+			emitToUser("chats:promptTokenCount", promptResult)
+			return promptResult
 		} catch (error) {
 			console.error("Error in promptTokenCountHandler:", error)
 			return {

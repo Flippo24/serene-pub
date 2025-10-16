@@ -29,7 +29,7 @@
 	}: Props = $props()
 </script>
 
-<div role="group" aria-label="Message actions" class="flex gap-2">
+<div role="group" aria-label="Message actions" class="flex flex-col lg:flex-row gap-2">
 	<button
 		class="btn btn-sm msg-cntrl-icon hover:preset-filled-secondary-500"
 		class:preset-filled-secondary-500={msg.isHidden}
@@ -102,6 +102,7 @@
 	@reference "tailwindcss";
 
 	.msg-cntrl-icon {
-		@apply h-min w-min px-2 text-[1em] disabled:opacity-25;
+		@apply h-min px-2 text-[1em] disabled:opacity-25;
+		@apply lg:w-min w-full justify-start;
 	}
 </style>

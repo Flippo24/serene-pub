@@ -269,15 +269,35 @@
 			}
 		})
 		socket.on(
+			"lorebooks:create",
+			(msg: Sockets.Lorebooks.Create.Response) => {
+				if (msg.lorebook) {
+					toaster.success({
+						title: "Lorebook Created",
+						description: `"${msg.lorebook.name}" created successfully.`
+					})
+					// Server automatically emits updated list
+				}
+			}
+		)
+		socket.on(
+			"lorebooks:update",
+			(msg: Sockets.Lorebooks.Update.Response) => {
+				// Server automatically emits updated list
+			}
+		)
+		socket.on(
 			"lorebooks:import",
 			(msg: Sockets.Lorebooks.Import.Response) => {
 				toaster.success({ title: "Lorebook Imported" })
+				// Server automatically emits updated list
 			}
 		)
 		socket.on(
 			"lorebooks:delete",
 			(msg: Sockets.Lorebooks.Delete.Response) => {
 				toaster.success({ title: "Lorebook Deleted" })
+				// Server automatically emits updated list
 			}
 		)
 		onclose = handleOnClose
@@ -286,6 +306,8 @@
 
 	onDestroy(() => {
 		socket.off("lorebooks:list")
+		socket.off("lorebooks:create")
+		socket.off("lorebooks:update")
 		socket.off("lorebooks:import")
 		socket.off("lorebooks:delete")
 		onclose = undefined

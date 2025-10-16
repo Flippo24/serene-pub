@@ -146,10 +146,26 @@ declare global {
 
 	export interface CompiledPrompt {
 		meta: {
-			description: string
+			description?: string
 			promptFormat: string
+			templateName?: string | null
+			timestamp?: string
+			truncationReason?: string | null
+			currentTurnCharacterId?: number | null
+			tokenCounts?: {
+				total: number
+				limit: number
+			}
+			chatMessages?: {
+				included: number
+				total: number
+				includedIds: number[]
+				excludedIds: number[]
+			}
+			sources?: any
 		}
-		prompt: ChatCompletionMessageParam[]
+		prompt?: string | ChatCompletionMessageParam[]
+		messages?: any[]
 	}
 
 	export interface ConnectionSummary {

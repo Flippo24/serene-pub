@@ -10,7 +10,7 @@ export class StopStrings {
 		format: (typeof PromptFormats.keys)[0]
 		characters: SelectCharacter[]
 		personas: SelectPersona[]
-		currentCharacterId: number
+		currentCharacterId?: number
 	}): string[] {
 		let stopStrings: string[] = []
 
