@@ -257,7 +257,6 @@ export const samplingConfigsCreate: Handler<
 
 		const res: Sockets.SamplingConfigs.Create.Response = { sampling }
 		emitToUser("samplingConfigs:create", res)
-		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }
@@ -310,7 +309,6 @@ export const samplingConfigsDelete: Handler<
 			success: "Sampling config deleted successfully"
 		}
 		emitToUser("samplingConfigs:delete", res)
-		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }
@@ -358,7 +356,6 @@ export const samplingConfigsUpdate: Handler<
 			sampling: updatedSamplingConfig
 		}
 		emitToUser("samplingConfigs:update", res)
-		emitToUser("samplingConfigs:list", {})
 		return res
 	}
 }

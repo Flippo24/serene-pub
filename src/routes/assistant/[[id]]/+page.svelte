@@ -6,6 +6,7 @@
 	import ChatContainer from "$lib/client/components/chatMessages/ChatContainer.svelte"
 	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
 	import MessageComposer from "$lib/client/components/chatMessages/MessageComposer.svelte"
+	import CharacterSelector from "$lib/client/components/assistant/CharacterSelector.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount } from "svelte"
 	import { toaster } from "$lib/client/utils/toaster"
@@ -20,6 +21,14 @@
 	let isCreatingChat = $state(false)
 	let isSending = $state(false)
 	let openMobileMsgControls: number | undefined = $state(undefined)
+	
+	// Function calling state
+	let pendingFunctionCall: {
+		messageId: number
+		reasoning: string
+		functionCalls: Array<{ name: string; args: Record<string, any> }>
+		results?: any[]
+	} | undefined = $state(undefined)
 
 	// Get chat id from route params if it exists
 	let chatId: number | undefined = $derived.by(() => {
@@ -68,6 +77,9 @@
 		socket.on("chats:createAssistant", handleCreateAssistantResponse)
 		socket.on("chats:sendAssistantMessage", handleSendMessageResponse)
 		socket.on("chats:titleGenerated", handleTitleGenerated)
+		socket.on("assistant:reasoningDetected", handleReasoningDetected)
+		socket.on("assistant:functionResults", handleFunctionResults)
+		socket.on("assistant:selectionComplete", handleSelectionComplete)
 
 		// Load list of assistant chats
 		socket.emit("chats:list", { chatType: ChatTypes.ASSISTANT })
@@ -86,6 +98,9 @@
 			socket.off("chats:createAssistant", handleCreateAssistantResponse)
 			socket.off("chats:sendAssistantMessage", handleSendMessageResponse)
 			socket.off("chats:titleGenerated", handleTitleGenerated)
+			socket.off("assistant:reasoningDetected", handleReasoningDetected)
+			socket.off("assistant:functionResults", handleFunctionResults)
+			socket.off("assistant:selectionComplete", handleSelectionComplete)
 		}
 	})
 
@@ -173,6 +188,75 @@
 		)
 
 		console.log(`Chat ${data.chatId} title updated to: "${data.title}"`)
+	}
+
+	function handleReasoningDetected(data: any) {
+		if (!chat || data.chatId !== chat.id) return
+		
+		console.log("Reasoning detected:", data)
+		
+		// Store the function call and execute it
+		pendingFunctionCall = {
+			messageId: data.messageId,
+			reasoning: data.reasoning,
+			functionCalls: data.functionCalls
+		}
+		
+		// Execute the functions
+		if (socket) {
+			socket.emit("assistant:executeFunctions", {
+				chatId: chat.id,
+				functionCalls: data.functionCalls
+			})
+		}
+	}
+
+	function handleFunctionResults(data: any) {
+		if (!chat || !pendingFunctionCall || data.chatId !== chat.id) return
+		
+		console.log("Function results:", data)
+		
+		// Store results
+		pendingFunctionCall = {
+			...pendingFunctionCall,
+			results: data.results
+		}
+		
+		scrollToBottom()
+	}
+
+	function handleSelectionComplete(data: any) {
+		if (!chat || data.chatId !== chat.id) return
+		
+		console.log("Selection complete:", data)
+		
+		// Store the original user message for context  
+		const originalMessage = chat.chatMessages
+			.filter((m: any) => m.role === 'user')
+			.pop()?.content || ''
+		
+		// Clear pending function call
+		pendingFunctionCall = undefined
+		
+		// Trigger a follow-up generation to answer the original question
+		// The assistant will now have access to the tagged entity data
+		if (socket && originalMessage) {
+			// Send a continuation prompt WITHOUT trigger words to avoid re-entering function-calling mode
+			const continuationPrompt = `You now have the character information. Please provide a response based on what was requested.`
+			
+			socket.emit("chats:sendAssistantMessage", {
+				chatId: chat.id,
+				content: continuationPrompt  // ✅ FIXED: changed from 'message' to 'content'
+			})
+		}
+		
+		toaster.success({ title: "Character selected, generating response..." })
+	}
+
+	function handleSelectionCompleted() {
+		// Clear the pending function call UI
+		pendingFunctionCall = undefined
+		scrollToBottom()
 	}
 
 	function handleChatMessage(data: Sockets.ChatMessage.Call) {
@@ -301,7 +385,7 @@
 		<div class="flex-1">
 			<h1 class="text-xl font-bold">
 				<Icons.BotMessageSquare class="inline" size={24} />
-				Serene Pub Assistant
+				{chat?.name || "Serene Pub Assistant"}
 			</h1>
 			<p class="text-muted text-sm">
 				Get help, suggestions, and creative ideas
@@ -462,6 +546,19 @@
 				{/snippet}
 
 				{#snippet ComposerComponent()}
+					<!-- Character Selection UI -->
+					{#if pendingFunctionCall && pendingFunctionCall.results && chat}
+						<div class="preset-filled-surface-50-950 border-t border-surface-400-600 p-4">
+							<CharacterSelector
+								chatId={chat.id}
+								messageId={pendingFunctionCall.messageId}
+								reasoning={pendingFunctionCall.reasoning}
+								results={pendingFunctionCall.results}
+								onSelect={handleSelectionCompleted}
+							/>
+						</div>
+					{/if}
+					
 					<div class="preset-filled-surface-50-950 border-t border-surface-400-600 p-4">
 						<form
 							class="flex gap-2"

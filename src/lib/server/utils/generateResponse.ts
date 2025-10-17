@@ -9,6 +9,7 @@ import { getUserConfigurations } from "./getUserConfigurations"
 import { broadcastToChatUsers } from "../sockets/utils/broadcastHelpers"
 import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 import { generateChatTitle } from "./generateChatTitle"
+import { parseReasoningFormat } from "./parseReasoningFormat"
 
 export async function generateResponse({
 	socket,
@@ -206,6 +207,44 @@ export async function generateResponse({
 			})
 			// Final update: mark as not generating, clear adapterId
 			content = content.replace(startString, "").trim()
+			
+			// Check for reasoning format in assistant mode
+			if (isAssistantMode) {
+				console.log('[AssistantFunctions] Checking for reasoning format in content:', content.substring(0, 200))
+				const reasoningParsed = parseReasoningFormat(content)
+				console.log('[AssistantFunctions] Parsed result:', reasoningParsed)
+				
+				if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
+					console.log('[AssistantFunctions] Function calls detected!', reasoningParsed.functionCalls)
+					// Emit function calls to client for execution
+					socket.emit('assistant:reasoningDetected', {
+						chatId,
+						messageId: generatingMessage.id,
+						reasoning: reasoningParsed.reasoning,
+						functionCalls: reasoningParsed.functionCalls
+					})
+					
+					// Update message with reasoning content and mark as waiting for function
+					await db
+						.update(schema.chatMessages)
+						.set({ 
+							content: reasoningParsed.reasoning, 
+							isGenerating: false, 
+							adapterId: null,
+							metadata: {
+								...generatingMessage.metadata,
+								waitingForFunctionSelection: true
+							}
+						})
+						.where(eq(schema.chatMessages.id, generatingMessage.id))
+					
+					activeAdapters.delete(adapterId)
+					return true // Wait for user selection
+				} else {
+					console.log('[AssistantFunctions] No function calls found in response')
+				}
+			}
+			
 			const ret = await db
 				.update(schema.chatMessages)
 				.set({ content, isGenerating: false, adapterId: null })
@@ -240,6 +279,43 @@ export async function generateResponse({
 			)
 		} else {
 			content = completionResult.replace(startString, "").trim()
+
+			// Check for reasoning format in assistant mode
+			if (isAssistantMode) {
+				console.log('[AssistantFunctions] (Non-streaming) Checking for reasoning format in content:', content.substring(0, 200))
+				const reasoningParsed = parseReasoningFormat(content)
+				console.log('[AssistantFunctions] (Non-streaming) Parsed result:', reasoningParsed)
+				
+				if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
+					console.log('[AssistantFunctions] (Non-streaming) Function calls detected!', reasoningParsed.functionCalls)
+					// Emit function calls to client for execution
+					socket.emit('assistant:reasoningDetected', {
+						chatId,
+						messageId: generatingMessage.id,
+						reasoning: reasoningParsed.reasoning,
+						functionCalls: reasoningParsed.functionCalls
+					})
+					
+					// Update message with reasoning content and mark as waiting for function
+					await db
+						.update(schema.chatMessages)
+						.set({ 
+							content: reasoningParsed.reasoning, 
+							isGenerating: false, 
+							adapterId: null,
+							metadata: {
+								...generatingMessage.metadata,
+								waitingForFunctionSelection: true
+							} as any
+						})
+						.where(eq(schema.chatMessages.id, generatingMessage.id))
+					
+					activeAdapters.delete(adapterId)
+					return true // Wait for user selection
+				} else {
+					console.log('[AssistantFunctions] (Non-streaming) No function calls found in response')
+				}
+			}
 
 			// --- SWIPE HISTORY LOGIC (non-streamed) ---
 			let updateData: any = {

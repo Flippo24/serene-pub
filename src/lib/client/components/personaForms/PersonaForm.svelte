@@ -275,68 +275,74 @@
 		isSafeToClose = hasChanges
 	})
 
+	// Define socket event handlers as named functions for proper cleanup
+	const handlePersonasCreate = (res: Sockets.CreatePersona.Response) => {
+		if (res.persona) {
+			validationErrors = {} // Clear any validation errors on success
+			toaster.success({
+				title: "Persona Created",
+				description: `Persona "${res.persona.name}" created successfully.`
+			})
+			closeForm()
+		}
+	}
+
+	const handlePersonasUpdate = (res: Sockets.UpdatePersona.Response) => {
+		if (res.persona) {
+			validationErrors = {} // Clear any validation errors on success
+			toaster.success({
+				title: "Persona Updated",
+				description: `Persona "${res.persona.name}" updated successfully.`
+			})
+			closeForm()
+		}
+	}
+
+	const handleTagsList = (msg: any) => {
+		tagsList = msg.tagsList || []
+	}
+
+	const handlePersonasGet = (message: Sockets.Personas.Get.Response) => {
+		if (message.persona) {
+			const personaData = { ...message.persona }
+			editPersonaData = {
+				...editPersonaData,
+				...personaData,
+				avatar: personaData.avatar ?? "",
+				description: personaData.description ?? "",
+				tags: personaData.tags || [],
+				_avatar: ""
+			}
+			originalPersonaData = { ...editPersonaData }
+		}
+	}
+
 	onMount(() => {
 		onCancel = handleCancel
 
 		// Add keyboard event listener
 		document.addEventListener("keydown", handleKeydown)
 
-		socket.on("personas:create", (res: Sockets.CreatePersona.Response) => {
-			if (res.persona) {
-				validationErrors = {} // Clear any validation errors on success
-				toaster.success({
-					title: "Persona Created",
-					description: `Persona "${res.persona.name}" created successfully.`
-				})
-				closeForm()
-			}
-		})
-
-		socket.on("personas:update", (res: Sockets.UpdatePersona.Response) => {
-			if (res.persona) {
-				validationErrors = {} // Clear any validation errors on success
-				toaster.success({
-					title: "Persona Updated",
-					description: `Persona "${res.persona.name}" updated successfully.`
-				})
-				closeForm()
-			}
-		})
-
-		socket.on("tags:list", (msg: any) => {
-			tagsList = msg.tagsList || []
-		})
+		// Register socket event handlers
+		socket.on("personas:create", handlePersonasCreate)
+		socket.on("personas:update", handlePersonasUpdate)
+		socket.on("tags:list", handleTagsList)
 
 		// Load tags list
 		socket.emit("tags:list", {})
 
 		if (personaId) {
-			socket.once(
-				"personas:get",
-				(message: Sockets.Personas.Get.Response) => {
-					if (message.persona) {
-						const personaData = { ...message.persona }
-						editPersonaData = {
-							...editPersonaData,
-							...personaData,
-							avatar: personaData.avatar ?? "",
-							description: personaData.description ?? "",
-							tags: personaData.tags || [],
-							_avatar: ""
-						}
-						originalPersonaData = { ...editPersonaData }
-					}
-				}
-			)
+			socket.once("personas:get", handlePersonasGet)
 			socket.emit("personas:get", { id: personaId })
 		}
 	})
 
 	onDestroy(() => {
-		socket.off("createPersona")
-		socket.off("updatePersona")
-		socket.off("personas:get")
-		socket.off("tags:list")
+		// Properly remove event handlers by passing the function references
+		socket.off("personas:create", handlePersonasCreate)
+		socket.off("personas:update", handlePersonasUpdate)
+		socket.off("personas:get", handlePersonasGet)
+		socket.off("tags:list", handleTagsList)
 
 		// Remove keyboard event listener and clear timeout
 		document.removeEventListener("keydown", handleKeydown)

@@ -477,7 +477,7 @@
 		socket.on(
 			"samplingConfigs:list",
 			(message: Sockets.SamplingConfigs.List.Response) => {
-				samplingConfigsList = message.samplingConfigsList
+				samplingConfigsList = message.samplingConfigsList || []
 				if (
 					!userSettingsCtx.settings?.activeSamplingConfigId &&
 					samplingConfigsList.length > 0
@@ -509,9 +509,9 @@
 		socket.on(
 			"samplingConfigs:setUserActive",
 			(message: Sockets.SamplingConfigs.SetUserActive.Response) => {
-				if (message.id) {
-					const selectedSampling = samplingConfigsList.find(
-						(s) => s.id === message.id
+				if (message.user?.activeSamplingConfigId) {
+					const selectedSampling = (samplingConfigsList || []).find(
+						(s) => s.id === message.user.activeSamplingConfigId
 					)
 					if (selectedSampling) {
 						console.log(
@@ -649,12 +649,12 @@
 				value={activeConfigId}
 				disabled={unsavedChanges}
 			>
-				{#each samplingConfigsList.filter((w) => w.isImmutable) as w}
+				{#each (samplingConfigsList || []).filter((w) => w.isImmutable) as w}
 					<option value={w.id}>
 						{w.name}{#if w.isImmutable}*{/if}
 					</option>
 				{/each}
-				{#each samplingConfigsList.filter((w) => !w.isImmutable) as w}
+				{#each (samplingConfigsList || []).filter((w) => !w.isImmutable) as w}
 					<option value={w.id}>
 						{w.name}{#if w.isImmutable}*{/if}
 					</option>

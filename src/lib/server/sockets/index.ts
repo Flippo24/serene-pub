@@ -10,6 +10,7 @@ import {
 	chatsCreateAssistantHandler,
 	chatsSendAssistantMessageHandler
 } from "./assistantChats"
+import { handleAssistantFunctions } from "./assistantFunctions"
 import { registerPromptConfigHandlers } from "./promptConfigs"
 import { registerUserHandlers } from "./users"
 import { registerLorebookHandlers } from "./lorebooks"
@@ -60,6 +61,7 @@ export function connectSockets(io: {
 		// Register assistant chat handlers
 		register(socket, chatsCreateAssistantHandler, emitToUser)
 		register(socket, chatsSendAssistantMessageHandler, emitToUser)
+		handleAssistantFunctions(io as any, socket, userId)
 		registerLorebookHandlers(socket, emitToUser, register)
 		registerWorldLoreEntryHandlers(socket, emitToUser, register)
 		registerCharacterLoreEntryHandlers(socket, emitToUser, register)

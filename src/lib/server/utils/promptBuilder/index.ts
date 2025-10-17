@@ -667,6 +667,61 @@ export class PromptBuilder {
 		}
 	}
 
+	// --- Load tagged entities for assistant mode ---
+	private async loadTaggedEntities(): Promise<string> {
+		if (!this.isAssistantMode) {
+			return ""
+		}
+
+		const metadata = this.chat.metadata as any
+		if (!metadata || !metadata.taggedEntities) {
+			return ""
+		}
+
+		const sections: string[] = []
+
+		// Load tagged characters
+		if (metadata.taggedEntities.characters && Array.isArray(metadata.taggedEntities.characters)) {
+			const { db } = await import("../../db")
+			const characterIds = metadata.taggedEntities.characters
+			
+			if (characterIds.length > 0) {
+				const characters = await db.query.characters.findMany({
+					where: (c:any, { inArray, eq, and }: any) =>
+						and(
+							inArray(c.id, characterIds),
+							eq(c.userId, this.chat.userId)
+						),
+					columns: {
+						id: true,
+						name: true,
+						nickname: true,
+						description: true,
+						avatar: true,
+						createdAt: true
+					}
+				})
+
+				if (characters.length > 0) {
+					sections.push("## Tagged Characters\n")
+					for (const char of characters) {
+						sections.push(`### ${char.name}${char.nickname ? ` (${char.nickname})` : ""}`)
+						sections.push(`- ID: ${char.id}`)
+						if (char.description) {
+							sections.push(`- Description: ${char.description}`)
+						}
+						if (char.avatar) {
+							sections.push(`- Avatar: ${char.avatar}`)
+						}
+						sections.push(`- Created: ${new Date(char.createdAt).toLocaleDateString()}\n`)
+					}
+				}
+			}
+		}
+
+		return sections.length > 0 ? "\n" + sections.join("\n") + "\n" : ""
+	}
+
 	// --- Main compilePrompt ---
 	async compilePrompt({
 		useChatFormat = false
