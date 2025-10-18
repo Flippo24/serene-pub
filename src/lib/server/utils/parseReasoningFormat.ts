@@ -17,8 +17,9 @@ export interface ParsedReasoning {
  * Parse reasoning format from assistant response
  */
 export function parseReasoningFormat(content: string): ParsedReasoning | null {
-	// Match: {reasoning: "...", functions?: [...]}
-	const reasoningPattern = /\{reasoning:\s*"([^"]+)"(?:,\s*functions\?:\s*\[([^\]]+)\])?\}/
+	// Match: {reasoning: "...", functions?: [...]} or {reasoning:"...", functions:[...]}
+	// Allow optional whitespace around colons and after commas
+	const reasoningPattern = /\{\s*reasoning\s*:\s*"([^"]+)"\s*(?:,\s*functions\??\s*:\s*\[([^\]]+)\])?\s*\}/
 	const match = content.match(reasoningPattern)
 
 	if (!match) {
@@ -55,8 +56,9 @@ export function parseFunctionCalls(
 		const args: Record<string, any> = {}
 
 		if (argsStr.trim()) {
-			// Parse arguments: arg:"value" or arg:number or arg:true
-			const argPattern = /(\w+):(["']?)([^,"']+)\2/g
+			// Parse arguments: arg:"value" or arg: "value" or arg:number or arg: number
+			// Allow optional whitespace after colon
+			const argPattern = /(\w+)\s*:\s*(["']?)([^,"']+)\2/g
 			let argMatch
 
 			while ((argMatch = argPattern.exec(argsStr)) !== null) {

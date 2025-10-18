@@ -3,10 +3,11 @@
 	import { goto } from "$app/navigation"
 	import * as skio from "sveltekit-io"
 	import * as Icons from "@lucide/svelte"
+	import { Modal } from "@skeletonlabs/skeleton-svelte"
 	import ChatContainer from "$lib/client/components/chatMessages/ChatContainer.svelte"
 	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
 	import MessageComposer from "$lib/client/components/chatMessages/MessageComposer.svelte"
-	import CharacterSelector from "$lib/client/components/assistant/CharacterSelector.svelte"
+	import AssistantDataManager from "$lib/client/components/assistant/AssistantDataManager.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount } from "svelte"
 	import { toaster } from "$lib/client/utils/toaster"
@@ -21,6 +22,13 @@
 	let isCreatingChat = $state(false)
 	let isSending = $state(false)
 	let openMobileMsgControls: number | undefined = $state(undefined)
+	let showDeleteChatModal = $state(false)
+	let chatToDelete: SelectChat | null = $state(null)
+	
+	// Scroll tracking for autoscroll
+	let lastSeenMessageId: number | null = $state(null)
+	let lastSeenMessageContent: string = $state("")
+	let isInitialLoad = $state(true)
 	
 	// Function calling state
 	let pendingFunctionCall: {
@@ -45,6 +53,20 @@
 
 	let hasGeneratingMessage = $derived.by(() => {
 		return chat?.chatMessages?.some((msg) => msg.isGenerating) || false
+	})
+
+	// Extract tagged entities from chat metadata
+	let taggedEntities = $derived.by(() => {
+		if (!chat?.metadata) return {}
+		
+		const metadata = typeof chat.metadata === 'string' 
+			? JSON.parse(chat.metadata) 
+			: chat.metadata
+		
+		console.log('[Page] Chat metadata:', metadata)
+		console.log('[Page] Tagged entities:', metadata?.taggedEntities)
+		
+		return metadata?.taggedEntities || {}
 	})
 
 	// Check if we can send a message
@@ -80,6 +102,8 @@
 		socket.on("assistant:reasoningDetected", handleReasoningDetected)
 		socket.on("assistant:functionResults", handleFunctionResults)
 		socket.on("assistant:selectionComplete", handleSelectionComplete)
+		socket.on("assistant:unlinkSuccess", handleUnlinkSuccess)
+		socket.on("chats:delete", handleChatDeleted)
 
 		// Load list of assistant chats
 		socket.emit("chats:list", { chatType: ChatTypes.ASSISTANT })
@@ -101,6 +125,19 @@
 			socket.off("assistant:reasoningDetected", handleReasoningDetected)
 			socket.off("assistant:functionResults", handleFunctionResults)
 			socket.off("assistant:selectionComplete", handleSelectionComplete)
+			socket.off("assistant:unlinkSuccess", handleUnlinkSuccess)
+			socket.off("chats:delete", handleChatDeleted)
+		}
+	})
+	
+	// Watch for chat ID changes to reset scroll tracking
+	$effect(() => {
+		if (chatId) {
+			isInitialLoad = true
+			lastSeenMessageId = null
+			lastSeenMessageContent = ""
+			// Load the chat
+			socket?.emit("chats:get", { id: chatId })
 		}
 	})
 
@@ -193,7 +230,21 @@
 	function handleReasoningDetected(data: any) {
 		if (!chat || data.chatId !== chat.id) return
 		
-		console.log("Reasoning detected:", data)
+		console.log("=== REASONING DETECTED ===", data)
+		console.log("Chat ID:", chat.id)
+		console.log("Function calls:", data.functionCalls)
+		
+		// Update the message to mark it as no longer generating
+		const messageIndex = chat.chatMessages.findIndex(m => m.id === data.messageId)
+		if (messageIndex >= 0) {
+			chat.chatMessages[messageIndex] = {
+				...chat.chatMessages[messageIndex],
+				isGenerating: false,
+				content: data.reasoning
+			}
+			// Trigger reactivity
+			chat = chat
+		}
 		
 		// Store the function call and execute it
 		pendingFunctionCall = {
@@ -202,25 +253,53 @@
 			functionCalls: data.functionCalls
 		}
 		
+		console.log("Pending function call set:", pendingFunctionCall)
+		
 		// Execute the functions
 		if (socket) {
+			console.log("Emitting assistant:executeFunctions")
 			socket.emit("assistant:executeFunctions", {
 				chatId: chat.id,
 				functionCalls: data.functionCalls
 			})
+		} else {
+			console.error("Socket not available!")
 		}
 	}
 
 	function handleFunctionResults(data: any) {
-		if (!chat || !pendingFunctionCall || data.chatId !== chat.id) return
+		console.log("=== FUNCTION RESULTS HANDLER CALLED ===")
+		console.log("Data received:", data)
+		console.log("Current chat:", chat?.id)
+		console.log("Pending function call:", pendingFunctionCall)
+		console.log("Data chat ID:", data.chatId)
 		
-		console.log("Function results:", data)
+		if (!chat) {
+			console.error("❌ No chat available!")
+			return
+		}
+		
+		if (!pendingFunctionCall) {
+			console.error("❌ No pending function call!")
+			return
+		}
+		
+		if (data.chatId !== chat.id) {
+			console.error("❌ Chat ID mismatch!", data.chatId, "!==", chat.id)
+			return
+		}
+		
+		console.log("=== FUNCTION RESULTS RECEIVED ===", data)
+		console.log("Results count:", data.results?.length)
+		console.log("Results data:", data.results)
 		
 		// Store results
 		pendingFunctionCall = {
 			...pendingFunctionCall,
 			results: data.results
 		}
+		
+		console.log("✅ Updated pending function call:", pendingFunctionCall)
 		
 		scrollToBottom()
 	}
@@ -229,6 +308,17 @@
 		if (!chat || data.chatId !== chat.id) return
 		
 		console.log("Selection complete:", data)
+		
+		// Update chat metadata with new tagged entities
+		if (chat.metadata) {
+			chat.metadata = {
+				...((chat.metadata as any) || {}),
+				taggedEntities: data.taggedEntities
+			}
+		}
+		
+		// Force reactivity
+		chat = chat
 		
 		// Store the original user message for context  
 		const originalMessage = chat.chatMessages
@@ -250,13 +340,82 @@
 			})
 		}
 		
-		toaster.success({ title: "Character selected, generating response..." })
+		toaster.success({ title: "Data linked, generating response..." })
 	}
 
 	function handleSelectionCompleted() {
 		// Clear the pending function call UI
 		pendingFunctionCall = undefined
 		scrollToBottom()
+	}
+
+	function handleUnlinkSuccess(data: any) {
+		if (!chat || data.chatId !== chat.id) return
+		
+		console.log("Entity unlinked successfully:", data)
+		
+		// Update chat metadata with new tagged entities
+		if (chat.metadata) {
+			chat.metadata = {
+				...((chat.metadata as any) || {}),
+				taggedEntities: data.taggedEntities
+			}
+		}
+		
+		// Force reactivity
+		chat = chat
+		
+		toaster.success({ title: "Entity unlinked successfully" })
+	}
+	
+	function handleChatDeleted(res: any) {
+		console.log("handleChatDeleted called with:", res)
+		
+		if (res.error) {
+			toaster.error({ title: res.error })
+			return
+		}
+		
+		// Check for both chatId and id in response
+		const deletedChatId = res.chatId || res.id
+		
+		if (deletedChatId) {
+			console.log("Removing chat from list:", deletedChatId)
+			console.log("Before filter:", assistantChats.length)
+			
+			// Remove from list
+			assistantChats = assistantChats.filter(c => c.id !== deletedChatId)
+			
+			console.log("After filter:", assistantChats.length)
+			
+			// If we deleted the current chat, navigate to index
+			if (chat && chat.id === deletedChatId) {
+				chat = undefined
+				goto('/assistant', { replaceState: true })
+			}
+			
+			toaster.success({ title: "Chat deleted" })
+		} else {
+			console.error("No chat ID in delete response:", res)
+		}
+	}
+	
+	function openDeleteChatModal(chatToDeleteParam: SelectChat) {
+		chatToDelete = chatToDeleteParam
+		showDeleteChatModal = true
+	}
+	
+	function confirmDeleteChat() {
+		if (!chatToDelete || !socket) return
+		
+		socket.emit("chats:delete", { id: chatToDelete.id })
+		showDeleteChatModal = false
+		chatToDelete = null
+	}
+	
+	function cancelDeleteChat() {
+		showDeleteChatModal = false
+		chatToDelete = null
 	}
 
 	function handleChatMessage(data: Sockets.ChatMessage.Call) {
@@ -306,6 +465,62 @@
 			}, 50)
 		}
 	}
+	
+	// Helper function to perform autoscroll with retries
+	function performAutoscroll(attempt = 1, maxAttempts = 3) {
+		if (!messagesContainer) return
+
+		const scrollHeight = messagesContainer.scrollHeight
+		const clientHeight = messagesContainer.clientHeight
+
+		// Check if there's actually content to scroll to
+		if (scrollHeight > clientHeight) {
+			messagesContainer.scrollTo({
+				top: scrollHeight,
+				behavior: isInitialLoad ? "instant" : "smooth"
+			})
+			return
+		}
+
+		// If no content yet and we haven't exceeded max attempts, retry
+		if (attempt < maxAttempts) {
+			const delay = attempt === 1 ? 100 : 300
+			setTimeout(() => performAutoscroll(attempt + 1, maxAttempts), delay)
+		}
+	}
+	
+	// Auto-scroll to bottom on new messages, initial load, or last message content updates
+	$effect(() => {
+		// React to changes in messages and container
+		const messagesLength = chat?.chatMessages?.length ?? 0
+		const lastMsg = chat?.chatMessages?.[messagesLength - 1]
+		const currentLastMessageId = lastMsg?.id
+		const currentLastMessageContent = lastMsg?.content || ""
+
+		if (messagesContainer && messagesLength > 0) {
+			// Determine if we should autoscroll
+			const isNewMessage =
+				currentLastMessageId &&
+				(!lastSeenMessageId || currentLastMessageId > lastSeenMessageId)
+			const isLastMessageContentUpdated =
+				currentLastMessageId === lastSeenMessageId &&
+				currentLastMessageContent !== lastSeenMessageContent
+
+			const shouldAutoscroll =
+				isInitialLoad || isNewMessage || isLastMessageContentUpdated
+
+			if (shouldAutoscroll) {
+				performAutoscroll()
+				isInitialLoad = false
+			}
+
+			// Update tracking variables
+			if (currentLastMessageId) {
+				lastSeenMessageId = currentLastMessageId
+				lastSeenMessageContent = currentLastMessageContent
+			}
+		}
+	})
 
 	// Simple handlers for ChatMessage component
 	function getMessageCharacter(msg: SelectChatMessage) {
@@ -372,23 +587,23 @@
 	}
 </script>
 
-<div class="flex h-screen w-full flex-col">
+<div class="flex h-full w-full flex-col">
 	<!-- Header -->
 	<div class="preset-filled-surface-100-950 border-b border-surface-400-600 flex items-center gap-4 p-4">
 		<button
 			class="btn preset-tonal-surface"
 			onclick={handleBackButton}
-			title={chatId ? "Back to Assistant" : "Back to Home"}
+			title={chatId ? "Back to Serenity" : "Back to Home"}
 		>
 			<Icons.ArrowLeft size={20} />
 		</button>
 		<div class="flex-1">
 			<h1 class="text-xl font-bold">
 				<Icons.BotMessageSquare class="inline" size={24} />
-				{chat?.name || "Serene Pub Assistant"}
+				{chat?.name || "Serenity"}
 			</h1>
 			<p class="text-muted text-sm">
-				Get help, suggestions, and creative ideas
+				Your AI assistant for Serene Pub
 			</p>
 		</div>
 	</div>
@@ -399,13 +614,13 @@
 			<div class="flex flex-1 items-center justify-center">
 				<div class="text-center">
 					<div class="loading mb-4"></div>
-					<p class="text-muted">Creating assistant chat...</p>
+					<p class="text-muted">Starting conversation with Serenity...</p>
 				</div>
 			</div>
 		{:else if !chatId && !chat}
 			<!-- Recents List View (like Claude.ai) -->
-			<div class="flex flex-1 flex-col overflow-hidden p-6">
-				<div class="mx-auto w-full max-w-3xl">
+			<div class="flex flex-1 flex-col overflow-y-auto">
+				<div class="mx-auto w-full max-w-3xl p-6">
 					<!-- Message Input for Creating New Chat -->
 					<form
 						class="mb-8"
@@ -421,7 +636,7 @@
 							<input
 								type="text"
 								class="input w-full text-lg py-4 px-6 pr-14"
-								placeholder="Ask me anything about Serene Pub..."
+								placeholder="Ask Serenity anything about Serene Pub..."
 								bind:value={newMessage}
 								disabled={isCreatingChat}
 								aria-label="Start a new conversation"
@@ -446,24 +661,36 @@
 						<div class="space-y-2">
 							<h2 class="text-sm font-semibold text-muted mb-3">Recent Conversations</h2>
 							{#each assistantChats as assistantChat (assistantChat.id)}
-								<button
-									class="preset-tonal-surface w-full text-left p-4 rounded-lg hover:preset-filled-surface-100-950 transition-colors border border-surface-400-600"
-									onclick={() => goto(`/assistant/${assistantChat.id}`)}
+								<div
+									class="preset-tonal-surface w-full rounded-lg border border-surface-400-600 hover:preset-filled-surface-100-950 transition-colors flex items-start gap-2"
 								>
-									<div class="flex items-start justify-between gap-4">
-										<div class="flex-1 min-w-0">
-											<h3 class="font-medium truncate">
-												{assistantChat.name || "Conversation with Assistant"}
-											</h3>
-											<p class="text-sm text-muted mt-1">
-												Click to continue this conversation
-											</p>
+									<button
+										class="flex-1 text-left p-4"
+										onclick={() => goto(`/assistant/${assistantChat.id}`)}
+									>
+										<div class="flex items-start justify-between gap-4">
+											<div class="flex-1 min-w-0">
+												<h3 class="font-medium truncate">
+													{assistantChat.name || "Conversation with Serenity"}
+												</h3>
+												<p class="text-sm text-muted mt-1">
+													{new Date(assistantChat.updatedAt).toLocaleDateString()}
+												</p>
+											</div>
 										</div>
-										<div class="text-xs text-muted whitespace-nowrap">
-											{new Date(assistantChat.updatedAt).toLocaleDateString()}
-										</div>
-									</div>
-								</button>
+									</button>
+									<button
+										class="btn-icon btn-icon-sm hover:variant-filled-error p-2 m-2"
+										onclick={(e) => {
+											e.stopPropagation()
+											openDeleteChatModal(assistantChat)
+										}}
+										title="Delete conversation"
+										aria-label="Delete conversation"
+									>
+										<Icons.Trash2 size={16} />
+									</button>
+								</div>
 							{/each}
 						</div>
 					{:else}
@@ -546,20 +773,26 @@
 				{/snippet}
 
 				{#snippet ComposerComponent()}
-					<!-- Character Selection UI -->
-					{#if pendingFunctionCall && pendingFunctionCall.results && chat}
-						<div class="preset-filled-surface-50-950 border-t border-surface-400-600 p-4">
-							<CharacterSelector
+					<div class="preset-filled-surface-50-950 border-t border-surface-400-600">
+						<!-- Data Manager above input -->
+						{#if chat}
+						<div class="p-4 pb-2">
+							<AssistantDataManager 
 								chatId={chat.id}
-								messageId={pendingFunctionCall.messageId}
-								reasoning={pendingFunctionCall.reasoning}
-								results={pendingFunctionCall.results}
-								onSelect={handleSelectionCompleted}
+								taggedEntities={taggedEntities}
+								pendingSelection={pendingFunctionCall ? {
+									messageId: pendingFunctionCall.messageId,
+									reasoning: pendingFunctionCall.reasoning,
+									results: pendingFunctionCall.results || [],
+									type: 'characters'
+								} : null}
+								onSelectionComplete={handleSelectionCompleted}
 							/>
 						</div>
-					{/if}
-					
-					<div class="preset-filled-surface-50-950 border-t border-surface-400-600 p-4">
+						{/if}
+						
+						<!-- Message Input -->
+						<div class="p-4 pt-2">
 						<form
 							class="flex gap-2"
 							onsubmit={(e) => {
@@ -594,6 +827,7 @@
 								Assistant is thinking...
 							</p>
 						{/if}
+						</div>
 					</div>
 				{/snippet}
 			</ChatContainer>
@@ -670,3 +904,47 @@
 		}
 	}
 </style>
+
+<!-- Delete Chat Confirmation Modal -->
+<Modal
+	open={showDeleteChatModal}
+	onOpenChange={(e) => {
+		if (!e.open) cancelDeleteChat()
+	}}
+	contentBase="card bg-surface-100-900 p-6 w-[90vw] max-w-md"
+	backdropClasses="backdrop-blur-sm"
+>
+	{#snippet content()}
+		<div class="space-y-4">
+			<div class="flex items-start gap-3">
+				<div class="flex-1">
+					<h3 class="h3">Delete Conversation?</h3>
+					<p class="text-sm opacity-80 mt-2">
+						Are you sure you want to delete this conversation? This action cannot be undone.
+					</p>
+					{#if chatToDelete}
+						<p class="text-sm font-medium mt-2">
+							"{chatToDelete.name || 'Untitled Conversation'}"
+						</p>
+					{/if}
+				</div>
+			</div>
+			
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn preset-tonal-surface"
+					onclick={cancelDeleteChat}
+				>
+					Cancel
+				</button>
+				<button
+					class="btn preset-filled-error-500"
+					onclick={confirmDeleteChat}
+				>
+					<Icons.Trash2 size={16} />
+					Delete
+				</button>
+			</div>
+		</div>
+	{/snippet}
+</Modal>

@@ -555,7 +555,14 @@ export const chatsDeleteHandler: Handler<
 
 			await db.delete(schema.chats).where(eq(schema.chats.id, params.id))
 
-			return { success: "Chat deleted successfully" }
+			// Emit the delete event with the chat ID so the client can update
+			const response = { 
+				success: "Chat deleted successfully",
+				chatId: params.id 
+			}
+			emitToUser("chats:delete", response)
+			
+			return response
 		} catch (error) {
 			throw error
 		}

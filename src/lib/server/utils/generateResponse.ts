@@ -225,14 +225,18 @@ export async function generateResponse({
 					})
 					
 					// Update message with reasoning content and mark as waiting for function
+					const currentMetadata = (typeof generatingMessage.metadata === 'object' && generatingMessage.metadata !== null) 
+						? generatingMessage.metadata 
+						: {}
+					
 					await db
 						.update(schema.chatMessages)
 						.set({ 
-							content: reasoningParsed.reasoning, 
+							content: reasoningParsed.reasoning || "",  // Ensure content is never null/undefined
 							isGenerating: false, 
 							adapterId: null,
 							metadata: {
-								...generatingMessage.metadata,
+								...currentMetadata,
 								waitingForFunctionSelection: true
 							}
 						})

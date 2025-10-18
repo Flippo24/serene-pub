@@ -93,7 +93,7 @@ export const chatsSendAssistantMessageHandler: Handler<
 					chatId: params.chatId,
 					userId,
 					role: "user",
-					content: params.content,
+					content: params.content || "", // Ensure content is never null
 					isGenerating: false
 				})
 				.returning()

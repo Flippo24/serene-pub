@@ -146,4 +146,62 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 			}
 		}
 	)
+
+	/**
+	 * Handle unlinking entities from chat
+	 */
+	socket.on(
+		'assistant:unlinkEntity',
+		async (data: { chatId: number; entityId: number; type: string }) => {
+			try {
+				const { chatId, entityId, type } = data
+
+				// Get current chat metadata
+				const chat = await db.query.chats.findFirst({
+					where: eq(schema.chats.id, chatId)
+				})
+
+				if (!chat) {
+					socket.emit('assistant:unlinkError', { error: 'Chat not found' })
+					return
+				}
+
+				// Update chat metadata by removing the entity
+				const metadata = (chat.metadata as any) || {}
+				const taggedEntities = metadata.taggedEntities || {}
+
+				if (taggedEntities[type]) {
+					taggedEntities[type] = taggedEntities[type].filter(
+						(id: number) => id !== entityId
+					)
+					
+					// Remove the type key if array is empty
+					if (taggedEntities[type].length === 0) {
+						delete taggedEntities[type]
+					}
+				}
+
+				// Save updated metadata
+				await db
+					.update(schema.chats)
+					.set({
+						metadata: JSON.stringify({ ...metadata, taggedEntities })
+					})
+					.where(eq(schema.chats.id, chatId))
+
+				// Emit success
+				socket.emit('assistant:unlinkSuccess', {
+					chatId,
+					entityId,
+					type,
+					taggedEntities
+				})
+			} catch (error) {
+				console.error('Error unlinking entity:', error)
+				socket.emit('assistant:unlinkError', {
+					error: 'Failed to unlink entity'
+				})
+			}
+		}
+	)
 }
