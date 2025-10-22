@@ -26,7 +26,8 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 		tokenCounter,
 		tokenLimit,
 		contextThresholdPercent,
-		isAssistantMode
+		isAssistantMode,
+		generatingMessageMetadata
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
@@ -44,6 +45,7 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 		tokenLimit?: number
 		contextThresholdPercent?: number
 		isAssistantMode?: boolean
+		generatingMessageMetadata?: any
 	}) {
 		super({
 			connection,
@@ -63,7 +65,8 @@ export class OpenAIChatAdapter extends BaseConnectionAdapter {
 					? sampling.contextTokens
 					: 4096),
 			contextThresholdPercent: contextThresholdPercent || 0.9,
-			isAssistantMode
+			isAssistantMode,
+			generatingMessageMetadata
 		})
 	}
 

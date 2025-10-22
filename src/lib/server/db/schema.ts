@@ -808,6 +808,7 @@ export const chatMessages = pgTable(
 			isGreeting?: boolean
 			swipes?: { currentIdx: number | null; history: [] }
 			waitingForFunctionSelection?: boolean
+			reasoning?: string // Assistant reasoning/thinking before response
 		}>(), // JSON for extra info
 		isGenerating: boolean("is_generating").notNull().default(false), // 1 if processing, 0 otherwise
 		adapterId: text("adapter_id"), // UUID for in-flight adapter instance, nullable

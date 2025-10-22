@@ -32,7 +32,8 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 		contextConfig,
 		promptConfig,
 		chat,
-		currentCharacterId
+		currentCharacterId,
+		generatingMessageMetadata
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
@@ -46,6 +47,7 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 			chatMessages: SelectChatMessage[]
 		}
 		currentCharacterId: number
+		generatingMessageMetadata?: any
 	}) {
 		super({
 			connection,
@@ -58,7 +60,8 @@ class LMStudioAdapter extends BaseConnectionAdapter {
 				connection.tokenCounter || TokenCounterOptions.ESTIMATE
 			),
 			tokenLimit: 0, // This is set dynamically based on the LM Studio API
-			contextThresholdPercent: 0.9
+			contextThresholdPercent: 0.9,
+			generatingMessageMetadata
 		})
 	}
 

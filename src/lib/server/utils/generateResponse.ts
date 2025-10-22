@@ -83,6 +83,27 @@ export async function generateResponse({
 	// Detect assistant mode
 	const isAssistantMode = chat?.chatType === ChatTypes.ASSISTANT
 
+	// CRITICAL: Load fresh metadata from DB before creating adapter
+	// This ensures the adapter knows if we're regenerating a message with existing reasoning
+	const freshMessageBeforeGen = await db.query.chatMessages.findFirst({
+		where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
+	})
+	const freshMetadata = (freshMessageBeforeGen?.metadata as any) || {}
+	const shouldCheckForReasoning = isAssistantMode && 
+		!(freshMetadata.reasoning && !freshMetadata.waitingForFunctionSelection)
+	
+	console.log('='.repeat(80))
+	console.log('[AssistantFunctions] PRE-GENERATION CHECK')
+	console.log('[AssistantFunctions] Message ID:', generatingMessage.id)
+	console.log('[AssistantFunctions] Fresh message from DB:', freshMessageBeforeGen)
+	console.log('[AssistantFunctions] Fresh metadata (raw):', freshMessageBeforeGen?.metadata)
+	console.log('[AssistantFunctions] Fresh metadata (parsed):', JSON.stringify(freshMetadata, null, 2))
+	console.log('[AssistantFunctions] Has reasoning:', !!freshMetadata.reasoning)
+	console.log('[AssistantFunctions] waitingForFunctionSelection:', freshMetadata.waitingForFunctionSelection)
+	console.log('[AssistantFunctions] shouldCheckForReasoning:', shouldCheckForReasoning)
+	console.log('[AssistantFunctions] Passing to adapter:', JSON.stringify(freshMetadata, null, 2))
+	console.log('='.repeat(80))
+
 	const adapter = new Adapter({
 		chat,
 		connection: connection,
@@ -95,14 +116,15 @@ export async function generateResponse({
 		tokenCounter,
 		tokenLimit,
 		contextThresholdPercent,
-		isAssistantMode
+		isAssistantMode,
+		generatingMessageMetadata: freshMetadata  // Pass the fresh metadata we loaded
 	})
 	// Store adapter in global map
 	activeAdapters.set(adapterId, adapter)
 
 	// For assistant mode, no character name prefix
 	const currentCharacter = chat?.chatCharacters?.find(
-		(cc) => cc.character?.id === adapter.currentCharacterId
+		(cc: any) => cc.character?.id === adapter.currentCharacterId
 	)
 
 	const charName = isAssistantMode
@@ -116,6 +138,8 @@ export async function generateResponse({
 	let { completionResult, compiledPrompt, isAborted } =
 		await adapter.generate() // TODO: save compiledPrompt to chatMessages
 	let content = ""
+	let reasoningDetectedDuringStream = false
+	
 	try {
 		if (typeof completionResult === "function") {
 			let ok = true
@@ -135,6 +159,19 @@ export async function generateResponse({
 						)
 					) {
 						stagedContent = ""
+					}
+				}
+
+				// Check for reasoning format during streaming to prevent it from being saved/broadcast
+				// Use the flag we determined BEFORE generation started (with fresh DB metadata)
+				if (shouldCheckForReasoning && !reasoningDetectedDuringStream) {
+					// Try to detect reasoning format early
+					const reasoningParsed = parseReasoningFormat(stagedContent.trim())
+					if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
+						console.log('[AssistantFunctions] 🛑 REASONING DETECTED DURING STREAM - STOPPING')
+						reasoningDetectedDuringStream = true
+						ok = false // Stop streaming immediately
+						return // Don't broadcast this chunk
 					}
 				}
 
@@ -208,9 +245,16 @@ export async function generateResponse({
 			// Final update: mark as not generating, clear adapterId
 			content = content.replace(startString, "").trim()
 			
-			// Check for reasoning format in assistant mode
-			if (isAssistantMode) {
-				console.log('[AssistantFunctions] Checking for reasoning format in content:', content.substring(0, 200))
+			console.log('='.repeat(80))
+			console.log('[AssistantFunctions] POST-GENERATION CHECK')
+			console.log('[AssistantFunctions] shouldCheckForReasoning:', shouldCheckForReasoning)
+			console.log('[AssistantFunctions] reasoningDetectedDuringStream:', reasoningDetectedDuringStream)
+			console.log('[AssistantFunctions] Content length:', content.length)
+			console.log('[AssistantFunctions] Content preview:', content.substring(0, 200))
+			console.log('='.repeat(80))
+			
+			// Only check for reasoning if we determined we should (before generation started)
+			if (shouldCheckForReasoning) {
 				const reasoningParsed = parseReasoningFormat(content)
 				console.log('[AssistantFunctions] Parsed result:', reasoningParsed)
 				
@@ -224,7 +268,7 @@ export async function generateResponse({
 						functionCalls: reasoningParsed.functionCalls
 					})
 					
-					// Update message with reasoning content and mark as waiting for function
+					// Update message: store reasoning in metadata, keep content empty, mark as waiting
 					const currentMetadata = (typeof generatingMessage.metadata === 'object' && generatingMessage.metadata !== null) 
 						? generatingMessage.metadata 
 						: {}
@@ -232,21 +276,38 @@ export async function generateResponse({
 					await db
 						.update(schema.chatMessages)
 						.set({ 
-							content: reasoningParsed.reasoning || "",  // Ensure content is never null/undefined
+							content: "",  // Keep content empty - reasoning goes in metadata
 							isGenerating: false, 
 							adapterId: null,
 							metadata: {
 								...currentMetadata,
+								reasoning: reasoningParsed.reasoning,  // Store reasoning in metadata
 								waitingForFunctionSelection: true
 							}
 						})
 						.where(eq(schema.chatMessages.id, generatingMessage.id))
+					
+					// Broadcast the updated message
+					const updatedMessage = await db.query.chatMessages.findFirst({
+						where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
+					})
+					
+					if (updatedMessage) {
+						await broadcastToChatUsers(
+							socket.io,
+							chatId,
+							"chatMessage",
+							{ chatMessage: updatedMessage }
+						)
+					}
 					
 					activeAdapters.delete(adapterId)
 					return true // Wait for user selection
 				} else {
 					console.log('[AssistantFunctions] No function calls found in response')
 				}
+			} else {
+				console.log('[AssistantFunctions] Skipping reasoning detection - shouldCheckForReasoning is false')
 			}
 			
 			const ret = await db

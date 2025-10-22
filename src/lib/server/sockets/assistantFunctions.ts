@@ -98,6 +98,9 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 		async (data: { chatId: number; selectedIds: number[]; type: string }) => {
 			try {
 				const { chatId, selectedIds, type } = data
+				
+				console.log('='.repeat(80))
+				console.log('[selectFunctionResults] Received selection:', { chatId, selectedIds, type })
 
 				// Get current chat metadata
 				const chat = await db.query.chats.findFirst({
@@ -109,9 +112,18 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 					return
 				}
 
+				console.log('[selectFunctionResults] Current chat.metadata:', chat.metadata)
+
 				// Update chat metadata with tagged entities
-				const metadata = (chat.metadata as any) || {}
+				const metadata = typeof chat.metadata === 'string' 
+					? JSON.parse(chat.metadata) 
+					: (chat.metadata || {})
+				
+				console.log('[selectFunctionResults] Parsed metadata:', metadata)
+				
 				const taggedEntities = metadata.taggedEntities || {}
+				
+				console.log('[selectFunctionResults] Existing taggedEntities:', taggedEntities)
 
 				// Add/update tagged entities for this type
 				if (!taggedEntities[type]) {
@@ -124,6 +136,8 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 						taggedEntities[type].push(id)
 					}
 				}
+				
+				console.log('[selectFunctionResults] Updated taggedEntities:', taggedEntities)
 
 				// Save updated metadata
 				await db
@@ -132,6 +146,9 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 						metadata: JSON.stringify({ ...metadata, taggedEntities })
 					})
 					.where(eq(schema.chats.id, chatId))
+
+				console.log('[selectFunctionResults] Emitting selectionComplete with:', { chatId, taggedEntities })
+				console.log('='.repeat(80))
 
 				// Emit success and continue generation
 				socket.emit('assistant:selectionComplete', {

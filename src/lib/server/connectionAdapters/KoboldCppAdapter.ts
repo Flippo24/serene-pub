@@ -21,7 +21,8 @@ class KoboldCppAdapter extends BaseConnectionAdapter {
 		contextConfig,
 		promptConfig,
 		chat,
-		currentCharacterId
+		currentCharacterId,
+		generatingMessageMetadata
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
@@ -29,6 +30,7 @@ class KoboldCppAdapter extends BaseConnectionAdapter {
 		promptConfig: SelectPromptConfig
 		chat: BaseChat
 		currentCharacterId: number
+		generatingMessageMetadata?: any
 	}) {
 		super({
 			connection,
@@ -44,7 +46,8 @@ class KoboldCppAdapter extends BaseConnectionAdapter {
 				typeof sampling.contextTokens === "number"
 					? sampling.contextTokens
 					: 2048,
-			contextThresholdPercent: 0.9
+			contextThresholdPercent: 0.9,
+			generatingMessageMetadata
 		})
 	}
 

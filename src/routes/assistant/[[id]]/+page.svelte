@@ -234,13 +234,20 @@
 		console.log("Chat ID:", chat.id)
 		console.log("Function calls:", data.functionCalls)
 		
-		// Update the message to mark it as no longer generating
+		// Message is already updated on the server with reasoning in metadata
+		// Just update our local state to ensure UI is in sync
 		const messageIndex = chat.chatMessages.findIndex(m => m.id === data.messageId)
 		if (messageIndex >= 0) {
+			const currentMetadata = chat.chatMessages[messageIndex].metadata || {}
 			chat.chatMessages[messageIndex] = {
 				...chat.chatMessages[messageIndex],
 				isGenerating: false,
-				content: data.reasoning
+				content: "", // Content stays empty - reasoning is in metadata
+				metadata: {
+					...currentMetadata,
+					reasoning: data.reasoning,
+					waitingForFunctionSelection: true
+				}
 			}
 			// Trigger reactivity
 			chat = chat
@@ -308,36 +315,61 @@
 		if (!chat || data.chatId !== chat.id) return
 		
 		console.log("Selection complete:", data)
+		console.log("Current chat.metadata:", chat.metadata)
+		console.log("New taggedEntities from server:", data.taggedEntities)
 		
-		// Update chat metadata with new tagged entities
-		if (chat.metadata) {
-			chat.metadata = {
-				...((chat.metadata as any) || {}),
-				taggedEntities: data.taggedEntities
-			}
+		// Parse existing metadata if it's a string
+		const existingMetadata = typeof chat.metadata === 'string' 
+			? JSON.parse(chat.metadata) 
+			: (chat.metadata || {})
+		
+		console.log("Parsed existing metadata:", existingMetadata)
+		
+		// Update chat metadata with new tagged entities (server already merged them)
+		chat.metadata = {
+			...existingMetadata,
+			taggedEntities: data.taggedEntities
 		}
+		
+		console.log("Updated chat.metadata:", chat.metadata)
 		
 		// Force reactivity
 		chat = chat
-		
-		// Store the original user message for context  
-		const originalMessage = chat.chatMessages
-			.filter((m: any) => m.role === 'user')
-			.pop()?.content || ''
 		
 		// Clear pending function call
 		pendingFunctionCall = undefined
 		
 		// Trigger a follow-up generation to answer the original question
-		// The assistant will now have access to the tagged entity data
-		if (socket && originalMessage) {
-			// Send a continuation prompt WITHOUT trigger words to avoid re-entering function-calling mode
-			const continuationPrompt = `You now have the character information. Please provide a response based on what was requested.`
+		// The tagged entity data will be automatically included in the system prompt
+		if (socket) {
+			// Find the last assistant message to regenerate
+			const lastAssistantMessage = chat.chatMessages
+				.filter((m: any) => m.role === 'assistant')
+				.pop()
 			
-			socket.emit("chats:sendAssistantMessage", {
-				chatId: chat.id,
-				content: continuationPrompt  // ✅ FIXED: changed from 'message' to 'content'
-			})
+			if (lastAssistantMessage) {
+				// Clear the waitingForFunctionSelection flag before regenerating
+				// This ensures we don't re-enter the reasoning loop
+				// BUT preserve the reasoning metadata so it can be displayed with the final response
+				const currentMetadata = lastAssistantMessage.metadata || {}
+				lastAssistantMessage.metadata = {
+					...currentMetadata,
+					waitingForFunctionSelection: false
+					// Keep reasoning: it will be displayed in the pre-content section
+				}
+				
+				// Update the message in our local state
+				const messageIndex = chat.chatMessages.findIndex(m => m.id === lastAssistantMessage.id)
+				if (messageIndex >= 0) {
+					chat.chatMessages[messageIndex] = lastAssistantMessage
+					chat = chat
+				}
+				
+				// Trigger regeneration - the adapter will see the tagged entities and use conversational mode
+				socket.emit("chatMessages:regenerate", {
+					id: lastAssistantMessage.id
+				})
+			}
 		}
 		
 		toaster.success({ title: "Data linked, generating response..." })
@@ -354,12 +386,15 @@
 		
 		console.log("Entity unlinked successfully:", data)
 		
-		// Update chat metadata with new tagged entities
-		if (chat.metadata) {
-			chat.metadata = {
-				...((chat.metadata as any) || {}),
-				taggedEntities: data.taggedEntities
-			}
+		// Parse existing metadata if it's a string
+		const existingMetadata = typeof chat.metadata === 'string' 
+			? JSON.parse(chat.metadata) 
+			: (chat.metadata || {})
+		
+		// Update chat metadata with new tagged entities (server already removed the entity)
+		chat.metadata = {
+			...existingMetadata,
+			taggedEntities: data.taggedEntities
 		}
 		
 		// Force reactivity
@@ -527,7 +562,7 @@
 		// For assistant chat, we can create a simple assistant "character" object
 		if (msg.role === "assistant") {
 			return {
-				name: "Serene Pub Assistant",
+				name: "Serenity",
 				avatar: null
 			} as any
 		}
@@ -821,12 +856,6 @@
 								{/if}
 							</button>
 						</form>
-						{#if hasGeneratingMessage}
-							<p class="text-muted mt-2 text-xs">
-								<Icons.Loader2 size={12} class="inline animate-spin" />
-								Assistant is thinking...
-							</p>
-						{/if}
 						</div>
 					</div>
 				{/snippet}

@@ -82,9 +82,17 @@
 	const canControl = $derived(canControlMessage(msg))
 	const showSwipes = $derived(showSwipeControls(msg, isGreeting))
 	const canSwipeRightVal = $derived(canSwipeRight(msg, isGreeting))
+	const preContent = $derived((msg.metadata as any)?.reasoning || "")
+	const hasPreContent = $derived(preContent.trim().length > 0)
+	
+	let isPreContentExpanded = $state(false)
 
 	function handleMessageUpdate() {
 		onSaveEditMessage()
+	}
+	
+	function togglePreContent() {
+		isPreContentExpanded = !isPreContentExpanded
 	}
 </script>
 
@@ -238,6 +246,29 @@
 		{/if}
 	</div>
 
+	<!-- Pre-Content Section (Reasoning/Thinking) -->
+	{#if hasPreContent}
+		<div class="mx-2 mt-2">
+			<button
+				class="flex w-full items-center gap-2 py-2 text-sm opacity-70 hover:opacity-100 transition-opacity"
+				onclick={togglePreContent}
+				title={isPreContentExpanded ? "Collapse reasoning" : "Expand reasoning"}
+			>
+				<Icons.Brain size={16} />
+				<span>Reasoning</span>
+				<Icons.ChevronDown 
+					size={16} 
+					class={`transition-transform ${isPreContentExpanded ? 'rotate-180' : ''}`}
+				/>
+			</button>
+			{#if isPreContentExpanded}
+				<div class="rendered-chat-message-content pb-2 text-sm opacity-80">
+					{@html renderMarkdownWithQuotedText(preContent)}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="flex h-fit rounded p-2 text-left">
 		{#if msg.content === "" && msg.isGenerating}
 			{#if generatingAnimation}
@@ -246,8 +277,14 @@
 				{@render GeneratingAnimationComponent()}
 			{:else}
 				<div class="flex items-center gap-2">
-					<div class="animate-pulse text-sm text-surface-600-400">Generating...</div>
-					<div class="h-2 w-2 animate-bounce rounded-full bg-primary-500"></div>
+					<Icons.Loader2 size={14} class="animate-spin text-surface-600-400" />
+					<div class="text-sm text-surface-600-400">
+						{#if msg.metadata?.reasoning}
+							Serenity is typing...
+						{:else}
+							Serenity is reasoning...
+						{/if}
+					</div>
 				</div>
 			{/if}
 		{:else if editChatMessage && editChatMessage.id === msg.id}

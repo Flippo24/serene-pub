@@ -31,6 +31,7 @@ export interface BaseConnectionAdapterParams {
 	tokenLimit: number
 	contextThresholdPercent: number
 	isAssistantMode?: boolean
+	generatingMessageMetadata?: any  // Metadata of the message being generated/regenerated
 }
 
 // Types for abstract functions
@@ -50,6 +51,7 @@ export abstract class BaseConnectionAdapter {
 	currentCharacterId: number | null
 	isAborting = false
 	isAssistantMode = false
+	generatingMessageMetadata: any = {}
 	promptBuilder: PromptBuilder
 
 	constructor({
@@ -62,7 +64,8 @@ export abstract class BaseConnectionAdapter {
 		tokenCounter,
 		tokenLimit,
 		contextThresholdPercent,
-		isAssistantMode = false
+		isAssistantMode = false,
+		generatingMessageMetadata = {}
 	}: BaseConnectionAdapterParams) {
 		this.connection = connection
 		this.sampling = sampling
@@ -71,6 +74,7 @@ export abstract class BaseConnectionAdapter {
 		this.chat = chat
 		this.currentCharacterId = currentCharacterId
 		this.isAssistantMode = isAssistantMode || chat.chatType === ChatTypes.ASSISTANT
+		this.generatingMessageMetadata = generatingMessageMetadata
 		this.promptBuilder = new PromptBuilder({
 			connection: this.connection,
 			sampling: this.sampling,
@@ -129,17 +133,79 @@ export abstract class BaseConnectionAdapter {
 	 * Determine which assistant prompt mode to use based on chat state
 	 */
 	protected getAssistantPromptMode(): 'function-calling' | 'conversational' | 'default' {
-		const metadata = this.chat.metadata as any
+		let metadata: any = {}
 		
-		// If we have tagged entities, use conversational mode (they already selected what they want)
-		if (metadata?.taggedEntities && Object.keys(metadata.taggedEntities).length > 0) {
+		// Parse metadata if it's a string
+		if (this.chat.metadata) {
+			if (typeof this.chat.metadata === 'string') {
+				try {
+					metadata = JSON.parse(this.chat.metadata)
+				} catch (e) {
+					console.error('[getAssistantPromptMode] Failed to parse metadata:', e)
+					metadata = {}
+				}
+			} else {
+				metadata = this.chat.metadata
+			}
+		}
+		
+		console.log('='.repeat(80))
+		console.log('[getAssistantPromptMode] Checking mode...')
+		console.log('[getAssistantPromptMode] Chat messages count:', this.chat.chatMessages.length)
+		console.log('[getAssistantPromptMode] Generating message metadata:', JSON.stringify(this.generatingMessageMetadata, null, 2))
+		console.log('[getAssistantPromptMode] Raw metadata:', this.chat.metadata)
+		console.log('[getAssistantPromptMode] Parsed metadata:', JSON.stringify(metadata, null, 2))
+		
+		// CRITICAL: Check if we're regenerating a message that already has reasoning
+		// The generating message is excluded from chat.chatMessages, so we need to check it separately
+		const generatingHasReasoning = !!this.generatingMessageMetadata?.reasoning
+		
+		console.log('[getAssistantPromptMode] Generating message has reasoning:', generatingHasReasoning)
+		
+		if (generatingHasReasoning) {
+			console.log('[getAssistantPromptMode] ✅ Regenerating message with existing reasoning, using CONVERSATIONAL mode')
+			console.log('='.repeat(80))
 			return 'conversational'
 		}
 		
-		// Check if last message was asking about an entity
+		// Get the very last message in the chat (could be user or assistant)
+		const lastMessage = this.chat.chatMessages[this.chat.chatMessages.length - 1]
+		
+		console.log('[getAssistantPromptMode] Last message:', {
+			id: lastMessage?.id,
+			role: lastMessage?.role,
+			content: lastMessage?.content?.substring(0, 50),
+			isGenerating: lastMessage?.isGenerating,
+			metadata: lastMessage?.metadata
+		})
+		
+		// Only use conversational mode if:
+		// 1. Last message was from assistant
+		// 2. Reasoning was already performed (has reasoning in metadata)
+		// This means we're regenerating after function selection
+		if (lastMessage?.role === 'assistant') {
+			const lastMessageMetadata = (lastMessage.metadata as any) || {}
+			const hasReasoningInLastMessage = !!lastMessageMetadata.reasoning
+			
+			console.log('[getAssistantPromptMode] Last message is assistant')
+			console.log('[getAssistantPromptMode] Has reasoning:', hasReasoningInLastMessage)
+			
+			if (hasReasoningInLastMessage) {
+				console.log('[getAssistantPromptMode] ✅ Last assistant message has reasoning, using CONVERSATIONAL mode')
+				console.log('='.repeat(80))
+				return 'conversational'
+			}
+		}
+		
+		// Check if last user message has trigger words for function calling
 		const lastUserMessage = [...this.chat.chatMessages]
 			.reverse()
 			.find((m: any) => m.role === 'user')
+		
+		console.log('[getAssistantPromptMode] Last user message:', {
+			id: lastUserMessage?.id,
+			content: lastUserMessage?.content?.substring(0, 100)
+		})
 		
 		if (lastUserMessage) {
 			const content = lastUserMessage.content.toLowerCase()
@@ -151,11 +217,17 @@ export abstract class BaseConnectionAdapter {
 			]
 			
 			const hasTrigger = functionTriggers.some(trigger => content.includes(trigger))
+			console.log('[getAssistantPromptMode] Has trigger words:', hasTrigger)
+			
 			if (hasTrigger) {
+				console.log('[getAssistantPromptMode] ✅ Found trigger words, using FUNCTION-CALLING mode')
+				console.log('='.repeat(80))
 				return 'function-calling'
 			}
 		}
 		
+		console.log('[getAssistantPromptMode] ✅ No special conditions, using DEFAULT mode')
+		console.log('='.repeat(80))
 		return 'default'
 	}
 
@@ -191,6 +263,7 @@ export abstract class BaseConnectionAdapter {
 		const taggedEntitiesContext = await this.loadTaggedEntitiesContext()
 		if (taggedEntitiesContext) {
 			systemContent += "\n\n" + taggedEntitiesContext
+			systemContent += "\n\n**Instructions:** The user has requested information about the above entities. Please provide a response based on what was requested in their original question, using the entity data provided above."
 		}
 		
 		messages.push({

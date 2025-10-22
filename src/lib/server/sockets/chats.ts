@@ -1329,12 +1329,22 @@ export const chatMessagesRegenerateHandler: Handler<
 				return res
 			}
 
-			// Clear the content and set as generating
+			// Get current metadata and clear function-calling related flags
+			// BUT preserve the reasoning so it can be displayed with the final response
+			const currentMetadata = (messageToRegenerate.metadata as any) || {}
+			const cleanedMetadata = {
+				...currentMetadata,
+				waitingForFunctionSelection: undefined
+				// Keep reasoning: it will be displayed in the pre-content section
+			}
+
+			// Clear the content, metadata flags, and set as generating
 			const [updated] = await db
 				.update(schema.chatMessages)
 				.set({
 					content: "",
-					isGenerating: true
+					isGenerating: true,
+					metadata: cleanedMetadata
 				})
 				.where(eq(schema.chatMessages.id, params.id))
 				.returning()

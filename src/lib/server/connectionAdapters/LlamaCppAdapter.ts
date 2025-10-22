@@ -231,7 +231,8 @@ class LlamaCppAdapter extends BaseConnectionAdapter {
 		contextConfig,
 		promptConfig,
 		chat,
-		currentCharacterId
+		currentCharacterId,
+		generatingMessageMetadata
 	}: {
 		connection: SelectConnection
 		sampling: SelectSamplingConfig
@@ -245,6 +246,7 @@ class LlamaCppAdapter extends BaseConnectionAdapter {
 			chatMessages: SelectChatMessage[]
 		}
 		currentCharacterId: number
+		generatingMessageMetadata?: any
 	}) {
 		super({
 			connection,
@@ -265,7 +267,8 @@ class LlamaCppAdapter extends BaseConnectionAdapter {
 				typeof sampling.contextTokens === "number"
 					? sampling.contextTokens
 					: 2048,
-			contextThresholdPercent: 0.9
+			contextThresholdPercent: 0.9,
+			generatingMessageMetadata
 		})
 	}
 
