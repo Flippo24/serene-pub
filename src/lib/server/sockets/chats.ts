@@ -555,14 +555,10 @@ export const chatsDeleteHandler: Handler<
 
 			await db.delete(schema.chats).where(eq(schema.chats.id, params.id))
 
-			// Emit the delete event with the chat ID so the client can update
-			const response = { 
-				success: "Chat deleted successfully",
-				chatId: params.id 
-			}
-			emitToUser("chats:delete", response)
+			// Emit to user with the deleted chat ID so frontend can update
+			emitToUser("chats:delete", { success: "Chat deleted successfully", id: params.id })
 			
-			return response
+			return { success: "Chat deleted successfully", id: params.id }
 		} catch (error) {
 			throw error
 		}
@@ -1181,13 +1177,18 @@ export const chatMessagesUpdateHandler: Handler<
 	event: "chatMessages:update",
 	handler: async (socket, params, emitToUser) => {
 		try {
-			const { id, content } = params
+			const { id, content, isHidden } = params
 			const userId = 1
+
+			// Build the update object dynamically
+			const updates: Partial<typeof schema.chatMessages.$inferInsert> = {}
+			if (content !== undefined) updates.content = content
+			if (isHidden !== undefined) updates.isHidden = isHidden
 
 			// Update the message
 			const [updated] = await db
 				.update(schema.chatMessages)
-				.set({ content })
+				.set(updates)
 				.where(
 					and(
 						eq(schema.chatMessages.id, id),
@@ -1379,6 +1380,92 @@ export const chatMessagesRegenerateHandler: Handler<
 				error: "Failed to regenerate message"
 			}
 			emitToUser("chatMessages:regenerate:error", res)
+			throw error
+		}
+	}
+}
+
+export const chatMessagesContinueHandler: Handler<
+	Sockets.ChatMessages.Continue.Params,
+	Sockets.ChatMessages.Continue.Response
+> = {
+	event: "chatMessages:continue",
+	handler: async (socket, params, emitToUser) => {
+		try {
+			const userId = socket.user!.id
+
+			// Get the message to continue first
+			const messageToContinue = await db.query.chatMessages.findFirst({
+				where: (cm, { eq }) => eq(cm.id, params.id)
+			})
+
+			if (!messageToContinue) {
+				const res: Sockets.ChatMessages.Continue.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:continue", res)
+				return res
+			}
+
+			// Check if user owns the chat (only chat owners can continue)
+			const chatAccess = await checkChatAccess(
+				messageToContinue.chatId,
+				userId
+			)
+			if (!chatAccess.hasAccess || !chatAccess.isOwner) {
+				const res: Sockets.ChatMessages.Continue.Response = {
+					chatMessage: undefined,
+					error: "Access denied. Only chat owners can continue messages."
+				}
+				emitToUser("chatMessages:continue", res)
+				return res
+			}
+
+			// Get current metadata and preserve it
+			const currentMetadata = (messageToContinue.metadata as any) || {}
+
+			// Set as generating but KEEP existing content
+			// The content will be used as a prefix in generateResponse
+			const [updated] = await db
+				.update(schema.chatMessages)
+				.set({
+					isGenerating: true,
+					metadata: currentMetadata
+				})
+				.where(eq(schema.chatMessages.id, params.id))
+				.returning()
+
+			const res: Sockets.ChatMessages.Continue.Response = {
+				chatMessage: updated as any
+			}
+			emitToUser("chatMessages:continue", res)
+
+			// Broadcast chatMessage to all chat participants
+			await broadcastToChatUsers(
+				socket.io,
+				updated.chatId,
+				"chatMessage",
+				{ chatMessage: updated }
+			)
+
+			// Start generating the response continuation
+			await generateResponse({
+				socket,
+				emitToUser,
+				chatId: messageToContinue.chatId,
+				userId,
+				generatingMessage: updated as any
+			})
+
+			return res
+		} catch (error: any) {
+			console.error("Error continuing chat message:", error)
+			const res: Sockets.ChatMessages.Continue.Response = {
+				chatMessage: undefined,
+				error: "Failed to continue message"
+			}
+			emitToUser("chatMessages:continue:error", res)
 			throw error
 		}
 	}
@@ -2468,6 +2555,126 @@ export const updateChatCharacterVisibilityHandler: Handler<
 	}
 }
 
+/**
+ * Handler for saving a character draft to the database
+ */
+export const assistantSaveDraftHandler: Handler<
+	{ chatId: number },
+	{ success: boolean; characterId?: number; error?: string }
+> = {
+	event: 'assistant:saveDraft',
+	description: 'Save character draft from chat metadata to characters table',
+	async handler(data, { socket, userId, emitToUser }) {
+		try {
+			const { chatId } = data
+
+			// Get the chat
+			const chat = await db.query.chats.findFirst({
+				where: and(eq(schema.chats.id, chatId), eq(schema.chats.ownerId, userId))
+			})
+
+			if (!chat) {
+				throw new Error('Chat not found or access denied')
+			}
+
+			// Get the draft from metadata
+			const metadata = typeof chat.metadata === 'string' 
+				? JSON.parse(chat.metadata) 
+				: (chat.metadata || {})
+
+			const draft = metadata?.dataEditor?.create?.characters?.[0]
+
+			if (!draft) {
+				throw new Error('No character draft found in chat metadata')
+			}
+
+			// Validate the draft one final time
+			const { assistantCreateCharacterSchema } = await import('$lib/server/db/zodSchemas')
+			const validationResult = assistantCreateCharacterSchema.safeParse(draft)
+
+			if (!validationResult.success) {
+				console.error('Draft validation failed:', validationResult.error)
+				return {
+					success: false,
+					error: 'Draft validation failed. Please review the errors.'
+				}
+			}
+
+			// Create the character
+			const [newCharacter] = await db
+				.insert(schema.characters)
+				.values({
+					name: draft.name,
+					description: draft.description,
+					nickname: draft.nickname || null,
+					personality: draft.personality || null,
+					scenario: draft.scenario || null,
+					firstMessage: draft.firstMessage || null,
+					alternateGreetings: draft.alternateGreetings || null,
+					exampleDialogues: draft.exampleDialogues || null,
+					creatorNotes: draft.creatorNotes || null,
+					groupOnlyGreetings: draft.groupOnlyGreetings || null,
+					postHistoryInstructions: draft.postHistoryInstructions || null,
+					source: draft.source || null,
+					characterVersion: draft.characterVersion || null,
+					ownerId: userId,
+					favorite: false
+				})
+				.returning()
+
+			console.log('Character created from draft:', newCharacter.id)
+
+			// Link the character to the chat
+			await db.insert(schema.chatsToCharacters).values({
+				chatId,
+				characterId: newCharacter.id,
+				isActive: true,
+				isVisible: true
+			})
+
+			// Clear the draft from metadata
+			const updatedMetadata = {
+				...metadata,
+				dataEditor: {
+					...metadata.dataEditor,
+					create: {
+						...metadata.dataEditor?.create,
+						characters: []
+					}
+				}
+			}
+
+			await db
+				.update(schema.chats)
+				.set({ metadata: updatedMetadata })
+				.where(eq(schema.chats.id, chatId))
+
+			console.log('Draft cleared from chat metadata')
+
+			// Emit success event
+			emitToUser('assistant:draftSaved', {
+				chatId,
+				characterId: newCharacter.id,
+				character: newCharacter
+			})
+
+			// Reload the chat to show the new character
+			socket.emit('chats:get', { id: chatId })
+
+			return {
+				success: true,
+				characterId: newCharacter.id
+			}
+		} catch (error) {
+			console.error('Error saving draft:', error)
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : 'Failed to save character draft'
+			}
+		}
+	}
+}
+
 // Registration function for all chat handlers
 export function registerChatHandlers(
 	socket: any,
@@ -2491,6 +2698,7 @@ export function registerChatHandlers(
 	register(socket, chatMessagesUpdateHandler, emitToUser)
 	register(socket, chatMessagesDeleteHandler, emitToUser)
 	register(socket, chatMessagesRegenerateHandler, emitToUser)
+	register(socket, chatMessagesContinueHandler, emitToUser)
 	register(socket, chatMessagesSwipeLeftHandler, emitToUser)
 	register(socket, chatMessagesSwipeRightHandler, emitToUser)
 	register(socket, chatsGetResponseOrderHandler, emitToUser)
@@ -2500,4 +2708,5 @@ export function registerChatHandlers(
 	register(socket, triggerGenerateMessageHandler, emitToUser)
 	register(socket, toggleChatCharacterActiveHandler, emitToUser)
 	register(socket, updateChatCharacterVisibilityHandler, emitToUser)
+	register(socket, assistantSaveDraftHandler, emitToUser)
 }

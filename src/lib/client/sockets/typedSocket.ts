@@ -199,6 +199,14 @@ type SocketEventMap = {
 		params: Sockets.ChatMessages.Delete.Params
 		response: Sockets.ChatMessages.Delete.Response
 	}
+	"chatMessages:regenerate": {
+		params: Sockets.ChatMessages.Regenerate.Params
+		response: Sockets.ChatMessages.Regenerate.Response
+	}
+	"chatMessages:continue": {
+		params: Sockets.ChatMessages.Continue.Params
+		response: Sockets.ChatMessages.Continue.Response
+	}
 	"chatMessages:swipeLeft": {
 		params: Sockets.ChatMessages.SwipeLeft.Params
 		response: Sockets.ChatMessages.SwipeLeft.Response

@@ -11,6 +11,132 @@ import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 import { generateChatTitle } from "./generateChatTitle"
 import { parseReasoningFormat } from "./parseReasoningFormat"
 
+/**
+ * Handles reasoning format detection and processing for assistant mode
+ * @returns true if waiting for user function selection, false if continuing with generation
+ */
+async function handleAssistantReasoning({
+	content,
+	socket,
+	chatId,
+	generatingMessage,
+	adapterId,
+	emitToUser,
+	userId
+}: {
+	content: string
+	socket: any
+	chatId: number
+	generatingMessage: SelectChatMessage
+	adapterId: string
+	emitToUser: (event: string, data: any) => void
+	userId: number
+}): Promise<boolean | null> {
+	console.log('[handleAssistantReasoning] Parsing for reasoning format...')
+	const reasoningParsed = parseReasoningFormat(content)
+	
+	console.log('[handleAssistantReasoning] Parse result:', reasoningParsed ? 'DETECTED' : 'NOT DETECTED')
+	if (reasoningParsed) {
+		console.log('[handleAssistantReasoning] Reasoning text:', reasoningParsed.reasoning)
+		console.log('[handleAssistantReasoning] Function calls count:', reasoningParsed.functionCalls.length)
+		if (reasoningParsed.functionCalls.length > 0) {
+			console.log('[handleAssistantReasoning] Function calls:', JSON.stringify(reasoningParsed.functionCalls, null, 2))
+		}
+	}
+	
+	if (!reasoningParsed) {
+		return null // No reasoning detected, continue with normal flow
+	}
+	
+	if (reasoningParsed.functionCalls.length > 0) {
+		// Functions needed - emit to client and wait for selection
+		console.log('[handleAssistantReasoning] Function calls detected, waiting for user selection')
+		
+		socket.emit('assistant:reasoningDetected', {
+			chatId,
+			messageId: generatingMessage.id,
+			reasoning: reasoningParsed.reasoning,
+			functionCalls: reasoningParsed.functionCalls
+		})
+		
+		// Update message: store reasoning in metadata, keep content empty, mark as waiting
+		const currentMetadata = (typeof generatingMessage.metadata === 'object' && generatingMessage.metadata !== null) 
+			? generatingMessage.metadata 
+			: {}
+		
+		await db
+			.update(schema.chatMessages)
+			.set({ 
+				content: "",
+				isGenerating: false,
+				adapterId: null,
+				metadata: {
+					...currentMetadata,
+					reasoning: reasoningParsed.reasoning,
+					waitingForFunctionSelection: true
+				}
+			})
+			.where(eq(schema.chatMessages.id, generatingMessage.id))
+		
+		const updatedMessage = await db.query.chatMessages.findFirst({
+			where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
+		})
+		
+		if (updatedMessage) {
+			await broadcastToChatUsers(
+				socket.io,
+				chatId,
+				"chatMessage",
+				{ chatMessage: updatedMessage }
+			)
+		}
+		
+		activeAdapters.delete(adapterId)
+		return true // Wait for user selection
+	} else {
+		// No functions needed - store reasoning and regenerate for final response
+		console.log('[handleAssistantReasoning] No functions needed, regenerating for conversational response')
+		
+		const currentMetadata = (typeof generatingMessage.metadata === 'object' && generatingMessage.metadata !== null) 
+			? generatingMessage.metadata 
+			: {}
+		
+		await db
+			.update(schema.chatMessages)
+			.set({ 
+				content: "",
+				isGenerating: true, // Keep generating for second pass
+				metadata: {
+					...currentMetadata,
+					reasoning: reasoningParsed.reasoning
+				}
+			})
+			.where(eq(schema.chatMessages.id, generatingMessage.id))
+		
+		// Re-fetch message and call generateResponse again
+		const updatedGeneratingMessage = await db.query.chatMessages.findFirst({
+			where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
+		})
+		
+		if (!updatedGeneratingMessage) {
+			console.error('[handleAssistantReasoning] Failed to fetch updated message')
+			activeAdapters.delete(adapterId)
+			return false
+		}
+		
+		activeAdapters.delete(adapterId)
+		
+		// Recursive call for conversational response
+		return await generateResponse({
+			socket,
+			emitToUser,
+			chatId,
+			userId,
+			generatingMessage: updatedGeneratingMessage
+		})
+	}
+}
+
 export async function generateResponse({
 	socket,
 	emitToUser,
@@ -26,10 +152,23 @@ export async function generateResponse({
 }): Promise<boolean> {
 	// Generate a UUID for this adapter instance
 	const adapterId = uuidv4()
-	// Save the adapterId to the chatMessage (set isGenerating true, content empty, and adapterId)
+	
+	// Get the current message content before updating
+	const currentMessage = await db.query.chatMessages.findFirst({
+		where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
+	})
+	const preservedContent = currentMessage?.content || ""
+	
+	// Save the adapterId to the chatMessage
+	// For continue: preserve existing content
+	// For new generation: clear content
 	await db
 		.update(schema.chatMessages)
-		.set({ isGenerating: true, content: "", adapterId })
+		.set({ 
+			isGenerating: true, 
+			content: preservedContent, // Preserve existing content for continue
+			adapterId 
+		})
 		.where(eq(schema.chatMessages.id, generatingMessage.id))
 	// Instead of getChat, emit the chatMessage
 
@@ -37,7 +176,7 @@ export async function generateResponse({
 		chatMessage: {
 			...generatingMessage,
 			isGenerating: true,
-			content: "",
+			content: preservedContent, // Use existing content
 			adapterId
 		}
 	}
@@ -83,26 +222,8 @@ export async function generateResponse({
 	// Detect assistant mode
 	const isAssistantMode = chat?.chatType === ChatTypes.ASSISTANT
 
-	// CRITICAL: Load fresh metadata from DB before creating adapter
-	// This ensures the adapter knows if we're regenerating a message with existing reasoning
-	const freshMessageBeforeGen = await db.query.chatMessages.findFirst({
-		where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
-	})
-	const freshMetadata = (freshMessageBeforeGen?.metadata as any) || {}
-	const shouldCheckForReasoning = isAssistantMode && 
-		!(freshMetadata.reasoning && !freshMetadata.waitingForFunctionSelection)
-	
-	console.log('='.repeat(80))
-	console.log('[AssistantFunctions] PRE-GENERATION CHECK')
-	console.log('[AssistantFunctions] Message ID:', generatingMessage.id)
-	console.log('[AssistantFunctions] Fresh message from DB:', freshMessageBeforeGen)
-	console.log('[AssistantFunctions] Fresh metadata (raw):', freshMessageBeforeGen?.metadata)
-	console.log('[AssistantFunctions] Fresh metadata (parsed):', JSON.stringify(freshMetadata, null, 2))
-	console.log('[AssistantFunctions] Has reasoning:', !!freshMetadata.reasoning)
-	console.log('[AssistantFunctions] waitingForFunctionSelection:', freshMetadata.waitingForFunctionSelection)
-	console.log('[AssistantFunctions] shouldCheckForReasoning:', shouldCheckForReasoning)
-	console.log('[AssistantFunctions] Passing to adapter:', JSON.stringify(freshMetadata, null, 2))
-	console.log('='.repeat(80))
+	// Get fresh metadata from the generating message (important for reasoning detection)
+	const generatingMessageMetadata = (generatingMessage.metadata as any) || {}
 
 	const adapter = new Adapter({
 		chat,
@@ -117,14 +238,14 @@ export async function generateResponse({
 		tokenLimit,
 		contextThresholdPercent,
 		isAssistantMode,
-		generatingMessageMetadata: freshMetadata  // Pass the fresh metadata we loaded
+		generatingMessageMetadata
 	})
 	// Store adapter in global map
 	activeAdapters.set(adapterId, adapter)
 
 	// For assistant mode, no character name prefix
 	const currentCharacter = chat?.chatCharacters?.find(
-		(cc: any) => cc.character?.id === adapter.currentCharacterId
+		(cc) => cc.character?.id === adapter.currentCharacterId
 	)
 
 	const charName = isAssistantMode
@@ -132,14 +253,23 @@ export async function generateResponse({
 		: currentCharacter?.character?.nickname ||
 		  currentCharacter?.character?.name ||
 		  ""
-	const startString = charName ? `${charName}:` : ""
+	
+	// If message already has content, we're continuing it
+	// Include the existing content in the startString so LLM continues from there
+	// Use preservedContent which was fetched from the database earlier
+	const existingContent = preservedContent || ""
+	const startString = existingContent 
+		? charName 
+			? `${charName}: ${existingContent}`
+			: existingContent
+		: charName 
+			? `${charName}:`
+			: ""
 
 	// Generate completion
 	let { completionResult, compiledPrompt, isAborted } =
 		await adapter.generate() // TODO: save compiledPrompt to chatMessages
 	let content = ""
-	let reasoningDetectedDuringStream = false
-	
 	try {
 		if (typeof completionResult === "function") {
 			let ok = true
@@ -162,22 +292,14 @@ export async function generateResponse({
 					}
 				}
 
-				// Check for reasoning format during streaming to prevent it from being saved/broadcast
-				// Use the flag we determined BEFORE generation started (with fresh DB metadata)
-				if (shouldCheckForReasoning && !reasoningDetectedDuringStream) {
-					// Try to detect reasoning format early
-					const reasoningParsed = parseReasoningFormat(stagedContent.trim())
-					if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
-						console.log('[AssistantFunctions] 🛑 REASONING DETECTED DURING STREAM - STOPPING')
-						reasoningDetectedDuringStream = true
-						ok = false // Stop streaming immediately
-						return // Don't broadcast this chunk
-					}
-				}
+				// When continuing, prepend existing content to the staged content
+				const finalContent = existingContent 
+					? existingContent + stagedContent.trim()
+					: stagedContent.trim()
 
 				// --- SWIPE HISTORY LOGIC ---
 				let updateData: any = {
-					content: stagedContent.trim(),
+					content: finalContent,
 					isGenerating: true
 				}
 				if (
@@ -216,6 +338,7 @@ export async function generateResponse({
 					)
 					.returning()
 				if (!!updatedChatMsg) {
+					// Removed verbose streaming log
 					const chatMsgReq: Sockets.ChatMessage.Call = {
 						chatMessage: updatedChatMsg
 					}
@@ -242,74 +365,33 @@ export async function generateResponse({
 					ok = false
 				}
 			})
+			
 			// Final update: mark as not generating, clear adapterId
 			content = content.replace(startString, "").trim()
 			
-			console.log('='.repeat(80))
-			console.log('[AssistantFunctions] POST-GENERATION CHECK')
-			console.log('[AssistantFunctions] shouldCheckForReasoning:', shouldCheckForReasoning)
-			console.log('[AssistantFunctions] reasoningDetectedDuringStream:', reasoningDetectedDuringStream)
-			console.log('[AssistantFunctions] Content length:', content.length)
-			console.log('[AssistantFunctions] Content preview:', content.substring(0, 200))
-			console.log('='.repeat(80))
+			console.log('[generateResponse] POST-STREAM: Final content length:', content.length)
+			console.log('[generateResponse] POST-STREAM: Is assistant mode:', isAssistantMode)
+			console.log('[generateResponse] POST-STREAM: First 300 chars:', content.substring(0, 300))
 			
-			// Only check for reasoning if we determined we should (before generation started)
-			if (shouldCheckForReasoning) {
-				const reasoningParsed = parseReasoningFormat(content)
-				console.log('[AssistantFunctions] Parsed result:', reasoningParsed)
+			// Check for reasoning format in assistant mode - only after streaming is complete
+			if (isAssistantMode) {
+				const reasoningResult = await handleAssistantReasoning({
+					content,
+					socket,
+					chatId,
+					generatingMessage,
+					adapterId,
+					emitToUser,
+					userId
+				})
 				
-				if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
-					console.log('[AssistantFunctions] Function calls detected!', reasoningParsed.functionCalls)
-					// Emit function calls to client for execution
-					socket.emit('assistant:reasoningDetected', {
-						chatId,
-						messageId: generatingMessage.id,
-						reasoning: reasoningParsed.reasoning,
-						functionCalls: reasoningParsed.functionCalls
-					})
-					
-					// Update message: store reasoning in metadata, keep content empty, mark as waiting
-					const currentMetadata = (typeof generatingMessage.metadata === 'object' && generatingMessage.metadata !== null) 
-						? generatingMessage.metadata 
-						: {}
-					
-					await db
-						.update(schema.chatMessages)
-						.set({ 
-							content: "",  // Keep content empty - reasoning goes in metadata
-							isGenerating: false, 
-							adapterId: null,
-							metadata: {
-								...currentMetadata,
-								reasoning: reasoningParsed.reasoning,  // Store reasoning in metadata
-								waitingForFunctionSelection: true
-							}
-						})
-						.where(eq(schema.chatMessages.id, generatingMessage.id))
-					
-					// Broadcast the updated message
-					const updatedMessage = await db.query.chatMessages.findFirst({
-						where: (cm, { eq }) => eq(cm.id, generatingMessage.id)
-					})
-					
-					if (updatedMessage) {
-						await broadcastToChatUsers(
-							socket.io,
-							chatId,
-							"chatMessage",
-							{ chatMessage: updatedMessage }
-						)
-					}
-					
-					activeAdapters.delete(adapterId)
-					return true // Wait for user selection
-				} else {
-					console.log('[AssistantFunctions] No function calls found in response')
+				// If reasoning was detected and handled, return the result
+				if (reasoningResult !== null) {
+					return reasoningResult
 				}
-			} else {
-				console.log('[AssistantFunctions] Skipping reasoning detection - shouldCheckForReasoning is false')
 			}
 			
+			// Normal completion - no reasoning detected
 			const ret = await db
 				.update(schema.chatMessages)
 				.set({ content, isGenerating: false, adapterId: null })
@@ -344,47 +426,33 @@ export async function generateResponse({
 			)
 		} else {
 			content = completionResult.replace(startString, "").trim()
+			
+			// When continuing, prepend existing content to the new content
+			const finalContent = existingContent 
+				? existingContent + content
+				: content
 
-			// Check for reasoning format in assistant mode
+			// Check for reasoning format in assistant mode (NON-STREAMING)
 			if (isAssistantMode) {
-				console.log('[AssistantFunctions] (Non-streaming) Checking for reasoning format in content:', content.substring(0, 200))
-				const reasoningParsed = parseReasoningFormat(content)
-				console.log('[AssistantFunctions] (Non-streaming) Parsed result:', reasoningParsed)
+				const reasoningResult = await handleAssistantReasoning({
+					content: finalContent,
+					socket,
+					chatId,
+					generatingMessage,
+					adapterId,
+					emitToUser,
+					userId
+				})
 				
-				if (reasoningParsed && reasoningParsed.functionCalls.length > 0) {
-					console.log('[AssistantFunctions] (Non-streaming) Function calls detected!', reasoningParsed.functionCalls)
-					// Emit function calls to client for execution
-					socket.emit('assistant:reasoningDetected', {
-						chatId,
-						messageId: generatingMessage.id,
-						reasoning: reasoningParsed.reasoning,
-						functionCalls: reasoningParsed.functionCalls
-					})
-					
-					// Update message with reasoning content and mark as waiting for function
-					await db
-						.update(schema.chatMessages)
-						.set({ 
-							content: reasoningParsed.reasoning, 
-							isGenerating: false, 
-							adapterId: null,
-							metadata: {
-								...generatingMessage.metadata,
-								waitingForFunctionSelection: true
-							} as any
-						})
-						.where(eq(schema.chatMessages.id, generatingMessage.id))
-					
-					activeAdapters.delete(adapterId)
-					return true // Wait for user selection
-				} else {
-					console.log('[AssistantFunctions] (Non-streaming) No function calls found in response')
+				// If reasoning was detected and handled, return the result
+				if (reasoningResult !== null) {
+					return reasoningResult
 				}
 			}
 
 			// --- SWIPE HISTORY LOGIC (non-streamed) ---
 			let updateData: any = {
-				content,
+				content: finalContent,
 				isGenerating: false,
 				adapterId: null
 			}
@@ -400,7 +468,7 @@ export async function generateResponse({
 				const history: string[] = [
 					...generatingMessage.metadata.swipes.history
 				]
-				history[idx] = content
+				history[idx] = finalContent
 				updateData = {
 					...updateData,
 					metadata: {

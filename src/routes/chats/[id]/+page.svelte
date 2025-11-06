@@ -9,6 +9,7 @@
 	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
 	import NextCharacterBlock from "$lib/client/components/chatMessages/NextCharacterBlock.svelte"
 	import ChatComposer from "$lib/client/components/chatMessages/ChatComposer.svelte"
+	import GeneratingAnimation from "$lib/client/components/chatMessages/GeneratingAnimation.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount } from "svelte"
 	import Avatar from "$lib/client/components/Avatar.svelte"
@@ -398,6 +399,32 @@
 		editChatMessage = undefined
 	}
 
+	function handleRegenerateMessage(e: Event, msg: SelectChatMessage) {
+		e.stopPropagation()
+		socket.emit("chatMessages:regenerate", { id: msg.id })
+	}
+
+	function handleContinueMessage(e: Event, msg: SelectChatMessage) {
+		e.stopPropagation()
+		// The continue functionality should regenerate but preserve the existing content
+		// This is handled server-side by passing continueFrom flag
+		socket.emit("chatMessages:continue", { id: msg.id })
+	}
+
+	function handleHideMessage(e: Event, msg: SelectChatMessage) {
+		e.stopPropagation()
+		// Toggle isHidden status by updating the message
+		socket.emit("chatMessages:update", { 
+			id: msg.id,
+			isHidden: !msg.isHidden
+		})
+	}
+
+	function handleDeleteMessage(e: Event, msg: SelectChatMessage) {
+		e.stopPropagation()
+		openDeleteMessageModal(msg)
+	}
+
 	$effect(() => {
 		// React to chatId changes (which is derived from page.params.id)
 		if (chatId) {
@@ -520,23 +547,6 @@
 	function handleSaveEditMessage(e: Event) {
 		e.stopPropagation()
 		handleMessageUpdate(e)
-	}
-	function handleHideMessage(e: Event, msg: SelectChatMessage) {
-		e.stopPropagation()
-		openMobileMsgControls = undefined
-		socket.emit("chatMessages:update", {
-			chatMessage: { ...msg, isHidden: !msg.isHidden }
-		})
-	}
-	function handleDeleteMessage(e: Event, msg: SelectChatMessage) {
-		e.stopPropagation()
-		openMobileMsgControls = undefined
-		openDeleteMessageModal(msg)
-	}
-	function handleRegenerateMessage(e: Event, msg: SelectChatMessage) {
-		e.stopPropagation()
-		openMobileMsgControls = undefined
-		socket.emit("chatMessages:regenerate", { id: msg.id })
 	}
 	function handleAbortMessage(e: Event, msg: SelectChatMessage) {
 		e.stopPropagation()
@@ -970,6 +980,7 @@
 		onDeleteMessage={handleDeleteMessage}
 		onHideMessage={handleHideMessage}
 		onRegenerateMessage={handleRegenerateMessage}
+		onContinueMessage={handleContinueMessage}
 		onAbortMessage={handleAbortMessage}
 		onBranchMessage={handleBranchMessage}
 		{editChatMessage}
@@ -984,7 +995,14 @@
 				onSaveEditMessage={handleSaveEditMessage}
 				bind:openMobileMsgControls
 				{lastPersonaMessage}
-			/>
+			>
+				{#snippet GeneratingAnimationComponent()}
+					{@const character = props.getMessageCharacter(props.msg)}
+					<GeneratingAnimation
+						text={`${character?.nickname || character?.name || "User"} is typing`}
+					/>
+				{/snippet}
+			</ChatMessage>
 		{/snippet}
 		{#snippet ComposerComponent()}
 			<ChatComposer
@@ -1375,84 +1393,6 @@
 <style lang="postcss">
 	@reference "tailwindcss";
 
-	/* Loader styles from Uiverse.io by mobinkakei */
-	.wrapper {
-		width: 66px;
-		height: 20px;
-		position: relative;
-		z-index: 1;
-		margin-left: 0;
-	}
-	.circle {
-		width: 6.6px;
-		height: 6.6px;
-		position: absolute;
-		border-radius: 50%;
-		background-color: #fff;
-		left: 15%;
-		transform-origin: 50%;
-		animation: circle7124 0.5s alternate infinite ease;
-	}
-	@keyframes circle7124 {
-		0% {
-			top: 20px;
-			height: 1.66px;
-			border-radius: 50px 50px 25px 25px;
-			transform: scaleX(1.7);
-		}
-		40% {
-			height: 6.6px;
-			border-radius: 50%;
-			transform: scaleX(1);
-		}
-		100% {
-			top: 0%;
-		}
-	}
-	.circle:nth-child(2) {
-		left: 45%;
-		animation-delay: 0.2s;
-	}
-	.circle:nth-child(3) {
-		left: auto;
-		right: 15%;
-		animation-delay: 0.3s;
-	}
-	.shadow {
-		width: 6.6px;
-		height: 1.33px;
-		border-radius: 50%;
-		background-color: rgba(0, 0, 0, 0.9);
-		position: absolute;
-		top: 20.66px;
-		transform-origin: 50%;
-		z-index: -1;
-		left: 15%;
-		filter: blur(0.33px);
-		animation: shadow046 0.5s alternate infinite ease;
-	}
-	@keyframes shadow046 {
-		0% {
-			transform: scaleX(1.5);
-		}
-		40% {
-			transform: scaleX(1);
-			opacity: 0.7;
-		}
-		100% {
-			transform: scaleX(0.2);
-			opacity: 0.4;
-		}
-	}
-	.shadow:nth-child(4) {
-		left: 45%;
-		animation-delay: 0.2s;
-	}
-	.shadow:nth-child(5) {
-		left: auto;
-		right: 15%;
-		animation-delay: 0.3s;
-	}
 	/* --- Markdown custom styles --- */
 	:global(.markdown-body) {
 		white-space: pre-line;

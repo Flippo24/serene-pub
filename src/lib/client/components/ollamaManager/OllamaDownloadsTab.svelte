@@ -73,9 +73,17 @@
 
 	onMount(() => {
 		socket.on(
-			"ollama:pullProgress",
-			(message: Sockets.OllamaPullProgress.Response) => {
+			"ollamaPullProgress",
+			(message: Sockets.Ollama.PullProgress.Response) => {
 				// Server sends the entire downloadingQuants object
+				downloadingQuants = message.downloadingQuants || {}
+			}
+		)
+
+		socket.on(
+			"ollama:getDownloadProgress",
+			(message: Sockets.Ollama.GetDownloadProgress.Response) => {
+				// Load initial download progress state
 				downloadingQuants = message.downloadingQuants || {}
 			}
 		)
@@ -94,7 +102,8 @@
 	})
 
 	onDestroy(() => {
-		socket.off("ollama:pullProgress")
+		socket.off("ollamaPullProgress")
+		socket.off("ollama:getDownloadProgress")
 		socket.off("ollama:clearDownloadHistory")
 	})
 </script>

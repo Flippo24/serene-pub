@@ -89,13 +89,17 @@
 		}
 	})
 	
-	// Load linked character data when taggedEntities changes
+	// Load linked entities when they change
 	$effect(() => {
-		console.log('[DataManager] Tagged entities changed:', taggedEntities)
-		if (taggedEntities?.characters && socket) {
-			console.log('[DataManager] Loading characters:', taggedEntities.characters)
-			loadLinkedCharacters(taggedEntities.characters)
+		const characterIds = taggedEntities.characters || []
+		const locationIds = taggedEntities.locations || []
+		const lorebooks = taggedEntities.lorebooks || []
+
+		if (characterIds.length > 0) {
+			loadLinkedCharacters(characterIds)
 		}
+		// Note: Don't need to manually clear - linkedEntities is derived from loadedCharacters
+		// and will automatically be empty when there are no matching IDs
 	})
 	
 	// Filtered characters based on search

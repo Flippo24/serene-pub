@@ -87,10 +87,10 @@
 	}
 
 	function isModelRunning(model: OllamaModel): boolean {
-		const res = runningModels.some((runningModel) => {
+		const res = runningModels?.some((runningModel) => {
 			return runningModel.name === model.name
 		})
-		return res
+		return res ?? false
 	}
 
 	// Check Ollama connection and refresh models
@@ -194,7 +194,7 @@
 		socket.on(
 			"ollama:listRunningModels",
 			(message: Sockets.OllamaListRunningModels.Response) => {
-				runningModels = message.models
+				runningModels = message.models ?? []
 			}
 		)
 

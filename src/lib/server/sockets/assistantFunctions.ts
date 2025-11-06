@@ -107,37 +107,36 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 					where: eq(schema.chats.id, chatId)
 				})
 
-				if (!chat) {
-					socket.emit('assistant:selectionError', { error: 'Chat not found' })
-					return
+			if (!chat) {
+				socket.emit('assistant:selectionError', { error: 'Chat not found' })
+				return
+			}
+
+			console.log('[selectFunctionResults] Chat metadata exists:', !!chat.metadata)
+
+			// Update chat metadata with tagged entities
+			const metadata = typeof chat.metadata === 'string' 
+				? JSON.parse(chat.metadata) 
+				: (chat.metadata || {})
+			
+			console.log('[selectFunctionResults] Parsed metadata keys:', Object.keys(metadata))
+			
+			const taggedEntities = metadata.taggedEntities || {}
+			console.log('[selectFunctionResults] Existing taggedEntities:', taggedEntities)
+
+			// Add/update tagged entities for this type
+			if (!taggedEntities[type]) {
+				taggedEntities[type] = []
+			}
+
+			// Add selected IDs (avoid duplicates)
+			for (const id of selectedIds) {
+				if (!taggedEntities[type].includes(id)) {
+					taggedEntities[type].push(id)
 				}
-
-				console.log('[selectFunctionResults] Current chat.metadata:', chat.metadata)
-
-				// Update chat metadata with tagged entities
-				const metadata = typeof chat.metadata === 'string' 
-					? JSON.parse(chat.metadata) 
-					: (chat.metadata || {})
-				
-				console.log('[selectFunctionResults] Parsed metadata:', metadata)
-				
-				const taggedEntities = metadata.taggedEntities || {}
-				
-				console.log('[selectFunctionResults] Existing taggedEntities:', taggedEntities)
-
-				// Add/update tagged entities for this type
-				if (!taggedEntities[type]) {
-					taggedEntities[type] = []
-				}
-
-				// Add selected IDs (avoid duplicates)
-				for (const id of selectedIds) {
-					if (!taggedEntities[type].includes(id)) {
-						taggedEntities[type].push(id)
-					}
-				}
-				
-				console.log('[selectFunctionResults] Updated taggedEntities:', taggedEntities)
+			}
+			
+			console.log('[selectFunctionResults] Updated taggedEntities:', taggedEntities)
 
 				// Save updated metadata
 				await db

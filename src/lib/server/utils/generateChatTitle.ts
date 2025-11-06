@@ -29,7 +29,7 @@ Title:`
 
 		if (connection.type === CONNECTION_TYPE.OPENAI_CHAT) {
 			// OpenAI-compatible API
-			const response = await fetch(`${connection.url}/chat/completions`, {
+			const response = await fetch(`${connection.baseUrl}/chat/completions`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -48,7 +48,7 @@ Title:`
 			title = data.choices?.[0]?.message?.content || ""
 		} else if (connection.type === CONNECTION_TYPE.OLLAMA) {
 			// Ollama API
-			const response = await fetch(`${connection.url}/api/chat`, {
+			const response = await fetch(`${connection.baseUrl}/api/chat`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -62,8 +62,22 @@ Title:`
 				})
 			})
 
-			const data = await response.json()
-			title = data.message?.content || ""
+			// Try JSON parsing first, fall back to text if it fails
+			const contentType = response.headers.get('content-type')
+			if (contentType?.includes('application/json')) {
+				const data = await response.json()
+				title = data.message?.content || ""
+			} else {
+				// Fallback to text parsing for non-JSON responses
+				const text = await response.text()
+				try {
+					const data = JSON.parse(text)
+					title = data.message?.content || ""
+				} catch (e) {
+					// If JSON parsing fails, use the text directly
+					title = text
+				}
+			}
 		} else {
 			// Fallback for other connection types
 			throw new Error(`Unsupported connection type: ${connection.type}`)

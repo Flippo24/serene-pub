@@ -253,7 +253,7 @@ export async function user(
 		activePromptConfig: promptConfig
 	}
 
-	socket.server.to("user_" + userId).emit("user", { user: userWithConfigs })
+	socket.server.to("user_" + userId).emit("users:current", { user: userWithConfigs })
 }
 
 export async function setTheme(

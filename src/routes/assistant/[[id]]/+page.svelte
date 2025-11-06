@@ -8,6 +8,8 @@
 	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
 	import MessageComposer from "$lib/client/components/chatMessages/MessageComposer.svelte"
 	import AssistantDataManager from "$lib/client/components/assistant/AssistantDataManager.svelte"
+	import CharacterDraftPreview from "$lib/client/components/assistant/CharacterDraftPreview.svelte"
+	import GeneratingAnimation from "$lib/client/components/chatMessages/GeneratingAnimation.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount } from "svelte"
 	import { toaster } from "$lib/client/utils/toaster"
@@ -25,6 +27,11 @@
 	let showDeleteChatModal = $state(false)
 	let chatToDelete: SelectChat | null = $state(null)
 	
+	// Bulk delete state
+	let isSelectMode = $state(false)
+	let selectedChatIds = $state(new Set<number>())
+	let showBulkDeleteModal = $state(false)
+	
 	// Scroll tracking for autoscroll
 	let lastSeenMessageId: number | null = $state(null)
 	let lastSeenMessageContent: string = $state("")
@@ -37,6 +44,18 @@
 		functionCalls: Array<{ name: string; args: Record<string, any> }>
 		results?: any[]
 	} | undefined = $state(undefined)
+	
+	// Character draft state
+	let characterDraft: any | null = $state(null)
+	let draftValidationStatus: 'valid' | 'invalid' | 'validating' | null = $state(null)
+	let draftErrors: any | null = $state(null)
+	let draftGeneratedFields: string[] = $state([])
+	let isDraftGenerating = $state(false)
+	let draftCurrentField: string | null = $state(null)
+	let draftCurrentFieldIndex = $state(0)
+	let draftTotalFields = $state(0)
+	let isDraftCorrecting = $state(false)
+	let draftCorrectionAttempt = $state(0)
 
 	// Get chat id from route params if it exists
 	let chatId: number | undefined = $derived.by(() => {
@@ -67,6 +86,28 @@
 		console.log('[Page] Tagged entities:', metadata?.taggedEntities)
 		
 		return metadata?.taggedEntities || {}
+	})
+	
+	// Extract character draft from chat metadata (stored separately from tagged entities)
+	$effect(() => {
+		if (!chat?.metadata) {
+			characterDraft = null
+			console.log('[Page] No chat metadata, clearing draft')
+			return
+		}
+		
+		const metadata = typeof chat.metadata === 'string' 
+			? JSON.parse(chat.metadata) 
+			: chat.metadata
+		
+		// Draft is in dataEditor.create.characters[0], NOT in taggedEntities
+		const extractedDraft = metadata?.dataEditor?.create?.characters?.[0] || null
+		characterDraft = extractedDraft
+		
+		console.log('[Page] Metadata keys:', Object.keys(metadata))
+		console.log('[Page] dataEditor:', metadata?.dataEditor)
+		console.log('[Page] Extracted character draft:', extractedDraft)
+		console.log('[Page] characterDraft is now:', characterDraft)
 	})
 
 	// Check if we can send a message
@@ -104,6 +145,7 @@
 		socket.on("assistant:selectionComplete", handleSelectionComplete)
 		socket.on("assistant:unlinkSuccess", handleUnlinkSuccess)
 		socket.on("chats:delete", handleChatDeleted)
+		socket.on("assistant:draftProgress", handleDraftProgress)
 
 		// Load list of assistant chats
 		socket.emit("chats:list", { chatType: ChatTypes.ASSISTANT })
@@ -127,6 +169,7 @@
 			socket.off("assistant:selectionComplete", handleSelectionComplete)
 			socket.off("assistant:unlinkSuccess", handleUnlinkSuccess)
 			socket.off("chats:delete", handleChatDeleted)
+			socket.off("assistant:draftProgress", handleDraftProgress)
 		}
 	})
 	
@@ -435,6 +478,95 @@
 		}
 	}
 	
+	function handleDraftProgress(data: any) {
+		console.log("=== DRAFT PROGRESS ===", data)
+		
+		// Only process if it's for the current chat
+		if (!chat || data.chatId !== chat.id) return
+		
+		// Update state based on status
+		switch (data.status) {
+			case 'started':
+				isDraftGenerating = true
+				draftCurrentField = null
+				draftCurrentFieldIndex = 0
+				draftTotalFields = data.totalFields || 0
+				draftGeneratedFields = []
+				isDraftCorrecting = false
+				draftCorrectionAttempt = 0
+				console.log("Draft generation started")
+				break
+				
+			case 'generating_field':
+				draftCurrentField = data.field || null
+				draftCurrentFieldIndex = data.currentField || 0
+				console.log(`Generating field: ${draftCurrentField} (${draftCurrentFieldIndex}/${draftTotalFields})`)
+				break
+				
+			case 'field_complete':
+				if (data.field && !draftGeneratedFields.includes(data.field)) {
+					draftGeneratedFields = [...draftGeneratedFields, data.field]
+				}
+				if (data.draft) {
+					characterDraft = data.draft
+				}
+				console.log(`Field complete: ${data.field}`)
+				break
+				
+			case 'field_error':
+				console.error(`Field error for ${data.field}:`, data.error)
+				toaster.error({ 
+					title: `Error generating ${data.field}`,
+					description: data.message || data.error 
+				})
+				break
+				
+			case 'validating':
+				draftValidationStatus = 'validating'
+				console.log("Validating draft...")
+				break
+				
+			case 'correcting':
+				isDraftCorrecting = true
+				draftCorrectionAttempt = data.attempt || 0
+				console.log(`Auto-correcting errors (attempt ${draftCorrectionAttempt}/3)...`)
+				break
+				
+			case 'complete':
+				isDraftGenerating = false
+				isDraftCorrecting = false
+				draftValidationStatus = 'valid'
+				if (data.draft) {
+					characterDraft = data.draft
+				}
+				if (data.fields) {
+					draftGeneratedFields = data.fields
+				}
+				console.log("Draft generation complete!")
+				toaster.success({ title: "Character draft created successfully!" })
+				scrollToBottom()
+				break
+				
+			case 'validation_failed':
+				isDraftGenerating = false
+				isDraftCorrecting = false
+				draftValidationStatus = 'invalid'
+				if (data.draft) {
+					characterDraft = data.draft
+				}
+				if (data.errors) {
+					draftErrors = data.errors
+				}
+				console.error("Draft validation failed:", data.errors)
+				toaster.warning({ 
+					title: "Draft needs review",
+					description: "Some fields need to be adjusted"
+				})
+				scrollToBottom()
+				break
+		}
+	}
+	
 	function openDeleteChatModal(chatToDeleteParam: SelectChat) {
 		chatToDelete = chatToDeleteParam
 		showDeleteChatModal = true
@@ -448,9 +580,72 @@
 		chatToDelete = null
 	}
 	
+	function cancelBulkDelete() {
+		showBulkDeleteModal = false
+	}
+	
+	function confirmBulkDelete() {
+		if (!socket || selectedChatIds.size === 0) return
+		
+		const deleteCount = selectedChatIds.size
+		
+		// Emit delete for each selected chat
+		selectedChatIds.forEach(chatId => {
+			socket.emit("chats:delete", { id: chatId })
+		})
+		
+		// Clear selection and exit select mode
+		selectedChatIds.clear()
+		selectedChatIds = selectedChatIds
+		isSelectMode = false
+		showBulkDeleteModal = false
+		
+		toaster.success({ title: `Deleting ${deleteCount} conversation${deleteCount !== 1 ? 's' : ''}...` })
+	}
+	
 	function cancelDeleteChat() {
 		showDeleteChatModal = false
 		chatToDelete = null
+	}
+	
+	function handleSaveDraft() {
+		if (!socket || !chat || !characterDraft) return
+		
+		console.log("Saving character draft:", characterDraft)
+		socket.emit("assistant:saveDraft", { chatId: chat.id })
+	}
+	
+	function handleCancelDraft() {
+		characterDraft = null
+		draftValidationStatus = null
+		draftErrors = null
+		draftGeneratedFields = []
+		isDraftGenerating = false
+		draftCurrentField = null
+		draftCurrentFieldIndex = 0
+		draftTotalFields = 0
+		isDraftCorrecting = false
+		draftCorrectionAttempt = 0
+		
+		toaster.info({ title: "Draft cancelled" })
+	}
+	
+	function handleRegenerateField(event: CustomEvent<{ field: string }>) {
+		if (!socket || !chat) return
+		
+		console.log("Regenerating field:", event.detail.field)
+		// TODO: Implement field regeneration
+		toaster.info({ title: `Regenerating ${event.detail.field}...` })
+	}
+	
+	function handleEditField(event: CustomEvent<{ field: string; value: any }>) {
+		if (!characterDraft) return
+		
+		console.log("Editing field:", event.detail.field, "=", event.detail.value)
+		characterDraft = {
+			...characterDraft,
+			[event.detail.field]: event.detail.value
+		}
 	}
 
 	function handleChatMessage(data: Sockets.ChatMessage.Call) {
@@ -641,6 +836,28 @@
 				Your AI assistant for Serene Pub
 			</p>
 		</div>
+		{#if !chatId && !chat && !isCreatingChat}
+			<!-- Select mode toggle button - only show on recents list -->
+			<button
+				class="btn preset-tonal-surface"
+				onclick={() => {
+					isSelectMode = !isSelectMode
+					if (!isSelectMode) {
+						selectedChatIds.clear()
+						selectedChatIds = selectedChatIds
+					}
+				}}
+				title={isSelectMode ? "Cancel selection" : "Select conversations"}
+			>
+				{#if isSelectMode}
+					<Icons.X size={20} />
+					<span class="hidden sm:inline ml-2">Cancel</span>
+				{:else}
+					<Icons.CheckSquare size={20} />
+					<span class="hidden sm:inline ml-2">Select</span>
+				{/if}
+			</button>
+		{/if}
 	</div>
 
 	<!-- Main Content -->
@@ -694,14 +911,75 @@
 					<!-- Recent Chats List -->
 					{#if assistantChats.length > 0}
 						<div class="space-y-2">
-							<h2 class="text-sm font-semibold text-muted mb-3">Recent Conversations</h2>
+							<div class="flex items-center justify-between mb-3">
+								<h2 class="text-sm font-semibold text-muted">Recent Conversations</h2>
+								{#if isSelectMode}
+									<div class="flex items-center gap-3">
+										<!-- Select All Checkbox -->
+										<label class="flex items-center gap-2 cursor-pointer">
+											<input
+												type="checkbox"
+												class="checkbox"
+												checked={selectedChatIds.size === assistantChats.length && assistantChats.length > 0}
+												onchange={(e) => {
+													if (e.currentTarget.checked) {
+														selectedChatIds = new Set(assistantChats.map(c => c.id))
+													} else {
+														selectedChatIds = new Set()
+													}
+												}}
+											/>
+											<span class="text-sm">Select All</span>
+										</label>
+										<!-- Delete Selected Button -->
+										<button
+											class="btn preset-filled-error-500 btn-sm"
+											disabled={selectedChatIds.size === 0}
+											onclick={() => {
+												if (selectedChatIds.size > 0) {
+													showBulkDeleteModal = true
+												}
+											}}
+											title="Delete selected conversations"
+										>
+											<Icons.Trash2 size={16} />
+											<span>Delete ({selectedChatIds.size})</span>
+										</button>
+									</div>
+								{/if}
+							</div>
 							{#each assistantChats as assistantChat (assistantChat.id)}
 								<div
 									class="preset-tonal-surface w-full rounded-lg border border-surface-400-600 hover:preset-filled-surface-100-950 transition-colors flex items-start gap-2"
 								>
+									{#if isSelectMode}
+										<!-- Checkbox in select mode -->
+										<label class="flex items-center p-4 cursor-pointer">
+											<input
+												type="checkbox"
+												class="checkbox"
+												checked={selectedChatIds.has(assistantChat.id)}
+												onchange={(e) => {
+													const newSet = new Set(selectedChatIds)
+													if (e.currentTarget.checked) {
+														newSet.add(assistantChat.id)
+													} else {
+														newSet.delete(assistantChat.id)
+													}
+													selectedChatIds = newSet
+												}}
+												onclick={(e) => e.stopPropagation()}
+											/>
+										</label>
+									{/if}
 									<button
 										class="flex-1 text-left p-4"
-										onclick={() => goto(`/assistant/${assistantChat.id}`)}
+										onclick={() => {
+											if (!isSelectMode) {
+												goto(`/assistant/${assistantChat.id}`)
+											}
+										}}
+										disabled={isSelectMode}
 									>
 										<div class="flex items-start justify-between gap-4">
 											<div class="flex-1 min-w-0">
@@ -714,17 +992,20 @@
 											</div>
 										</div>
 									</button>
-									<button
-										class="btn-icon btn-icon-sm hover:variant-filled-error p-2 m-2"
-										onclick={(e) => {
-											e.stopPropagation()
-											openDeleteChatModal(assistantChat)
-										}}
-										title="Delete conversation"
-										aria-label="Delete conversation"
-									>
-										<Icons.Trash2 size={16} />
-									</button>
+									{#if !isSelectMode}
+										<!-- Trash button in normal mode -->
+										<button
+											class="btn-icon btn-icon-sm hover:variant-filled-error p-2 m-2"
+											onclick={(e) => {
+												e.stopPropagation()
+												openDeleteChatModal(assistantChat)
+											}}
+											title="Delete conversation"
+											aria-label="Delete conversation"
+										>
+											<Icons.Trash2 size={16} />
+										</button>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -794,21 +1075,41 @@
 						isGuest={false}
 						lastPersonaMessage={undefined}
 					>
-						{#snippet generatingAnimation()}
-							<div class="wrapper">
-								<div class="circle"></div>
-								<div class="circle"></div>
-								<div class="circle"></div>
-								<div class="shadow"></div>
-								<div class="shadow"></div>
-								<div class="shadow"></div>
-							</div>
+						{#snippet GeneratingAnimationComponent()}
+							<GeneratingAnimation
+								text={msg.metadata?.reasoning
+									? "Assistant is answering"
+									: "Assistant is deciding"}
+							/>
 						{/snippet}
 					</ChatMessage>
 				{/snippet}
 
 				{#snippet ComposerComponent()}
 					<div class="preset-filled-surface-50-950 border-t border-surface-400-600">
+						<!-- Character Draft Preview above data manager -->
+						{#if characterDraft && chat}
+							{@const _ = console.log('[Render] Showing draft preview')}
+							<div class="pt-4">
+								<CharacterDraftPreview 
+									draft={characterDraft}
+									validationStatus={draftValidationStatus}
+									errors={draftErrors}
+									generatedFields={draftGeneratedFields}
+									isGenerating={isDraftGenerating}
+									currentField={draftCurrentField}
+									currentFieldIndex={draftCurrentFieldIndex}
+									totalFields={draftTotalFields}
+									isCorrecting={isDraftCorrecting}
+									correctionAttempt={draftCorrectionAttempt}
+									on:save={handleSaveDraft}
+									on:cancel={handleCancelDraft}
+									on:regenerateField={handleRegenerateField}
+									on:editField={handleEditField}
+								/>
+							</div>
+						{/if}
+						
 						<!-- Data Manager above input -->
 						{#if chat}
 						<div class="p-4 pb-2">
@@ -864,76 +1165,6 @@
 	</div>
 </div>
 
-<style>
-	/* Generating animation */
-	.wrapper {
-		width: 60px;
-		height: 30px;
-		position: relative;
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-	}
-
-	.circle {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background-color: rgb(var(--color-primary-500));
-		animation: bounce 0.6s ease-in-out infinite;
-	}
-
-	.circle:nth-child(2) {
-		animation-delay: 0.2s;
-	}
-
-	.circle:nth-child(3) {
-		animation-delay: 0.4s;
-	}
-
-	.shadow {
-		width: 12px;
-		height: 3px;
-		border-radius: 50%;
-		background-color: rgba(0, 0, 0, 0.2);
-		position: absolute;
-		bottom: 0;
-		animation: shadowExpand 0.6s ease-in-out infinite;
-	}
-
-	.shadow:nth-child(5) {
-		left: 24px;
-		animation-delay: 0.2s;
-	}
-
-	.shadow:nth-child(6) {
-		left: 48px;
-		animation-delay: 0.4s;
-	}
-
-	@keyframes bounce {
-		0%,
-		100% {
-			transform: translateY(0);
-		}
-		50% {
-			transform: translateY(-15px);
-		}
-	}
-
-	@keyframes shadowExpand {
-		0%,
-		100% {
-			transform: scale(1);
-			opacity: 0.5;
-		}
-		50% {
-			transform: scale(1.5);
-			opacity: 0.3;
-		}
-	}
-</style>
-
 <!-- Delete Chat Confirmation Modal -->
 <Modal
 	open={showDeleteChatModal}
@@ -972,6 +1203,45 @@
 				>
 					<Icons.Trash2 size={16} />
 					Delete
+				</button>
+			</div>
+		</div>
+	{/snippet}
+</Modal>
+
+<!-- Bulk Delete Confirmation Modal -->
+<Modal
+	open={showBulkDeleteModal}
+	onOpenChange={(e) => {
+		if (!e.open) cancelBulkDelete()
+	}}
+	contentBase="card bg-surface-100-900 p-6 w-[90vw] max-w-md"
+	backdropClasses="backdrop-blur-sm"
+>
+	{#snippet content()}
+		<div class="space-y-4">
+			<div class="flex items-start gap-3">
+				<div class="flex-1">
+					<h3 class="h3">Delete {selectedChatIds.size} Conversation{selectedChatIds.size !== 1 ? 's' : ''}?</h3>
+					<p class="text-sm opacity-80 mt-2">
+						Are you sure you want to delete {selectedChatIds.size} selected conversation{selectedChatIds.size !== 1 ? 's' : ''}? This action cannot be undone.
+					</p>
+				</div>
+			</div>
+			
+			<div class="flex gap-2 justify-end">
+				<button
+					class="btn preset-tonal-surface"
+					onclick={cancelBulkDelete}
+				>
+					Cancel
+				</button>
+				<button
+					class="btn preset-filled-error-500"
+					onclick={confirmBulkDelete}
+				>
+					<Icons.Trash2 size={16} />
+					Delete {selectedChatIds.size}
 				</button>
 			</div>
 		</div>

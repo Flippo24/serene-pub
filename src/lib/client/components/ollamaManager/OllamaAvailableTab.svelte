@@ -1,9 +1,10 @@
 <script lang="ts">
 	import * as Icons from "@lucide/svelte"
 	import * as skio from "sveltekit-io"
-	import { onMount, onDestroy } from "svelte"
+	import { onMount, onDestroy, getContext } from "svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { OllamaModelSearchSource } from "$lib/shared/constants/OllamaModelSource"
+	import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
 	import HuggingFaceQuantizationModal from "$lib/client/components/modals/HuggingFaceQuantizationModal.svelte"
 	import OllamaManualPullModal from "$lib/client/components/modals/OllamaManualPullModal.svelte"
 	import OllamaInstructionModal from "$lib/client/components/modals/OllamaInstructionModal.svelte"
@@ -35,7 +36,7 @@
 	let selectedSource = $state(OllamaModelSearchSource.RECOMMENDED)
 	let availableModels: Sockets.OllamaSearchAvailableModels.Response["models"] =
 		$state([])
-	let recommendedModels: Sockets.OllamaRecommendedModels.Response["models"] =
+	let recommendedModels: Sockets.OllamaRecommendedModels.Response["recommendedModels"] =
 		$state([])
 	let isSearching = $state(false)
 	let showHuggingFaceModal = $state(false)
@@ -46,21 +47,65 @@
 		| Sockets.OllamaSearchAvailableModels.Response["models"][0]
 		| null = $state(null)
 
+	// Get user context to track active connection
+	let userCtx: UserCtx = $state(getContext("userCtx"))
+
 	// Track which models are being downloaded locally (for UI state only)
 	let currentlyDownloading = $state(new Set<string>())
+
+	// Derive the current active connection model name for reactivity
+	let currentConnectionModelName: string | null = $derived.by(() => {
+		if (userCtx?.user?.activeConnection?.type === CONNECTION_TYPE.OLLAMA) {
+			const currentName = userCtx.user.activeConnection.model
+			return currentName
+		}
+		return null
+	})
+
+	// Create a derived set of installed model names for efficient lookups and reactivity
+	let installedModelNames = $derived(
+		new Set(installedModels.map((model) => model.name))
+	)
 
 	function isModelInstalled(modelName: string): boolean {
 		if (selectedSource === OllamaModelSearchSource.RECOMMENDED) {
 			// For recommended models, check against the pull string
 			const modelNameFromPull =
 				modelName.split("/").pop()?.split(":")[0] || modelName
-			return installedModels.some(
-				(model) =>
-					model.name.includes(modelNameFromPull) ||
-					model.name.startsWith(modelName.replace("hf.co/", ""))
+			// Check using the derived set
+			for (const name of installedModelNames) {
+				if (
+					name.includes(modelNameFromPull) ||
+					name.startsWith(modelName.replace("hf.co/", ""))
+				) {
+					return true
+				}
+			}
+			return false
+		}
+		// Check if any installed model name starts with the given model name
+		for (const name of installedModelNames) {
+			if (name.startsWith(modelName)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	function isModelActive(modelName: string): boolean {
+		// Access currentConnectionModelName to create reactive dependency
+		if (!currentConnectionModelName) return false
+		
+		if (selectedSource === OllamaModelSearchSource.RECOMMENDED) {
+			// For recommended models, check against the pull string
+			const modelNameFromPull =
+				modelName.split("/").pop()?.split(":")[0] || modelName
+			return (
+				currentConnectionModelName.includes(modelNameFromPull) ||
+				currentConnectionModelName.startsWith(modelName.replace("hf.co/", ""))
 			)
 		}
-		return installedModels.some((model) => model.name.startsWith(modelName))
+		return currentConnectionModelName.startsWith(modelName)
 	}
 
 	function searchAvailableModels() {
@@ -189,7 +234,7 @@
 					toaster.error({ title: message.error })
 					recommendedModels = []
 				} else {
-					recommendedModels = message.models || []
+					recommendedModels = message.recommendedModels || []
 				}
 			}
 		)
@@ -284,6 +329,8 @@
 		</div>
 	{:else if selectedSource === OllamaModelSearchSource.RECOMMENDED}
 		{#each recommendedModels as model}
+			{@const installed = isModelInstalled(model.pull)}
+			{@const active = isModelActive(model.pull)}
 			<div class="card preset-tonal p-4">
 				<div class="flex flex-col gap-3">
 					<!-- Header with name and VRAM tier -->
@@ -355,9 +402,11 @@
 					<!-- Actions -->
 					<div class="flex gap-2">
 						<button
-							class="btn btn-sm {isModelInstalled(model.pull)
-								? 'preset-filled-success-500'
-								: 'preset-filled-primary-500'}"
+							class="btn btn-sm {active
+								? 'preset-filled-primary-500'
+								: installed
+									? 'preset-filled-success-500'
+									: 'preset-filled-primary-500'}"
 							onclick={() => {
 								console.log(
 									"Downloading recommended model:",
@@ -369,12 +418,17 @@
 								} as Sockets.OllamaPullModel.Call)
 								onDownloadStart?.(model.pull)
 							}}
-							disabled={isModelInstalled(model.pull)}
-							aria-label={isModelInstalled(model.pull)
-								? `Model ${model.name} is already installed`
-								: `Install model ${model.name}`}
+							disabled={installed}
+							aria-label={active
+								? `Model ${model.name} is currently active`
+								: installed
+									? `Model ${model.name} is already installed`
+									: `Install model ${model.name}`}
 						>
-							{#if isModelInstalled(model.pull)}
+							{#if active}
+								<Icons.Zap size={14} aria-hidden="true" />
+								Active
+							{:else if installed}
 								<Icons.Check size={14} aria-hidden="true" />
 								Installed
 							{:else}
@@ -398,6 +452,8 @@
 		{/each}
 	{:else}
 		{#each availableModels as model}
+			{@const installed = isModelInstalled(model.name)}
+			{@const active = isModelActive(model.name)}
 			<div class="card preset-tonal p-4">
 				<div class="flex flex-col gap-2">
 					<!-- Header with name and badges -->
@@ -498,9 +554,11 @@
 					</div>
 					<div class="flex min-w-[100px] gap-2">
 						<button
-							class="btn btn-sm {isModelInstalled(model.name)
-								? 'preset-filled-success-500'
-								: 'preset-filled-primary-500'}"
+							class="btn btn-sm {active
+								? 'preset-filled-primary-500'
+								: installed
+									? 'preset-filled-success-500'
+									: 'preset-filled-primary-500'}"
 							onclick={() => {
 								if (
 									selectedSource ===
@@ -516,11 +574,16 @@
 									openOllamaManualPullModal(model.name)
 								}
 							}}
-							aria-label={isModelInstalled(model.name)
-								? `Model ${model.name} is already installed`
-								: `Install model ${model.name}`}
+							aria-label={active
+								? `Model ${model.name} is currently active`
+								: installed
+									? `Model ${model.name} is already installed`
+									: `Install model ${model.name}`}
 						>
-							{#if isModelInstalled(model.name)}
+							{#if active}
+								<Icons.Zap size={14} aria-hidden="true" />
+								Active
+							{:else if installed}
 								<Icons.Check size={14} aria-hidden="true" />
 								Installed
 							{:else}

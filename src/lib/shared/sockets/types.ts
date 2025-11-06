@@ -325,6 +325,7 @@ declare global {
 				interface Response {
 					success?: string
 					error?: string
+					id?: number
 				}
 			}
 			namespace ExportLogs {
@@ -492,7 +493,8 @@ declare global {
 			namespace Update {
 				interface Params {
 					id: number
-					content: string
+					content?: string
+					isHidden?: boolean
 				}
 				interface Response {
 					chatMessage?: SelectChatMessage
@@ -519,6 +521,15 @@ declare global {
 				}
 			}
 			namespace Regenerate {
+				interface Params {
+					id: number
+				}
+				interface Response {
+					chatMessage?: SelectChatMessage
+					error?: string
+				}
+			}
+			namespace Continue {
 				interface Params {
 					id: number
 				}
@@ -1148,6 +1159,12 @@ declare global {
 					downloadingQuants: any
 				}
 			}
+			namespace PullProgress {
+				interface Params {}
+				interface Response {
+					downloadingQuants: any
+				}
+			}
 			namespace RecommendedModels {
 				interface Params {}
 				interface Response {
@@ -1441,6 +1458,32 @@ declare global {
 			}
 			interface Response {
 				chatMessage: SelectChatMessage
+			}
+		}
+	}
+
+	// Assistant namespace
+	namespace Assistant {
+		// Draft progress event - emitted during character draft generation
+		namespace DraftProgress {
+			interface Params {}
+			interface Response {
+				chatId: number
+				timestamp: number
+				status: 'started' | 'generating_field' | 'field_complete' | 'field_error' | 'validating' | 'correcting' | 'complete' | 'validation_failed'
+				message?: string
+				field?: string
+				fieldStatus?: 'generating' | 'validating' | 'complete' | 'error'
+				value?: any
+				error?: string
+				currentField?: number
+				totalFields?: number
+				attempt?: number
+				fields?: string[]
+				draft?: any
+				errors?: any[]
+				generatedFields?: string[]
+				correctedFields?: string[]
 			}
 		}
 	}

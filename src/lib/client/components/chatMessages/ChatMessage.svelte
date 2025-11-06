@@ -25,6 +25,7 @@
 		onDeleteMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onHideMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onRegenerateMessage: (event: MouseEvent, msg: SelectChatMessage) => void
+		onContinueMessage?: (event: MouseEvent, msg: SelectChatMessage) => void
 		onAbortMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onBranchMessage?: (event: Event, msg: SelectChatMessage) => void
 		onCharacterNameClick: (msg: SelectChatMessage) => void
@@ -60,6 +61,7 @@
 		onDeleteMessage,
 		onHideMessage,
 		onRegenerateMessage,
+		onContinueMessage,
 		onAbortMessage,
 		onBranchMessage,
 		onCharacterNameClick,
@@ -171,6 +173,7 @@
 							{onHideMessage}
 							{onDeleteMessage}
 							{onRegenerateMessage}
+							{onContinueMessage}
 							{onAbortMessage}
 							{onBranchMessage}
 						/>
@@ -209,6 +212,7 @@
 										{onHideMessage}
 										{onDeleteMessage}
 										{onRegenerateMessage}
+										{onContinueMessage}
 										{onAbortMessage}
 										{onBranchMessage}
 									/>
@@ -271,20 +275,14 @@
 
 	<div class="flex h-fit rounded p-2 text-left">
 		{#if msg.content === "" && msg.isGenerating}
-			{#if generatingAnimation}
-				{@render generatingAnimation()}
-			{:else if GeneratingAnimationComponent}
+			{#if GeneratingAnimationComponent}
 				{@render GeneratingAnimationComponent()}
+			{:else if generatingAnimation}
+				{@render generatingAnimation()}
 			{:else}
 				<div class="flex items-center gap-2">
-					<Icons.Loader2 size={14} class="animate-spin text-surface-600-400" />
-					<div class="text-sm text-surface-600-400">
-						{#if msg.metadata?.reasoning}
-							Serenity is typing...
-						{:else}
-							Serenity is reasoning...
-						{/if}
-					</div>
+					<div class="animate-pulse text-sm text-surface-600-400">Generating...</div>
+					<div class="h-2 w-2 animate-bounce rounded-full bg-primary-500"></div>
 				</div>
 			{/if}
 		{:else if editChatMessage && editChatMessage.id === msg.id}
@@ -295,7 +293,7 @@
 				/>
 			</div>
 		{:else}
-			<div class="rendered-chat-message-content">
+			<div class="rendered-chat-message-content {msg.isGenerating && msg.content ? 'animate-pulse' : ''}">
 				{@html renderMarkdownWithQuotedText(msg.content)}
 			</div>
 		{/if}

@@ -22,6 +22,7 @@
 		onDeleteMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onHideMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onRegenerateMessage: (event: MouseEvent, msg: SelectChatMessage) => void
+		onContinueMessage?: (event: MouseEvent, msg: SelectChatMessage) => void
 		onAbortMessage: (event: MouseEvent, msg: SelectChatMessage) => void
 		onBranchMessage?: (event: Event, msg: SelectChatMessage) => void
 		editChatMessage: SelectChatMessage | undefined
@@ -45,6 +46,7 @@
 			onDeleteMessage: (event: MouseEvent, msg: SelectChatMessage) => void;
 			onHideMessage: (event: MouseEvent, msg: SelectChatMessage) => void;
 			onRegenerateMessage: (event: MouseEvent, msg: SelectChatMessage) => void;
+			onContinueMessage?: (event: MouseEvent, msg: SelectChatMessage) => void;
 			onAbortMessage: (event: MouseEvent, msg: SelectChatMessage) => void;
 			onBranchMessage?: (event: Event, msg: SelectChatMessage) => void;
 			editChatMessage: SelectChatMessage | undefined;
@@ -71,6 +73,7 @@
 		onDeleteMessage,
 		onHideMessage,
 		onRegenerateMessage,
+		onContinueMessage,
 		onAbortMessage,
 		onBranchMessage,
 		editChatMessage,
@@ -135,13 +138,15 @@
 								onEditMessage,
 								onDeleteMessage,
 								onHideMessage,
-							onRegenerateMessage,
-							onAbortMessage,
-							onBranchMessage,
-							editChatMessage,
-							canRegenerateLastMessage,
-							isGuest
-						})}							<!-- Show next character block after the last message if component provided -->
+								onRegenerateMessage,
+								onContinueMessage,
+								onAbortMessage,
+								onBranchMessage,
+								editChatMessage,
+								canRegenerateLastMessage,
+								isGuest
+							})}
+							<!-- Show next character block after the last message if component provided -->
 							{#if isLastMessage && NextCharacterComponent}
 								{@render NextCharacterComponent()}
 							{/if}

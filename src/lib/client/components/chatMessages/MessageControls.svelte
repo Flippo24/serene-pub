@@ -13,6 +13,7 @@
 		onRegenerateMessage: (e: Event, msg: SelectChatMessage) => void
 		onAbortMessage: (e: Event, msg: SelectChatMessage) => void
 		onBranchMessage?: (e: Event, msg: SelectChatMessage) => void
+		onContinueMessage?: (e: Event, msg: SelectChatMessage) => void
 	}
 
 	let {
@@ -25,7 +26,8 @@
 		onDeleteMessage,
 		onRegenerateMessage,
 		onAbortMessage,
-		onBranchMessage
+		onBranchMessage,
+		onContinueMessage
 	}: Props = $props()
 </script>
 
@@ -84,6 +86,18 @@
 		>
 			<Icons.RefreshCw size={16} />
 			<span class="lg:hidden">Regenerate Response</span>
+		</button>
+	{/if}
+	{#if onContinueMessage && !!msg.characterId && isLastMessage &&  !msg.isGenerating && msg.content}
+		<button
+			class="btn btn-sm msg-cntrl-icon hover:preset-filled-primary-500"
+			title="Continue Response"
+			aria-label="Continue generating this response"
+			disabled={!!editChatMessage}
+			onclick={(e) => onContinueMessage(e, msg)}
+		>
+			<Icons.ArrowDown size={16} aria-hidden="true" />
+			<span class="lg:hidden">Continue Response</span>
 		</button>
 	{/if}
 	{#if msg.isGenerating}

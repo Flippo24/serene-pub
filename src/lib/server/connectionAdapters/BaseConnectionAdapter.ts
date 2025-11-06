@@ -152,9 +152,10 @@ export abstract class BaseConnectionAdapter {
 		console.log('='.repeat(80))
 		console.log('[getAssistantPromptMode] Checking mode...')
 		console.log('[getAssistantPromptMode] Chat messages count:', this.chat.chatMessages.length)
-		console.log('[getAssistantPromptMode] Generating message metadata:', JSON.stringify(this.generatingMessageMetadata, null, 2))
-		console.log('[getAssistantPromptMode] Raw metadata:', this.chat.metadata)
-		console.log('[getAssistantPromptMode] Parsed metadata:', JSON.stringify(metadata, null, 2))
+		console.log('[getAssistantPromptMode] Generating message metadata exists:', !!this.generatingMessageMetadata)
+		console.log('[getAssistantPromptMode] Raw metadata exists:', !!this.chat.metadata)
+		console.log('[getAssistantPromptMode] Parsed metadata exists:', !!metadata)
+		console.log('[getAssistantPromptMode] Parsed metadata keys:', metadata ? Object.keys(metadata) : 'N/A')
 		
 		// CRITICAL: Check if we're regenerating a message that already has reasoning
 		// The generating message is excluded from chat.chatMessages, so we need to check it separately
@@ -197,38 +198,11 @@ export abstract class BaseConnectionAdapter {
 			}
 		}
 		
-		// Check if last user message has trigger words for function calling
-		const lastUserMessage = [...this.chat.chatMessages]
-			.reverse()
-			.find((m: any) => m.role === 'user')
-		
-		console.log('[getAssistantPromptMode] Last user message:', {
-			id: lastUserMessage?.id,
-			content: lastUserMessage?.content?.substring(0, 100)
-		})
-		
-		if (lastUserMessage) {
-			const content = lastUserMessage.content.toLowerCase()
-			const functionTriggers = [
-				'find', 'search', 'tell me about', 'who is', 'what is',
-				'show me', 'look up', 'get', 'fetch', 'summarize',
-				'describe', 'explain', 'details about', 'information about',
-				'tell me more about'
-			]
-			
-			const hasTrigger = functionTriggers.some(trigger => content.includes(trigger))
-			console.log('[getAssistantPromptMode] Has trigger words:', hasTrigger)
-			
-			if (hasTrigger) {
-				console.log('[getAssistantPromptMode] ✅ Found trigger words, using FUNCTION-CALLING mode')
-				console.log('='.repeat(80))
-				return 'function-calling'
-			}
-		}
-		
-		console.log('[getAssistantPromptMode] ✅ No special conditions, using DEFAULT mode')
+		// For assistant mode, always use function-calling prompt
+		// The prompt itself instructs the LLM when to use functions vs answer directly
+		console.log('[getAssistantPromptMode] ✅ Using FUNCTION-CALLING mode (LLM decides when to call functions)')
 		console.log('='.repeat(80))
-		return 'default'
+		return 'function-calling'
 	}
 
 	/**
