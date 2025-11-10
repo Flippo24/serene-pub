@@ -5,27 +5,50 @@
 	import { fade, slide } from 'svelte/transition'
 	import GeneratingAnimation from '$lib/client/components/chatMessages/GeneratingAnimation.svelte'
 
-	// Props
-	export let draft: AssistantCreateCharacter
-	export let validationStatus: 'valid' | 'invalid' | 'validating' | null = null
-	export let errors: ZodError | null = null
-	export let generatedFields: string[] = []
-	export let isGenerating = false
-	export let currentField: string | null = null
-	export let currentFieldIndex = 0
-	export let totalFields = 0
-	export let isCorrecting = false
-	export let correctionAttempt = 0
+	// Props using Svelte 5 runes
+	let {
+		draft,
+		validationStatus = null,
+		errors = null,
+		generatedFields = [],
+		isGenerating = false,
+		currentField = null,
+		currentFieldIndex = 0,
+		totalFields = 0,
+		isCorrecting = false,
+		correctionAttempt = 0
+	}: {
+		draft: AssistantCreateCharacter
+		validationStatus?: 'valid' | 'invalid' | 'validating' | null
+		errors?: ZodError | null
+		generatedFields?: string[]
+		isGenerating?: boolean
+		currentField?: string | null
+		currentFieldIndex?: number
+		totalFields?: number
+		isCorrecting?: boolean
+		correctionAttempt?: number
+	} = $props()
+
+	// Export a function to clear saving state for a field
+	export function clearSavingState(field: string) {
+		savingFields.delete(field)
+		savingFields = savingFields  // Trigger reactivity
+	}
 
 	const dispatch = createEventDispatcher<{
 		save: void
 		cancel: void
 		regenerateField: { field: string }
 		editField: { field: string; value: any }
+		updateField: { field: string; value: any }  // For immediate updates via socket
 	}>()
 
 	// State
 	let isExpanded = true
+	let editingField: string | null = $state(null)
+	let editingValues: Record<string, any> = $state({})
+	let savingFields: Set<string> = $state(new Set())
 
 	// Field labels for display
 	const fieldLabels: Record<string, string> = {
@@ -78,6 +101,57 @@
 		dispatch('editField', { field, value })
 	}
 
+	// Start editing a field
+	function startEditing(field: string, currentValue: any) {
+		editingField = field
+		editingValues[field] = currentValue
+	}
+
+	// Save field edit
+	function saveFieldEdit(field: string) {
+		const newValue = editingValues[field]
+		
+		// Don't save if value hasn't changed
+		if (newValue === (draft as any)[field]) {
+			editingField = null
+			return
+		}
+
+		// Add to saving set
+		savingFields.add(field)
+		
+		// Dispatch update event
+		dispatch('updateField', { field, value: newValue })
+		
+		// Clear editing state
+		editingField = null
+	}
+
+	// Cancel field edit
+	function cancelFieldEdit() {
+		editingField = null
+	}
+
+	// Handle field blur
+	function handleFieldBlur(field: string) {
+		// Small delay to allow click events on buttons
+		setTimeout(() => {
+			if (editingField === field) {
+				saveFieldEdit(field)
+			}
+		}, 100)
+	}
+
+	// Handle keydown in field
+	function handleFieldKeydown(event: KeyboardEvent, field: string) {
+		if (event.key === 'Enter' && !event.shiftKey && field !== 'description' && field !== 'personality' && field !== 'scenario') {
+			event.preventDefault()
+			saveFieldEdit(field)
+		} else if (event.key === 'Escape') {
+			cancelFieldEdit()
+		}
+	}
+
 	// Format array values for display
 	function formatArrayValue(value: string[] | undefined | null): string {
 		if (!value || value.length === 0) return 'Not set'
@@ -85,13 +159,15 @@
 	}
 
 	// Get all fields that exist in the draft
-	$: draftFields = Object.entries(draft).filter(
-		([key, value]) => value !== null && value !== undefined && value !== ''
+	let draftFields = $derived(
+		Object.entries(draft).filter(
+			([key, value]) => value !== null && value !== undefined && value !== ''
+		)
 	)
 
 	// Count valid/invalid fields
-	$: validFieldCount = generatedFields.filter((f) => isFieldValid(f)).length
-	$: invalidFieldCount = generatedFields.filter((f) => !isFieldValid(f)).length
+	let validFieldCount = $derived(generatedFields.filter((f) => isFieldValid(f)).length)
+	let invalidFieldCount = $derived(generatedFields.filter((f) => !isFieldValid(f)).length)
 </script>
 
 <div class="character-draft-preview" transition:fade={{ duration: 200 }}>
@@ -168,19 +244,79 @@
 
 					{#if Array.isArray(value)}
 						<div class="field-value array">
-							{#if value.length > 0}
-								<ul>
-									{#each value as item}
-										<li>{item}</li>
-									{/each}
-								</ul>
+							{#if editingField === field}
+								<textarea
+									bind:value={editingValues[field]}
+									on:blur={() => handleFieldBlur(field)}
+									on:keydown={(e) => handleFieldKeydown(e, field)}
+									class="editable-textarea"
+									rows={5}
+									placeholder="Enter items, one per line"
+									autofocus
+								/>
 							{:else}
-								<span class="empty">Not set</span>
+								<div 
+									class="field-content editable"
+									class:saving={savingFields.has(field)}
+									on:click={() => startEditing(field, value.join('\n'))}
+									role="button"
+									tabindex="0"
+									on:keydown={(e) => e.key === 'Enter' && startEditing(field, value.join('\n'))}
+								>
+									{#if value.length > 0}
+										<ul>
+											{#each value as item}
+												<li>{item}</li>
+											{/each}
+										</ul>
+									{:else}
+										<span class="empty">Click to add items...</span>
+									{/if}
+									{#if savingFields.has(field)}
+										<span class="saving-indicator">Saving...</span>
+									{/if}
+								</div>
 							{/if}
 						</div>
 					{:else}
 						<div class="field-value">
-							{value || '(empty)'}
+							{#if editingField === field}
+								{#if field === 'description' || field === 'personality' || field === 'scenario'}
+									<textarea
+										bind:value={editingValues[field]}
+										on:blur={() => handleFieldBlur(field)}
+										on:keydown={(e) => handleFieldKeydown(e, field)}
+										class="editable-textarea"
+										rows={6}
+										placeholder={`Enter ${fieldLabels[field] || field}...`}
+										autofocus
+									/>
+								{:else}
+									<input
+										type="text"
+										bind:value={editingValues[field]}
+										on:blur={() => handleFieldBlur(field)}
+										on:keydown={(e) => handleFieldKeydown(e, field)}
+										class="editable-input"
+										placeholder={`Enter ${fieldLabels[field] || field}...`}
+										autofocus
+									/>
+								{/if}
+							{:else}
+								<div 
+									class="field-content editable"
+									class:saving={savingFields.has(field)}
+									on:click={() => startEditing(field, value)}
+									role="button"
+									tabindex="0"
+									on:keydown={(e) => e.key === 'Enter' && startEditing(field, value)}
+								>
+									{value || '(empty)'}
+									{#if savingFields.has(field)}
+										<span class="saving-indicator">Saving...</span>
+									{/if}
+								</div>
+							{/if}
 						</div>
 					{/if}
 
@@ -415,6 +551,69 @@
 		word-break: break-word;
 		line-height: 1.5;
 		font-size: 0.875rem;
+		position: relative;
+	}
+
+	.field-content {
+		min-height: 1.5rem;
+	}
+
+	.field-content.editable {
+		cursor: text;
+		padding: 0.5rem;
+		margin: -0.5rem;
+		border-radius: 4px;
+		transition: background-color 0.2s, box-shadow 0.2s;
+	}
+
+	.field-content.editable:hover {
+		background: var(--surface-3);
+		box-shadow: 0 0 0 1px var(--border-color);
+	}
+
+	.field-content.editable:focus {
+		outline: none;
+		box-shadow: 0 0 0 2px var(--primary-color);
+	}
+
+	.field-content.saving {
+		opacity: 0.6;
+		pointer-events: none;
+	}
+
+	.saving-indicator {
+		position: absolute;
+		top: 0.375rem;
+		right: 0.375rem;
+		font-size: 0.75rem;
+		color: var(--text-tertiary);
+		font-style: italic;
+	}
+
+	.editable-input,
+	.editable-textarea {
+		width: 100%;
+		padding: 0.5rem;
+		background: var(--surface-1);
+		border: 2px solid var(--primary-color);
+		border-radius: 4px;
+		color: var(--text-primary);
+		font-family: inherit;
+		font-size: 0.875rem;
+		line-height: 1.5;
+		resize: vertical;
+		transition: border-color 0.2s;
+	}
+
+	.editable-input:focus,
+	.editable-textarea:focus {
+		outline: none;
+		border-color: var(--primary-hover);
+		box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+	}
+
+	.editable-textarea {
+		min-height: 100px;
 	}
 
 	.field-value.array ul {

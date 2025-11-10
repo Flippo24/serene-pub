@@ -11,7 +11,8 @@ import { assistantCreateCharacterSchema } from '$lib/server/db/zodSchemas'
 import { 
 	determineFieldsToPopulate,
 	generateFieldPrompt,
-	FIELD_GENERATION_GUIDANCE
+	FIELD_GENERATION_GUIDANCE,
+	initializeEmptyDraft
 } from './characterDraftGenerator'
 import { generateFieldWithProgress, type FieldGenerationProgressCallback } from './llmFieldGenerator'
 import { retryValidationWithLLM } from './validationRetryHandler'
@@ -110,9 +111,16 @@ export async function generateCharacterDraft({
 		totalFields: fieldsToPopulate.length
 	})
 	
-	// 2. Build draft by generating each field
-	const draft: Partial<AssistantCreateCharacter> = existingDraft ? { ...existingDraft } : {}
+	// 2. Initialize draft structure
+	// If we have an existing draft, use it; otherwise create a fully initialized empty structure
+	// This ensures all fields exist before field generation starts, preventing undefined access errors
+	const draft: Partial<AssistantCreateCharacter> = existingDraft 
+		? { ...existingDraft } 
+		: initializeEmptyDraft()
 	
+	console.log('[DraftOrchestrator] Draft initialized with structure:', Object.keys(draft))
+	
+	// 3. Build draft by generating each field
 	for (let i = 0; i < fieldsToPopulate.length; i++) {
 		const field = fieldsToPopulate[i]
 		const guidance = FIELD_GENERATION_GUIDANCE[field]

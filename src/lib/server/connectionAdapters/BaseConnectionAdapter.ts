@@ -169,6 +169,11 @@ export abstract class BaseConnectionAdapter {
 			return 'conversational'
 		}
 		
+		// Check if we have tagged entities (NOT draft - draft doesn't need conversational mode)
+		const hasTaggedEntities = metadata.taggedEntities && Object.keys(metadata.taggedEntities).length > 0
+		
+		console.log('[getAssistantPromptMode] Has tagged entities:', hasTaggedEntities)
+		
 		// Get the very last message in the chat (could be user or assistant)
 		const lastMessage = this.chat.chatMessages[this.chat.chatMessages.length - 1]
 		
@@ -182,23 +187,27 @@ export abstract class BaseConnectionAdapter {
 		
 		// Only use conversational mode if:
 		// 1. Last message was from assistant
-		// 2. Reasoning was already performed (has reasoning in metadata)
-		// This means we're regenerating after function selection
+		// 2. That message is still waiting for function selection OR actively being regenerated
+		// This means we're in the middle of a function-calling workflow
 		if (lastMessage?.role === 'assistant') {
 			const lastMessageMetadata = (lastMessage.metadata as any) || {}
-			const hasReasoningInLastMessage = !!lastMessageMetadata.reasoning
+			const isWaitingForSelection = !!lastMessageMetadata.waitingForFunctionSelection
+			const hasReasoningAndIsGenerating = !!lastMessageMetadata.reasoning && !!lastMessage.isGenerating
 			
 			console.log('[getAssistantPromptMode] Last message is assistant')
-			console.log('[getAssistantPromptMode] Has reasoning:', hasReasoningInLastMessage)
+			console.log('[getAssistantPromptMode] Waiting for selection:', isWaitingForSelection)
+			console.log('[getAssistantPromptMode] Has reasoning and generating:', hasReasoningAndIsGenerating)
 			
-			if (hasReasoningInLastMessage) {
-				console.log('[getAssistantPromptMode] ✅ Last assistant message has reasoning, using CONVERSATIONAL mode')
+			// Only use conversational mode if actively regenerating after selection
+			// NOT for new user messages after the function workflow completed
+			if (hasReasoningAndIsGenerating) {
+				console.log('[getAssistantPromptMode] ✅ Regenerating after function selection, using CONVERSATIONAL mode')
 				console.log('='.repeat(80))
 				return 'conversational'
 			}
 		}
 		
-		// For assistant mode, always use function-calling prompt
+		// For assistant mode, always use function-calling prompt for new messages
 		// The prompt itself instructs the LLM when to use functions vs answer directly
 		console.log('[getAssistantPromptMode] ✅ Using FUNCTION-CALLING mode (LLM decides when to call functions)')
 		console.log('='.repeat(80))
@@ -240,6 +249,12 @@ export abstract class BaseConnectionAdapter {
 			systemContent += "\n\n**Instructions:** The user has requested information about the above entities. Please provide a response based on what was requested in their original question, using the entity data provided above."
 		}
 		
+		// Load and append draft context (for conversational mode after draft creation)
+		const draftContext = await this.loadDraftContext()
+		if (draftContext) {
+			systemContent += "\n\n" + draftContext
+		}
+		
 		messages.push({
 			role: "system",
 			content: systemContent
@@ -253,6 +268,19 @@ export abstract class BaseConnectionAdapter {
 			messages.push({
 				role: msg.role === "assistant" ? "assistant" : "user",
 				content: msg.content
+			})
+		}
+		
+		// Add a mode-specific instruction as the last user message to reinforce the expected format
+		if (promptMode === 'function-calling') {
+			messages.push({
+				role: "user",
+				content: "[SYSTEM: You are now in Function Calling mode. Respond with the reasoning format: {\"reasoning\": \"your thoughts\", \"functions\": [...]} ]"
+			})
+		} else if (promptMode === 'conversational') {
+			messages.push({
+				role: "user",
+				content: "[SYSTEM: You are now in Conversational mode. Respond naturally using the information provided about the tagged entities.]"
 			})
 		}
 
@@ -346,6 +374,52 @@ export abstract class BaseConnectionAdapter {
 					}
 				}
 			}
+		}
+
+		return sections.length > 0 ? sections.join("\n") : ""
+	}
+
+	/**
+	 * Load draft data from chat metadata and format for context
+	 */
+	private async loadDraftContext(): Promise<string> {
+		// Parse metadata if it's a string
+		let metadata = this.chat.metadata
+		if (typeof metadata === 'string') {
+			try {
+				metadata = JSON.parse(metadata)
+			} catch (e) {
+				console.error('[BaseConnectionAdapter] Failed to parse metadata:', e)
+				return ""
+			}
+		}
+		
+		if (!metadata || !(metadata as any).dataEditor?.create) {
+			return ""
+		}
+
+		const sections: string[] = []
+		const drafts = (metadata as any).dataEditor.create
+
+		// Load draft characters
+		if (drafts.characters && Array.isArray(drafts.characters) && drafts.characters.length > 0) {
+			sections.push("## Character Draft Context\n")
+			const draft = drafts.characters[0] // Only show the first draft
+			
+			sections.push("A character draft has been created with the following details:")
+			sections.push("")
+			
+			if (draft.name) sections.push(`Name: ${draft.name}`)
+			if (draft.nickname) sections.push(`Nickname: ${draft.nickname}`)
+			if (draft.description) sections.push(`Description: ${draft.description.substring(0, 150)}${draft.description.length > 150 ? '...' : ''}`)
+			if (draft.personality) sections.push(`Personality: ${draft.personality.substring(0, 150)}${draft.personality.length > 150 ? '...' : ''}`)
+			if (draft.scenario) sections.push(`Scenario: ${draft.scenario.substring(0, 150)}${draft.scenario.length > 150 ? '...' : ''}`)
+			if (draft.exampleDialogues && Array.isArray(draft.exampleDialogues)) {
+				sections.push(`Example Dialogues: ${draft.exampleDialogues.length} dialogue(s)`)
+			}
+			
+			sections.push("")
+			sections.push("The user can see and edit this draft in their interface. You can reference it naturally in conversation if relevant.")
 		}
 
 		return sections.length > 0 ? sections.join("\n") : ""

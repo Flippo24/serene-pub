@@ -13,6 +13,7 @@ import {
 	setActiveCharacterDraft
 } from '$lib/shared/types/chatMetadata'
 import { generateCharacterDraft } from '../utils/draftOrchestrator'
+import { broadcastToChatUsers } from '$lib/server/sockets/utils/broadcastHelpers'
 
 export const listCharactersHandler: AssistantFunctionHandler = async ({
 	userId,
@@ -150,7 +151,19 @@ export const draftCharacterHandler: AssistantFunctionHandler = async ({
 
 		console.log(`[draftCharacterHandler] Draft saved to chat metadata`)
 
-		// 4. Return result - DON'T return draft data as it's already in metadata
+		// 4. Broadcast updated chat to client so draft appears immediately
+		const updatedChat = await db.query.chats.findFirst({
+			where: eq(schema.chats.id, chatId)
+		})
+		
+		if (updatedChat && socket?.io) {
+			console.log(`[draftCharacterHandler] Broadcasting updated chat to client`)
+			await broadcastToChatUsers(socket.io, chatId, "chats:get", {
+				chat: updatedChat
+			})
+		}
+
+		// 5. Return result - DON'T return draft data as it's already in metadata
 		// Returning data here would make it appear as a "selectable result" 
 		// which causes the CharacterSelector to auto-select and add null to taggedEntities
 		return {

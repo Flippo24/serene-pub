@@ -1,86 +1,123 @@
-import { CONNECTION_TYPE } from "$lib/shared/constants/ConnectionTypes"
+import { getConnectionAdapter } from "./getConnectionAdapter"
+import { TokenCounters } from "./TokenCounterManager"
 
 /**
  * Generate a concise title for an assistant chat based on the first exchange
- * Uses direct API calls to avoid adapter complexity
+ * Uses the connection adapter system to be provider-agnostic
  */
 export async function generateChatTitle({
 	userMessage,
 	assistantMessage,
 	connection,
-	sampling
+	sampling,
+	contextConfig,
+	promptConfig
 }: {
 	userMessage: string
 	assistantMessage: string
 	connection: any // SelectConnection
 	sampling: any // SelectSamplingConfig
+	contextConfig: any // SelectContextConfig
+	promptConfig: any // SelectPromptConfig
 }): Promise<string> {
 	try {
-		// Use a simple, focused prompt to generate a concise title
-		const titlePrompt = `Based on this conversation, generate a short, descriptive title (maximum 6 words, no quotes or punctuation at the end):
-
-User: ${userMessage.slice(0, 500)}
-Assistant: ${assistantMessage.slice(0, 500)}
-
-Title:`
-
-		// Make direct API call based on connection type
-		let title = ""
-
-		if (connection.type === CONNECTION_TYPE.OPENAI_CHAT) {
-			// OpenAI-compatible API
-			const response = await fetch(`${connection.baseUrl}/chat/completions`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${connection.apiKey}`
+		// Create a minimal chat structure for title generation
+		const titleChat = {
+			id: 0,
+			userId: 0,
+			name: null,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+			scenario: null,
+			metadata: null,
+			lorebookId: null,
+			isGroup: false,
+			chatType: "assistant",
+			groupReplyStrategy: null,
+			chatMessages: [
+				{
+					id: 1,
+					chatId: 0,
+					role: "user",
+					content: userMessage.slice(0, 500),
+					createdAt: new Date().toISOString(),
+					isHidden: false,
+					isGenerating: false,
+					metadata: null
 				},
-				body: JSON.stringify({
-					model: connection.model,
-					messages: [{ role: "user", content: titlePrompt }],
-					max_tokens: 30,
-					temperature: 0.7,
-					stream: false
-				})
-			})
-
-			const data = await response.json()
-			title = data.choices?.[0]?.message?.content || ""
-		} else if (connection.type === CONNECTION_TYPE.OLLAMA) {
-			// Ollama API
-			const response = await fetch(`${connection.baseUrl}/api/chat`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					model: connection.model,
-					messages: [{ role: "user", content: titlePrompt }],
-					stream: false,
-					options: {
-						num_predict: 30,
-						temperature: 0.7
-					}
-				})
-			})
-
-			// Try JSON parsing first, fall back to text if it fails
-			const contentType = response.headers.get('content-type')
-			if (contentType?.includes('application/json')) {
-				const data = await response.json()
-				title = data.message?.content || ""
-			} else {
-				// Fallback to text parsing for non-JSON responses
-				const text = await response.text()
-				try {
-					const data = JSON.parse(text)
-					title = data.message?.content || ""
-				} catch (e) {
-					// If JSON parsing fails, use the text directly
-					title = text
+				{
+					id: 2,
+					chatId: 0,
+					role: "assistant",
+					content: assistantMessage.slice(0, 500),
+					createdAt: new Date().toISOString(),
+					isHidden: false,
+					isGenerating: false,
+					metadata: null
+				},
+				{
+					id: 3,
+					chatId: 0,
+					role: "user",
+					content: "Based on the conversation above, generate a short, descriptive title (maximum 6 words, no quotes or punctuation at the end). Just the title, nothing else.",
+					createdAt: new Date().toISOString(),
+					isHidden: false,
+					isGenerating: false,
+					metadata: null
 				}
+			],
+			lorebook: {
+				id: 0,
+				userId: 0,
+				name: "",
+				description: null,
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+				lorebookBindings: []
 			}
+		}
+
+		// Get the appropriate adapter
+		const AdapterClass = getConnectionAdapter(connection.type)
+		if (!AdapterClass) {
+			throw new Error(`No adapter found for connection type: ${connection.type}`)
+		}
+
+		// Create token counter
+		const tokenCounter = new TokenCounters(connection.type)
+
+		// Create adapter instance with minimal config
+		const adapter = new AdapterClass.Adapter({
+			connection,
+			sampling: {
+				...sampling,
+				maxTokens: 30, // Limit to short title
+				temperature: 0.7
+			},
+			contextConfig,
+			promptConfig: {
+				...promptConfig,
+				systemPrompt: "You are a helpful assistant that generates concise titles."
+			},
+			chat: titleChat as any,
+			currentCharacterId: null,
+			tokenCounter,
+			tokenLimit: 4096,
+			contextThresholdPercent: 0.8,
+			isAssistantMode: false // Don't use assistant mode for title generation
+		})
+
+		// Generate the title
+		const { completionResult } = await adapter.generate()
+
+		let title = ""
+		if (typeof completionResult === "string") {
+			title = completionResult
 		} else {
-			// Fallback for other connection types
-			throw new Error(`Unsupported connection type: ${connection.type}`)
+			// Handle streaming response
+			await completionResult((chunk: string) => {
+				title += chunk
+			})
 		}
 
 		// Clean up the title

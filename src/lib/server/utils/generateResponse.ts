@@ -542,7 +542,9 @@ export async function generateResponse({
 			userId,
 			socket.io,
 			connection,
-			sampling
+			sampling,
+			contextConfig,
+			promptConfig
 		).catch((error) => {
 			console.error("Background title generation failed:", error)
 		})
@@ -560,7 +562,9 @@ async function generateChatTitleIfNeeded(
 	userId: number,
 	io: any,
 	connection: any,
-	sampling: any
+	sampling: any,
+	contextConfig: any,
+	promptConfig: any
 ) {
 	try {
 		// Check if this is the first assistant message
@@ -595,7 +599,9 @@ async function generateChatTitleIfNeeded(
 			userMessage: userMessage.content,
 			assistantMessage: assistantMessage.content,
 			connection,
-			sampling
+			sampling,
+			contextConfig,
+			promptConfig
 		})
 
 		// Update the chat with the new title

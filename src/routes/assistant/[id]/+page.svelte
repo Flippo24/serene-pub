@@ -11,26 +11,17 @@
 	import CharacterDraftPreview from "$lib/client/components/assistant/CharacterDraftPreview.svelte"
 	import GeneratingAnimation from "$lib/client/components/chatMessages/GeneratingAnimation.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
-	import { getContext, onMount } from "svelte"
+	import { getContext, onMount, untrack } from "svelte"
 	import { toaster } from "$lib/client/utils/toaster"
 	import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 
 	let chat: Sockets.Chats.Get.Response["chat"] | undefined = $state()
-	let assistantChats: SelectChat[] = $state([])
 	let newMessage = $state("")
 	const socket = skio.get()
 	let userCtx: UserCtx = getContext("userCtx")
 	let messagesContainer: HTMLDivElement | null = $state(null)
-	let isCreatingChat = $state(false)
 	let isSending = $state(false)
 	let openMobileMsgControls: number | undefined = $state(undefined)
-	let showDeleteChatModal = $state(false)
-	let chatToDelete: SelectChat | null = $state(null)
-	
-	// Bulk delete state
-	let isSelectMode = $state(false)
-	let selectedChatIds = $state(new Set<number>())
-	let showBulkDeleteModal = $state(false)
 	
 	// Scroll tracking for autoscroll
 	let lastSeenMessageId: number | null = $state(null)
@@ -89,25 +80,35 @@
 	})
 	
 	// Extract character draft from chat metadata (stored separately from tagged entities)
+	// Only update when the draft content actually changes
 	$effect(() => {
-		if (!chat?.metadata) {
-			characterDraft = null
-			console.log('[Page] No chat metadata, clearing draft')
+		// Track chat.metadata to detect changes
+		const metadata = chat?.metadata
+		
+		if (!metadata) {
+			if (characterDraft !== null) {
+				characterDraft = null
+				console.log('[Page] No chat metadata, clearing draft')
+			}
 			return
 		}
 		
-		const metadata = typeof chat.metadata === 'string' 
-			? JSON.parse(chat.metadata) 
-			: chat.metadata
+		const parsedMetadata = typeof metadata === 'string' 
+			? JSON.parse(metadata) 
+			: metadata
 		
 		// Draft is in dataEditor.create.characters[0], NOT in taggedEntities
-		const extractedDraft = metadata?.dataEditor?.create?.characters?.[0] || null
-		characterDraft = extractedDraft
+		const extractedDraft = parsedMetadata?.dataEditor?.create?.characters?.[0] || null
 		
-		console.log('[Page] Metadata keys:', Object.keys(metadata))
-		console.log('[Page] dataEditor:', metadata?.dataEditor)
-		console.log('[Page] Extracted character draft:', extractedDraft)
-		console.log('[Page] characterDraft is now:', characterDraft)
+		// Only update if the draft actually changed (deep comparison by stringifying)
+		const currentDraftStr = characterDraft ? JSON.stringify(characterDraft) : null
+		const extractedDraftStr = extractedDraft ? JSON.stringify(extractedDraft) : null
+		
+		if (currentDraftStr !== extractedDraftStr) {
+			characterDraft = extractedDraft
+			console.log('[Page] Draft changed, updating')
+			console.log('[Page] Extracted character draft:', extractedDraft)
+		}
 	})
 
 	// Check if we can send a message
@@ -120,56 +121,41 @@
 		)
 	})
 
-	// Check if we can create a new chat with the current message
-	let canCreateNewChat = $derived.by(() => {
-		return (
-			!chat &&
-			!isCreatingChat &&
-			newMessage.trim().length > 0
-		)
-	})
-
-	// Load or create assistant chat on mount
+	// Load assistant chat on mount
 	onMount(() => {
 		if (!socket) return
 
 		// Set up listeners first
 		socket.on("chatMessage", handleChatMessage)
 		socket.on("chats:get", handleChatGetResponse)
-		socket.on("chats:list", handleChatsListResponse)
-		socket.on("chats:createAssistant", handleCreateAssistantResponse)
 		socket.on("chats:sendAssistantMessage", handleSendMessageResponse)
 		socket.on("chats:titleGenerated", handleTitleGenerated)
 		socket.on("assistant:reasoningDetected", handleReasoningDetected)
 		socket.on("assistant:functionResults", handleFunctionResults)
 		socket.on("assistant:selectionComplete", handleSelectionComplete)
 		socket.on("assistant:unlinkSuccess", handleUnlinkSuccess)
-		socket.on("chats:delete", handleChatDeleted)
 		socket.on("assistant:draftProgress", handleDraftProgress)
-
-		// Load list of assistant chats
-		socket.emit("chats:list", { chatType: ChatTypes.ASSISTANT })
+		socket.on("assistant:editDraftSuccess", handleEditDraftSuccess)
+		socket.on("assistant:editDraftError", handleEditDraftError)
 
 		if (chatId) {
-			// Load specific chat if ID provided
+			// Load specific chat
 			socket.emit("chats:get", { id: chatId })
 		}
-		// Otherwise show the recents list
 
 		// Cleanup listeners on unmount
 		return () => {
 			socket.off("chatMessage", handleChatMessage)
 			socket.off("chats:get", handleChatGetResponse)
-			socket.off("chats:list", handleChatsListResponse)
-			socket.off("chats:createAssistant", handleCreateAssistantResponse)
 			socket.off("chats:sendAssistantMessage", handleSendMessageResponse)
 			socket.off("chats:titleGenerated", handleTitleGenerated)
 			socket.off("assistant:reasoningDetected", handleReasoningDetected)
 			socket.off("assistant:functionResults", handleFunctionResults)
 			socket.off("assistant:selectionComplete", handleSelectionComplete)
 			socket.off("assistant:unlinkSuccess", handleUnlinkSuccess)
-			socket.off("chats:delete", handleChatDeleted)
 			socket.off("assistant:draftProgress", handleDraftProgress)
+			socket.off("assistant:editDraftSuccess", handleEditDraftSuccess)
+			socket.off("assistant:editDraftError", handleEditDraftError)
 		}
 	})
 	
@@ -184,38 +170,10 @@
 		}
 	})
 
-	function handleChatsListResponse(res: Sockets.Chats.List.Response) {
-		if (res.chatList) {
-			// Sort by most recent (server already filters by chatType)
-			assistantChats = (res.chatList as SelectChat[])
-				.sort((a: SelectChat, b: SelectChat) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-		}
-	}
-
-	function handleCreateAssistantResponse(res: Sockets.Chats.CreateAssistant.Response) {
-		isCreatingChat = false
-		
-		if (res.error) {
-			toaster.error({ title: res.error })
-			return
-		}
-
-		if (res.chat) {
-			// Navigate to the new chat - it will be loaded by the Get handler
-			// Pass the initial message via URL params so it survives navigation
-			const initialMessage = newMessage.trim()
-			if (initialMessage) {
-				goto(`/assistant/${res.chat.id}?msg=${encodeURIComponent(initialMessage)}`, { replaceState: true })
-			} else {
-				goto(`/assistant/${res.chat.id}`, { replaceState: true })
-			}
-		}
-	}
-
 	function handleChatGetResponse(res: Sockets.Chats.Get.Response) {
 		if (!res.chat) {
 			toaster.error({ title: "Chat not found" })
-			goto("/")
+			goto("/assistant")
 			return
 		}
 
@@ -261,11 +219,6 @@
 		if (chat && data.chatId === chat.id) {
 			chat = { ...chat, name: data.title }
 		}
-		
-		// Update in the chat list
-		assistantChats = assistantChats.map(c => 
-			c.id === data.chatId ? { ...c, name: data.title } : c
-		)
 
 		console.log(`Chat ${data.chatId} title updated to: "${data.title}"`)
 	}
@@ -282,7 +235,8 @@
 		const messageIndex = chat.chatMessages.findIndex(m => m.id === data.messageId)
 		if (messageIndex >= 0) {
 			const currentMetadata = chat.chatMessages[messageIndex].metadata || {}
-			chat.chatMessages[messageIndex] = {
+			// Create a new message object to avoid mutation issues
+			const updatedMessage = {
 				...chat.chatMessages[messageIndex],
 				isGenerating: false,
 				content: "", // Content stays empty - reasoning is in metadata
@@ -292,8 +246,8 @@
 					waitingForFunctionSelection: true
 				}
 			}
-			// Trigger reactivity
-			chat = chat
+			// Create new array to trigger reactivity properly
+			chat.chatMessages[messageIndex] = updatedMessage
 		}
 		
 		// Store the function call and execute it
@@ -321,7 +275,8 @@
 		console.log("=== FUNCTION RESULTS HANDLER CALLED ===")
 		console.log("Data received:", data)
 		console.log("Current chat:", chat?.id)
-		console.log("Pending function call:", pendingFunctionCall)
+		console.log("Pending function call EXISTS:", !!pendingFunctionCall)
+		console.log("Pending function call value:", pendingFunctionCall)
 		console.log("Data chat ID:", data.chatId)
 		
 		if (!chat) {
@@ -330,8 +285,14 @@
 		}
 		
 		if (!pendingFunctionCall) {
-			console.error("❌ No pending function call!")
-			return
+			console.error("❌ No pending function call! This should not happen.")
+			console.error("Data:", data)
+			// Try to recover by creating a minimal pendingFunctionCall
+			pendingFunctionCall = {
+				messageId: 0, // We don't know the message ID
+				reasoning: "",
+				functionCalls: []
+			}
 		}
 		
 		if (data.chatId !== chat.id) {
@@ -351,15 +312,40 @@
 		
 		console.log("✅ Updated pending function call:", pendingFunctionCall)
 		
+		// If there are no results to select (e.g., draft functions that don't return data),
+		// automatically trigger the conversational response
+		if (!data.results || data.results.length === 0) {
+			console.log("🎯 No results to select, auto-triggering conversational response")
+			// Simulate selection complete with empty selection
+			handleSelectionComplete({
+				chatId: chat.id,
+				taggedEntities: {}
+			})
+		} else {
+			console.log("📋 Has results for selection, count:", data.results.length)
+		}
+		
 		scrollToBottom()
 	}
 
 	function handleSelectionComplete(data: any) {
-		if (!chat || data.chatId !== chat.id) return
+		console.log("=== HANDLE SELECTION COMPLETE CALLED ===")
+		console.log("Data:", data)
+		console.log("Current chat:", chat?.id)
+		console.log("Chat ID match:", chat?.id === data.chatId)
 		
-		console.log("Selection complete:", data)
+		if (!chat || data.chatId !== chat.id) {
+			console.log("❌ Exiting early - no chat or ID mismatch")
+			return
+		}
+		
+		console.log("✅ Selection complete:", data)
 		console.log("Current chat.metadata:", chat.metadata)
 		console.log("New taggedEntities from server:", data.taggedEntities)
+		
+		// Reload the chat from server to get updated metadata (including draft)
+		console.log("📡 Requesting chat refresh from server...")
+		socket.emit("chats:get", { id: chat.id })
 		
 		// Parse existing metadata if it's a string
 		const existingMetadata = typeof chat.metadata === 'string' 
@@ -376,49 +362,56 @@
 		
 		console.log("Updated chat.metadata:", chat.metadata)
 		
-		// Force reactivity
-		chat = chat
+		// Check if this is a draft function (no tagged entities to select)
+		const isDraftFunction = !data.taggedEntities || Object.keys(data.taggedEntities).length === 0
+		console.log("Is draft function?", isDraftFunction)
 		
 		// Clear pending function call
 		pendingFunctionCall = undefined
 		
-		// Trigger a follow-up generation to answer the original question
-		// The tagged entity data will be automatically included in the system prompt
-		if (socket) {
-			// Find the last assistant message to regenerate
-			const lastAssistantMessage = chat.chatMessages
-				.filter((m: any) => m.role === 'assistant')
-				.pop()
-			
-			if (lastAssistantMessage) {
-				// Clear the waitingForFunctionSelection flag before regenerating
-				// This ensures we don't re-enter the reasoning loop
-				// BUT preserve the reasoning metadata so it can be displayed with the final response
-				const currentMetadata = lastAssistantMessage.metadata || {}
-				lastAssistantMessage.metadata = {
+	// Trigger a follow-up generation to answer the original question
+	// The tagged entity data will be automatically included in the system prompt
+	if (socket && chat?.chatMessages) {
+		// Find the last assistant message to regenerate
+		const lastAssistantMessage = chat.chatMessages
+			.filter((m: any) => m.role === 'assistant')
+			.pop()
+		
+		console.log("Last assistant message:", lastAssistantMessage?.id)
+		
+		if (lastAssistantMessage) {
+			// Clear the waitingForFunctionSelection flag before regenerating
+			// This ensures we don't re-enter the reasoning loop
+			// BUT preserve the reasoning metadata so it can be displayed with the pre-content section
+			const currentMetadata = lastAssistantMessage.metadata || {}
+			const updatedMessage = {
+				...lastAssistantMessage,
+				content: "", // Clear content so regeneration starts fresh
+				metadata: {
 					...currentMetadata,
 					waitingForFunctionSelection: false
 					// Keep reasoning: it will be displayed in the pre-content section
 				}
-				
-				// Update the message in our local state
-				const messageIndex = chat.chatMessages.findIndex(m => m.id === lastAssistantMessage.id)
-				if (messageIndex >= 0) {
-					chat.chatMessages[messageIndex] = lastAssistantMessage
-					chat = chat
-				}
-				
-				// Trigger regeneration - the adapter will see the tagged entities and use conversational mode
-				socket.emit("chatMessages:regenerate", {
-					id: lastAssistantMessage.id
-				})
 			}
+			
+			// Update the message in our local state
+			const messageIndex = chat.chatMessages.findIndex(m => m.id === lastAssistantMessage.id)
+			if (messageIndex >= 0) {
+				chat.chatMessages[messageIndex] = updatedMessage
+			}
+			
+			// Trigger regeneration - the adapter will see the mode and respond appropriately
+			// For draft functions (no tagged entities), it will use conversational mode
+			// For data retrieval functions (with tagged entities), it will use conversational mode with entity data
+			console.log("🚀 Triggering regeneration for conversational response")
+			socket.emit("chatMessages:regenerate", {
+				id: lastAssistantMessage.id
+			})
 		}
-		
-		toaster.success({ title: "Data linked, generating response..." })
 	}
-
-	function handleSelectionCompleted() {
+	
+	toaster.success({ title: isDraftFunction ? "Draft updated!" : "Data linked!" })
+}	function handleSelectionCompleted() {
 		// Clear the pending function call UI
 		pendingFunctionCall = undefined
 		scrollToBottom()
@@ -440,51 +433,25 @@
 			taggedEntities: data.taggedEntities
 		}
 		
-		// Force reactivity
-		chat = chat
-		
-		toaster.success({ title: "Entity unlinked successfully" })
-	}
+	// Force reactivity
+	chat = chat
 	
-	function handleChatDeleted(res: any) {
-		console.log("handleChatDeleted called with:", res)
-		
-		if (res.error) {
-			toaster.error({ title: res.error })
-			return
-		}
-		
-		// Check for both chatId and id in response
-		const deletedChatId = res.chatId || res.id
-		
-		if (deletedChatId) {
-			console.log("Removing chat from list:", deletedChatId)
-			console.log("Before filter:", assistantChats.length)
-			
-			// Remove from list
-			assistantChats = assistantChats.filter(c => c.id !== deletedChatId)
-			
-			console.log("After filter:", assistantChats.length)
-			
-			// If we deleted the current chat, navigate to index
-			if (chat && chat.id === deletedChatId) {
-				chat = undefined
-				goto('/assistant', { replaceState: true })
-			}
-			
-			toaster.success({ title: "Chat deleted" })
-		} else {
-			console.error("No chat ID in delete response:", res)
-		}
-	}
+	toaster.success({ title: "Entity unlinked successfully" })
+}
+
+function handleSaveDraft() {
+	if (!socket || !chat || !characterDraft) return
 	
-	function handleDraftProgress(data: any) {
-		console.log("=== DRAFT PROGRESS ===", data)
-		
-		// Only process if it's for the current chat
-		if (!chat || data.chatId !== chat.id) return
-		
-		// Update state based on status
+	console.log("Saving character draft:", characterDraft)
+	socket.emit("assistant:saveDraft", { chatId: chat.id })
+}
+
+function handleDraftProgress(data: any) {
+	console.log("=== DRAFT PROGRESS ===", data)
+	
+	// Only process if it's for the current chat
+	if (!chat || data.chatId !== chat.id) return
+			// Update state based on status
 		switch (data.status) {
 			case 'started':
 				isDraftGenerating = true
@@ -543,94 +510,46 @@
 					draftGeneratedFields = data.fields
 				}
 				console.log("Draft generation complete!")
-				toaster.success({ title: "Character draft created successfully!" })
-				scrollToBottom()
-				break
-				
-			case 'validation_failed':
-				isDraftGenerating = false
-				isDraftCorrecting = false
-				draftValidationStatus = 'invalid'
-				if (data.draft) {
-					characterDraft = data.draft
-				}
-				if (data.errors) {
-					draftErrors = data.errors
-				}
-				console.error("Draft validation failed:", data.errors)
-				toaster.warning({ 
-					title: "Draft needs review",
-					description: "Some fields need to be adjusted"
-				})
-				scrollToBottom()
-				break
-		}
+			toaster.success({ title: "Character draft created successfully!" })
+			scrollToBottom()
+			break
+			
+		case 'validation_failed':
+			isDraftGenerating = false
+			isDraftCorrecting = false
+			draftValidationStatus = 'invalid'
+			if (data.draft) {
+				characterDraft = data.draft
+			}
+			if (data.errors) {
+				draftErrors = data.errors
+			}
+			console.error("Draft validation failed:", data.errors)
+			toaster.warning({ 
+				title: "Draft needs review",
+				description: "Some fields need to be adjusted"
+			})
+			scrollToBottom()
+			break
 	}
+}
+
+function handleCancelDraft() {
+	characterDraft = null
+	draftValidationStatus = null
+	draftErrors = null
+	draftGeneratedFields = []
+	isDraftGenerating = false
+	draftCurrentField = null
+	draftCurrentFieldIndex = 0
+	draftTotalFields = 0
+	isDraftCorrecting = false
+	draftCorrectionAttempt = 0
 	
-	function openDeleteChatModal(chatToDeleteParam: SelectChat) {
-		chatToDelete = chatToDeleteParam
-		showDeleteChatModal = true
-	}
-	
-	function confirmDeleteChat() {
-		if (!chatToDelete || !socket) return
-		
-		socket.emit("chats:delete", { id: chatToDelete.id })
-		showDeleteChatModal = false
-		chatToDelete = null
-	}
-	
-	function cancelBulkDelete() {
-		showBulkDeleteModal = false
-	}
-	
-	function confirmBulkDelete() {
-		if (!socket || selectedChatIds.size === 0) return
-		
-		const deleteCount = selectedChatIds.size
-		
-		// Emit delete for each selected chat
-		selectedChatIds.forEach(chatId => {
-			socket.emit("chats:delete", { id: chatId })
-		})
-		
-		// Clear selection and exit select mode
-		selectedChatIds.clear()
-		selectedChatIds = selectedChatIds
-		isSelectMode = false
-		showBulkDeleteModal = false
-		
-		toaster.success({ title: `Deleting ${deleteCount} conversation${deleteCount !== 1 ? 's' : ''}...` })
-	}
-	
-	function cancelDeleteChat() {
-		showDeleteChatModal = false
-		chatToDelete = null
-	}
-	
-	function handleSaveDraft() {
-		if (!socket || !chat || !characterDraft) return
-		
-		console.log("Saving character draft:", characterDraft)
-		socket.emit("assistant:saveDraft", { chatId: chat.id })
-	}
-	
-	function handleCancelDraft() {
-		characterDraft = null
-		draftValidationStatus = null
-		draftErrors = null
-		draftGeneratedFields = []
-		isDraftGenerating = false
-		draftCurrentField = null
-		draftCurrentFieldIndex = 0
-		draftTotalFields = 0
-		isDraftCorrecting = false
-		draftCorrectionAttempt = 0
-		
-		toaster.info({ title: "Draft cancelled" })
-	}
-	
-	function handleRegenerateField(event: CustomEvent<{ field: string }>) {
+	toaster.info({ title: "Draft cancelled" })
+}
+
+function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 		if (!socket || !chat) return
 		
 		console.log("Regenerating field:", event.detail.field)
@@ -648,8 +567,98 @@
 		}
 	}
 
+	// Handle updateField event (triggered on blur) - sends to server
+	let draftPreviewComponent: any = $state(null)
+	
+	function handleUpdateField(event: CustomEvent<{ field: string; value: any }>) {
+		if (!socket || !chat || !characterDraft) return
+		
+		const { field, value } = event.detail
+		
+		// Parse value for array fields
+		let finalValue = value
+		if (field === 'alternateGreetings' || field === 'exampleDialogues' || field === 'groupOnlyGreetings' || field === 'source') {
+			// Split by newlines and filter empty lines
+			finalValue = value.split('\n').filter((line: string) => line.trim().length > 0)
+		}
+		
+		console.log("Updating field via socket:", field, "=", finalValue)
+		
+		// Emit to server with new modular structure
+		socket.emit('assistant:editDraft', {
+			chatId: chat.id,
+			operation: 'create',  // Currently creating new character
+			entityType: 'characters',  // Entity type
+			entityIndex: 0,  // Index in the array
+			field,
+			value: finalValue
+		})
+	}
+
+	function handleEditDraftSuccess(data: {
+		chatId: number
+		operation: 'create' | 'edit'
+		entityType: 'characters' | 'personas'
+		entityIndex: number
+		field: string
+		value: any
+		draft: any
+		chat?: any
+	}) {
+		console.log("Draft field updated successfully:", data.field)
+		
+		// Update the local draft
+		if (characterDraft && data.operation === 'create' && data.entityType === 'characters' && data.entityIndex === 0) {
+			characterDraft = {
+				...characterDraft,
+				[data.field]: data.value
+			}
+			
+			// Clear saving state in the preview component
+			if (draftPreviewComponent) {
+				draftPreviewComponent.clearSavingState(data.field)
+			}
+		}
+		
+		// Update the chat with the latest metadata if provided
+		if (data.chat && chat && data.chat.id === chat.id) {
+			chat = {
+				...chat,
+				metadata: data.chat.metadata,
+				updatedAt: data.chat.updatedAt
+			}
+			console.log('[editDraftSuccess] Updated chat metadata')
+		}
+		
+		// Show success toast
+		toaster.success({ 
+			title: 'Field Updated', 
+			description: `${data.field} has been saved` 
+		})
+	}
+
+	function handleEditDraftError(data: { error: string; field?: string; value?: any }) {
+		console.error("Failed to update draft field:", data.error)
+		
+		// Clear saving state if field is specified
+		if (data.field && draftPreviewComponent) {
+			draftPreviewComponent.clearSavingState(data.field)
+		}
+		
+		// Show error toast
+		toaster.error({ 
+			title: 'Update Failed', 
+			description: data.error 
+		})
+	}
+
 	function handleChatMessage(data: Sockets.ChatMessage.Call) {
 		if (!chat || !data.chatMessage || data.chatMessage.chatId !== chat.id) return
+		
+		// Ensure chatMessages array exists
+		if (!chat.chatMessages) {
+			chat.chatMessages = []
+		}
 
 		const existingIndex = chat.chatMessages.findIndex(
 			(m) => m.id === data.chatMessage!.id
@@ -807,13 +816,8 @@
 	function noop() {}
 
 	function handleBackButton() {
-		if (chatId) {
-			// If viewing a specific chat, go back to assistant index
-			goto("/assistant")
-		} else {
-			// If on index, go back to home
-			goto("/")
-		}
+		// Go back to assistant index
+		goto("/assistant")
 	}
 </script>
 
@@ -823,7 +827,7 @@
 		<button
 			class="btn preset-tonal-surface"
 			onclick={handleBackButton}
-			title={chatId ? "Back to Serenity" : "Back to Home"}
+			title="Back to Serenity"
 		>
 			<Icons.ArrowLeft size={20} />
 		</button>
@@ -836,188 +840,11 @@
 				Your AI assistant for Serene Pub
 			</p>
 		</div>
-		{#if !chatId && !chat && !isCreatingChat}
-			<!-- Select mode toggle button - only show on recents list -->
-			<button
-				class="btn preset-tonal-surface"
-				onclick={() => {
-					isSelectMode = !isSelectMode
-					if (!isSelectMode) {
-						selectedChatIds.clear()
-						selectedChatIds = selectedChatIds
-					}
-				}}
-				title={isSelectMode ? "Cancel selection" : "Select conversations"}
-			>
-				{#if isSelectMode}
-					<Icons.X size={20} />
-					<span class="hidden sm:inline ml-2">Cancel</span>
-				{:else}
-					<Icons.CheckSquare size={20} />
-					<span class="hidden sm:inline ml-2">Select</span>
-				{/if}
-			</button>
-		{/if}
 	</div>
 
 	<!-- Main Content -->
 	<div class="flex flex-1 flex-col overflow-hidden">
-		{#if isCreatingChat}
-			<div class="flex flex-1 items-center justify-center">
-				<div class="text-center">
-					<div class="loading mb-4"></div>
-					<p class="text-muted">Starting conversation with Serenity...</p>
-				</div>
-			</div>
-		{:else if !chatId && !chat}
-			<!-- Recents List View (like Claude.ai) -->
-			<div class="flex flex-1 flex-col overflow-y-auto">
-				<div class="mx-auto w-full max-w-3xl p-6">
-					<!-- Message Input for Creating New Chat -->
-					<form
-						class="mb-8"
-						onsubmit={(e) => {
-							e.preventDefault()
-							if (canCreateNewChat) {
-								isCreatingChat = true
-								socket?.emit("chats:createAssistant", {})
-							}
-						}}
-					>
-						<div class="relative">
-							<input
-								type="text"
-								class="input w-full text-lg py-4 px-6 pr-14"
-								placeholder="Ask Serenity anything about Serene Pub..."
-								bind:value={newMessage}
-								disabled={isCreatingChat}
-								aria-label="Start a new conversation"
-							/>
-							<button
-								type="submit"
-								class="btn preset-filled-primary absolute right-2 top-1/2 -translate-y-1/2"
-								disabled={!canCreateNewChat}
-								title="Start conversation"
-							>
-								{#if isCreatingChat}
-									<Icons.Loader2 size={20} class="animate-spin" />
-								{:else}
-									<Icons.Send size={20} />
-								{/if}
-							</button>
-						</div>
-					</form>
-
-					<!-- Recent Chats List -->
-					{#if assistantChats.length > 0}
-						<div class="space-y-2">
-							<div class="flex items-center justify-between mb-3">
-								<h2 class="text-sm font-semibold text-muted">Recent Conversations</h2>
-								{#if isSelectMode}
-									<div class="flex items-center gap-3">
-										<!-- Select All Checkbox -->
-										<label class="flex items-center gap-2 cursor-pointer">
-											<input
-												type="checkbox"
-												class="checkbox"
-												checked={selectedChatIds.size === assistantChats.length && assistantChats.length > 0}
-												onchange={(e) => {
-													if (e.currentTarget.checked) {
-														selectedChatIds = new Set(assistantChats.map(c => c.id))
-													} else {
-														selectedChatIds = new Set()
-													}
-												}}
-											/>
-											<span class="text-sm">Select All</span>
-										</label>
-										<!-- Delete Selected Button -->
-										<button
-											class="btn preset-filled-error-500 btn-sm"
-											disabled={selectedChatIds.size === 0}
-											onclick={() => {
-												if (selectedChatIds.size > 0) {
-													showBulkDeleteModal = true
-												}
-											}}
-											title="Delete selected conversations"
-										>
-											<Icons.Trash2 size={16} />
-											<span>Delete ({selectedChatIds.size})</span>
-										</button>
-									</div>
-								{/if}
-							</div>
-							{#each assistantChats as assistantChat (assistantChat.id)}
-								<div
-									class="preset-tonal-surface w-full rounded-lg border border-surface-400-600 hover:preset-filled-surface-100-950 transition-colors flex items-start gap-2"
-								>
-									{#if isSelectMode}
-										<!-- Checkbox in select mode -->
-										<label class="flex items-center p-4 cursor-pointer">
-											<input
-												type="checkbox"
-												class="checkbox"
-												checked={selectedChatIds.has(assistantChat.id)}
-												onchange={(e) => {
-													const newSet = new Set(selectedChatIds)
-													if (e.currentTarget.checked) {
-														newSet.add(assistantChat.id)
-													} else {
-														newSet.delete(assistantChat.id)
-													}
-													selectedChatIds = newSet
-												}}
-												onclick={(e) => e.stopPropagation()}
-											/>
-										</label>
-									{/if}
-									<button
-										class="flex-1 text-left p-4"
-										onclick={() => {
-											if (!isSelectMode) {
-												goto(`/assistant/${assistantChat.id}`)
-											}
-										}}
-										disabled={isSelectMode}
-									>
-										<div class="flex items-start justify-between gap-4">
-											<div class="flex-1 min-w-0">
-												<h3 class="font-medium truncate">
-													{assistantChat.name || "Conversation with Serenity"}
-												</h3>
-												<p class="text-sm text-muted mt-1">
-													{new Date(assistantChat.updatedAt).toLocaleDateString()}
-												</p>
-											</div>
-										</div>
-									</button>
-									{#if !isSelectMode}
-										<!-- Trash button in normal mode -->
-										<button
-											class="btn-icon btn-icon-sm hover:variant-filled-error p-2 m-2"
-											onclick={(e) => {
-												e.stopPropagation()
-												openDeleteChatModal(assistantChat)
-											}}
-											title="Delete conversation"
-											aria-label="Delete conversation"
-										>
-											<Icons.Trash2 size={16} />
-										</button>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<div class="text-center py-12">
-							<Icons.BotMessageSquare size={48} class="text-muted mx-auto mb-4" />
-							<p class="text-muted">No conversations yet. Start one above!</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-		{:else if !chat}
+		{#if !chat}
 			<!-- Loading specific chat -->
 			<div class="flex flex-1 items-center justify-center">
 				<div class="text-center">
@@ -1092,6 +919,7 @@
 							{@const _ = console.log('[Render] Showing draft preview')}
 							<div class="pt-4">
 								<CharacterDraftPreview 
+									bind:this={draftPreviewComponent}
 									draft={characterDraft}
 									validationStatus={draftValidationStatus}
 									errors={draftErrors}
@@ -1106,6 +934,7 @@
 									on:cancel={handleCancelDraft}
 									on:regenerateField={handleRegenerateField}
 									on:editField={handleEditField}
+									on:updateField={handleUpdateField}
 								/>
 							</div>
 						{/if}
@@ -1164,86 +993,3 @@
 		{/if}
 	</div>
 </div>
-
-<!-- Delete Chat Confirmation Modal -->
-<Modal
-	open={showDeleteChatModal}
-	onOpenChange={(e) => {
-		if (!e.open) cancelDeleteChat()
-	}}
-	contentBase="card bg-surface-100-900 p-6 w-[90vw] max-w-md"
-	backdropClasses="backdrop-blur-sm"
->
-	{#snippet content()}
-		<div class="space-y-4">
-			<div class="flex items-start gap-3">
-				<div class="flex-1">
-					<h3 class="h3">Delete Conversation?</h3>
-					<p class="text-sm opacity-80 mt-2">
-						Are you sure you want to delete this conversation? This action cannot be undone.
-					</p>
-					{#if chatToDelete}
-						<p class="text-sm font-medium mt-2">
-							"{chatToDelete.name || 'Untitled Conversation'}"
-						</p>
-					{/if}
-				</div>
-			</div>
-			
-			<div class="flex gap-2 justify-end">
-				<button
-					class="btn preset-tonal-surface"
-					onclick={cancelDeleteChat}
-				>
-					Cancel
-				</button>
-				<button
-					class="btn preset-filled-error-500"
-					onclick={confirmDeleteChat}
-				>
-					<Icons.Trash2 size={16} />
-					Delete
-				</button>
-			</div>
-		</div>
-	{/snippet}
-</Modal>
-
-<!-- Bulk Delete Confirmation Modal -->
-<Modal
-	open={showBulkDeleteModal}
-	onOpenChange={(e) => {
-		if (!e.open) cancelBulkDelete()
-	}}
-	contentBase="card bg-surface-100-900 p-6 w-[90vw] max-w-md"
-	backdropClasses="backdrop-blur-sm"
->
-	{#snippet content()}
-		<div class="space-y-4">
-			<div class="flex items-start gap-3">
-				<div class="flex-1">
-					<h3 class="h3">Delete {selectedChatIds.size} Conversation{selectedChatIds.size !== 1 ? 's' : ''}?</h3>
-					<p class="text-sm opacity-80 mt-2">
-						Are you sure you want to delete {selectedChatIds.size} selected conversation{selectedChatIds.size !== 1 ? 's' : ''}? This action cannot be undone.
-					</p>
-				</div>
-			</div>
-			
-			<div class="flex gap-2 justify-end">
-				<button
-					class="btn preset-tonal-surface"
-					onclick={cancelBulkDelete}
-				>
-					Cancel
-				</button>
-				<button
-					class="btn preset-filled-error-500"
-					onclick={confirmBulkDelete}
-				>
-					<Icons.Trash2 size={16} />
-					Delete {selectedChatIds.size}
-				</button>
-			</div>
-		</div>
-	{/snippet}
-</Modal>

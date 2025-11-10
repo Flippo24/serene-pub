@@ -33,17 +33,27 @@ export const characterFunctions: Record<string, AssistantFunction> = {
 		name: 'draftCharacter',
 		description: `Create or update a character draft based on user requirements. The draft is saved to the chat and shown to the user for review before being saved to the database. 
 
-**When to use**: User asks to create/draft a character, provides character details, or asks you to help create a character.
+**When to use**: 
+- User asks to create/draft a character
+- User asks to modify an existing draft (e.g., "reroll personality", "change the description", "add more details")
 
 **How to call**:
-{reasoning: "User wants to create [type of character]", functions: [draftCharacter(userRequest:"[exact user request here]", additionalFields:["personality","scenario"])]}
+{reasoning: "User wants to create/modify [type of character]", functions: [draftCharacter(userRequest:"[exact user request here]", additionalFields:["personality","scenario"])]}
 
-**Examples**:
+**Examples - Creating new drafts**:
 - User: "Create a cowboy character" → {reasoning: "Creating cowboy character", functions: [draftCharacter(userRequest:"Create a cowboy character", additionalFields:["personality","scenario"])]}
 - User: "Make a detective named Sarah who is cynical" → {reasoning: "Creating detective character", functions: [draftCharacter(userRequest:"Make a detective named Sarah who is cynical", additionalFields:["personality","scenario"])]}
-- User: "I need a fantasy wizard" → {reasoning: "Creating wizard character", functions: [draftCharacter(userRequest:"I need a fantasy wizard", additionalFields:["personality","scenario","firstMessage"])]}
 
-**CRITICAL**: NEVER create character details yourself. NEVER output JSON schemas or API endpoints. Only call this function with the exact format shown above.`,
+**Examples - Modifying existing drafts**:
+- User: "Reroll his personality" → {reasoning: "User wants to regenerate personality field", functions: [draftCharacter(userRequest:"Reroll his personality", additionalFields:["personality"])]}
+- User: "Change the description" → {reasoning: "User wants to regenerate description", functions: [draftCharacter(userRequest:"Change the description", additionalFields:[])]}
+- User: "Make him more cynical" → {reasoning: "User wants to modify personality", functions: [draftCharacter(userRequest:"Make him more cynical", additionalFields:["personality"])]}
+
+**CRITICAL**: 
+- ALWAYS use the CURRENT user message as userRequest, not previous messages
+- NEVER create character details yourself
+- NEVER output JSON schemas or API endpoints
+- Only call this function with the exact format shown above`,
 		requiresConfirmation: false,
 		requiresAdmin: false,
 		parameters: {

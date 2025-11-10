@@ -8,6 +8,36 @@ import type { Socket } from 'socket.io'
 import type { AssistantCreateCharacter } from '$lib/server/db/zodSchemas'
 
 /**
+ * Initialize an empty draft structure with all fields set to appropriate empty/default values
+ * This ensures all properties exist before any field generation begins
+ */
+export function initializeEmptyDraft(): Partial<AssistantCreateCharacter> {
+	return {
+		// Required text fields
+		name: '',
+		description: '',
+		
+		// Optional text fields
+		nickname: undefined,
+		personality: undefined,
+		scenario: undefined,
+		firstMessage: undefined,
+		creatorNotes: undefined,
+		postHistoryInstructions: undefined,
+		characterVersion: undefined,
+		
+		// Array fields - initialize as empty arrays to prevent undefined access
+		alternateGreetings: [],
+		exampleDialogues: [],
+		groupOnlyGreetings: [],
+		source: [],
+		
+		// Object fields - initialize as empty objects
+		creatorNotesMultilingual: undefined
+	}
+}
+
+/**
  * Fields that are required for character creation
  */
 export const REQUIRED_CHARACTER_FIELDS = ['name', 'description'] as const
@@ -143,6 +173,32 @@ export function determineFieldsToPopulate(
 	existingDraft: Partial<AssistantCreateCharacter> | null
 ): string[] {
 	const fields: string[] = []
+	
+	// Detect if this is a regeneration/modification request
+	const regenerationKeywords = ['reroll', 'regenerate', 'change', 'modify', 'update', 'redo', 'remake', 'rewrite', 'remove', 'add', 'adjust', 'fix', 'correct']
+	const isRegenerationRequest = regenerationKeywords.some(keyword => 
+		userRequest.toLowerCase().includes(keyword)
+	)
+	
+	// Detect which fields are mentioned in the user request
+	const requestLower = userRequest.toLowerCase()
+	const mentionedFields: string[] = []
+	
+	// Check for field names mentioned in the request
+	const allFields = [...REQUIRED_CHARACTER_FIELDS, ...OPTIONAL_CHARACTER_FIELDS]
+	for (const field of allFields) {
+		// Match field name with word boundaries or as part of common phrases
+		if (
+			requestLower.includes(field) || 
+			(field === 'name' && requestLower.match(/\bname\b/)) ||
+			(field === 'nickname' && requestLower.match(/\bnick|alias\b/)) ||
+			(field === 'personality' && requestLower.match(/\bpersonality|traits?\b/)) ||
+			(field === 'description' && requestLower.match(/\bdescription|appearance|look\b/)) ||
+			(field === 'scenario' && requestLower.match(/\bscenario|setting|background\b/))
+		) {
+			mentionedFields.push(field)
+		}
+	}
 
 	// Always include required fields if not already present
 	for (const field of REQUIRED_CHARACTER_FIELDS) {
@@ -151,10 +207,24 @@ export function determineFieldsToPopulate(
 		}
 	}
 
-	// Add requested additional fields if not already present
+	// Add requested additional fields
 	for (const field of additionalFields) {
 		if (OPTIONAL_CHARACTER_FIELDS.includes(field as any)) {
-			if (!existingDraft || !(field in existingDraft)) {
+			// If this is a regeneration request, include the field even if it exists
+			// Otherwise, only include if missing
+			if (isRegenerationRequest) {
+				fields.push(field)
+			} else if (!existingDraft || !(field in existingDraft)) {
+				fields.push(field)
+			}
+		}
+	}
+	
+	// Add fields mentioned in the request (if modification is requested)
+	if (isRegenerationRequest && mentionedFields.length > 0) {
+		for (const field of mentionedFields) {
+			if (!fields.includes(field)) {
+				console.log(`[determineFieldsToPopulate] Adding mentioned field: ${field}`)
 				fields.push(field)
 			}
 		}
