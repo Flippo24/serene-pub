@@ -175,10 +175,8 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 
 			console.log('[selectFunctionResults] Chat metadata exists:', !!chat.metadata)
 
-			// Update chat metadata with tagged entities
-			const metadata = typeof chat.metadata === 'string' 
-				? JSON.parse(chat.metadata) 
-				: (chat.metadata || {})
+			// Get chat metadata (now a JSON column)
+			const metadata = chat.metadata || {}
 			
 			console.log('[selectFunctionResults] Parsed metadata keys:', Object.keys(metadata))
 			
@@ -199,11 +197,11 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 			
 			console.log('[selectFunctionResults] Updated taggedEntities:', taggedEntities)
 
-				// Save updated metadata
+				// Save updated metadata (metadata is now a JSON column)
 				await db
 					.update(schema.chats)
 					.set({
-						metadata: JSON.stringify({ ...metadata, taggedEntities })
+						metadata: { ...metadata, taggedEntities }
 					})
 					.where(eq(schema.chats.id, chatId))
 
@@ -258,11 +256,11 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 					}
 				}
 
-				// Save updated metadata
+				// Save updated metadata (metadata is now a JSON column)
 				await db
 					.update(schema.chats)
 					.set({
-						metadata: JSON.stringify({ ...metadata, taggedEntities })
+						metadata: { ...metadata, taggedEntities }
 					})
 					.where(eq(schema.chats.id, chatId))
 
@@ -324,10 +322,8 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 					return
 				}
 
-				// Parse metadata
-				const metadata = typeof chat.metadata === 'string' 
-					? JSON.parse(chat.metadata) 
-					: (chat.metadata || {})
+				// Get metadata (now a JSON column)
+				const metadata = chat.metadata || {}
 
 				// Navigate to the draft location
 				const drafts = metadata.dataEditor?.[operation]?.[entityType]
@@ -402,11 +398,11 @@ export function handleAssistantFunctions(io: Server, socket: Socket, userId: num
 				
 				console.log('[editDraft] Updated draft field:', field)
 
-				// Save updated metadata
+				// Save updated metadata (metadata is now a JSON column)
 				await db
 					.update(schema.chats)
 					.set({
-						metadata: JSON.stringify(metadata)
+						metadata
 					})
 					.where(eq(schema.chats.id, chatId))
 

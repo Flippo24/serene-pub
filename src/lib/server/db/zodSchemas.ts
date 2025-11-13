@@ -55,7 +55,6 @@ export const assistantCreateCharacterSchema = createInsertSchema(schema.characte
 		.describe("The character's personality traits and behavioral patterns"),
 	
 	scenario: (schema) => schema
-		.max(2000, "Scenario must be 2000 characters or less")
 		.optional()
 		.describe("The scenario or setting where the character exists"),
 	

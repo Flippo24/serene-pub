@@ -10,7 +10,6 @@
 
 	interface ExtraFieldData {
 		stream: boolean
-		raw: boolean
 		think: boolean
 		keepAliveNumber: number
 		keepAliveUnit: string
@@ -19,7 +18,6 @@
 
 	interface ExtraJson {
 		stream?: boolean
-		raw?: boolean
 		think?: boolean
 		keepAlive?: string
 		useChat?: boolean
@@ -110,9 +108,8 @@
 	function extraJsonToExtraFields(extraJson: ExtraJson): ExtraFieldData {
 		return {
 			stream: extraJson.stream || false,
-			raw: extraJson.raw || false,
 			think: extraJson.think || false,
-			useChat: extraJson.useChat || true,
+			useChat: extraJson.useChat ?? true,
 			keepAliveNumber: extraJson.keepAlive
 				? parseInt(extraJson.keepAlive) || 300
 				: 300,
@@ -125,10 +122,9 @@
 	function extraFieldsToExtraJson(fields: ExtraFieldData): ExtraJson {
 		return {
 			stream: fields.stream,
-			raw: fields.raw,
 			think: fields.think,
 			keepAlive: `${fields.keepAliveNumber}${fields.keepAliveUnit}`,
-			useChat: fields.useChat || true
+			useChat: fields.useChat ?? true
 		}
 	}
 

@@ -121,7 +121,7 @@
 
 	function confirmDeleteChat() {
 		if (chatToDelete && socket) {
-			socket.emit("chats:delete", { chatId: chatToDelete.id })
+			socket.emit("chats:delete", { id: chatToDelete.id })
 			showDeleteChatModal = false
 			chatToDelete = null
 		}
@@ -135,10 +135,9 @@
 		if (socket && selectedChatIds.size > 0) {
 			// Delete all selected chats
 			for (const chatId of selectedChatIds) {
-				socket.emit("chats:delete", { chatId })
+				socket.emit("chats:delete", { id: chatId })
 			}
-			selectedChatIds.clear()
-			selectedChatIds = selectedChatIds
+			selectedChatIds = new Set()
 			showBulkDeleteModal = false
 			isSelectMode = false
 		}
@@ -170,8 +169,7 @@
 			onclick={() => {
 				isSelectMode = !isSelectMode
 				if (!isSelectMode) {
-					selectedChatIds.clear()
-					selectedChatIds = selectedChatIds
+					selectedChatIds = new Set()
 				}
 			}}
 			title={isSelectMode ? "Cancel selection" : "Select conversations"}
@@ -288,7 +286,7 @@
 													} else {
 														selectedChatIds.delete(assistantChat.id)
 													}
-													selectedChatIds = selectedChatIds
+													selectedChatIds = new Set(selectedChatIds)
 												}}
 												onclick={(e) => e.stopPropagation()}
 											/>

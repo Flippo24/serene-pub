@@ -36,21 +36,23 @@
 			role="navigation"
 		>
 			{#each panelsCtx.getOrderedEntries(panelsCtx.leftNav, panelsCtx.leftNavOrder || []) as [key, item]}
-				{@const isOpen = panelsCtx.leftPanel === key}
-				<button
-					title={item.title}
-					onclick={() => panelsCtx.openPanel({ key })}
-					aria-pressed={isOpen}
-					aria-label="Open {item.title} panel"
-					type="button"
-				>
-					<item.icon
-						class="{isOpen
-							? 'text-primary-800-200'
-							: ''} hover:text-primary-500 h-5 w-5 transition-colors"
-						aria-hidden="true"
-					/>
-				</button>
+				{#if item?.icon}
+					{@const isOpen = panelsCtx.leftPanel === key}
+					<button
+						title={item.title}
+						onclick={() => panelsCtx.openPanel({ key })}
+						aria-pressed={isOpen}
+						aria-label="Open {item.title} panel"
+						type="button"
+					>
+						<item.icon
+							class="{isOpen
+								? 'text-primary-800-200'
+								: ''} hover:text-primary-500 h-5 w-5 transition-colors"
+							aria-hidden="true"
+						/>
+					</button>
+				{/if}
 			{/each}
 		</nav>
 
@@ -74,22 +76,24 @@
 			role="navigation"
 		>
 			{#each Object.entries(panelsCtx.rightNav) as [key, item]}
-				{@const isOpen = panelsCtx.rightPanel === key}
-				<button
-					class="btn-ghost"
-					title={item.title}
-					onclick={() => panelsCtx.openPanel({ key })}
-					aria-pressed={isOpen}
-					aria-label="Open {item.title} panel"
-					type="button"
-				>
-					<item.icon
-						class="{isOpen
-							? 'text-primary-800-200'
-							: ''} hover:text-primary-500 h-5 w-5 transition-colors"
-						aria-hidden="true"
-					/>
-				</button>
+				{#if item?.icon}
+					{@const isOpen = panelsCtx.rightPanel === key}
+					<button
+						class="btn-ghost"
+						title={item.title}
+						onclick={() => panelsCtx.openPanel({ key })}
+						aria-pressed={isOpen}
+						aria-label="Open {item.title} panel"
+						type="button"
+					>
+						<item.icon
+							class="{isOpen
+								? 'text-primary-800-200'
+								: ''} hover:text-primary-500 h-5 w-5 transition-colors"
+							aria-hidden="true"
+						/>
+					</button>
+				{/if}
 			{/each}
 		</nav>
 

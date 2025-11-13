@@ -8,9 +8,10 @@ import { registerContextConfigHandlers } from "./contextConfigs"
 import { registerChatHandlers } from "./chats"
 import {
 	chatsCreateAssistantHandler,
-	chatsSendAssistantMessageHandler
+	assistantUpdateDraftHandler
 } from "./assistantChats"
 import { handleAssistantFunctions } from "./assistantFunctions"
+import { handleAssistantV2 } from "./assistantV2"
 import { registerPromptConfigHandlers } from "./promptConfigs"
 import { registerUserHandlers } from "./users"
 import { registerLorebookHandlers } from "./lorebooks"
@@ -60,8 +61,10 @@ export function connectSockets(io: {
 		registerChatHandlers(socket, emitToUser, register)
 		// Register assistant chat handlers
 		register(socket, chatsCreateAssistantHandler, emitToUser)
-		register(socket, chatsSendAssistantMessageHandler, emitToUser)
+		register(socket, assistantUpdateDraftHandler, emitToUser)
 		handleAssistantFunctions(io as any, socket, userId)
+		// Register new assistant V2 handlers (tool-based)
+		handleAssistantV2(io as any, socket, userId)
 		registerLorebookHandlers(socket, emitToUser, register)
 		registerWorldLoreEntryHandlers(socket, emitToUser, register)
 		registerCharacterLoreEntryHandlers(socket, emitToUser, register)
@@ -76,15 +79,38 @@ function register(
 	handler: Handler<any, any>,
 	emitToUser: (event: string, data: any) => void
 ) {
-	socket.on(handler.event, async (message: any) => {
+	socket.on(handler.event, async (message: any, callback?: (response: any) => void) => {
 		try {
-			await handler.handler(socket, message, emitToUser)
+			const result = await handler.handler(socket, message, emitToUser)
+			// If a callback was provided, send the result back
+			if (callback && typeof callback === 'function') {
+				callback(result)
+			}
 		} catch (error) {
-			console.error(`Error handling event ${handler.event}:`, error)
+			// Check if this is an expected authorization error (should not spam logs)
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			const isAuthError = errorMessage.includes('Access denied') || errorMessage.includes('Permission denied')
+			
+			if (!isAuthError) {
+				// Only log unexpected errors
+				console.error(`Error handling event ${handler.event}:`, error)
+			} else {
+				// For auth errors, just log at debug level
+				console.debug(`Authorization error on ${handler.event}:`, errorMessage)
+			}
+			
 			const userId = socket.user?.id
 			socket.io.to("user_" + userId).emit(`${handler.event}:error`, {
 				error: "An error occurred while processing your request."
 			})
+			
+			// If a callback was provided, send error response
+			if (callback && typeof callback === 'function') {
+				callback({
+					success: false,
+					error: "An error occurred while processing your request."
+				})
+			}
 		}
 	})
 }

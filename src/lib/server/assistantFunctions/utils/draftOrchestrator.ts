@@ -10,7 +10,7 @@ import type { AssistantCreateCharacter } from '$lib/server/db/zodSchemas'
 import { assistantCreateCharacterSchema } from '$lib/server/db/zodSchemas'
 import { 
 	determineFieldsToPopulate,
-	generateFieldPrompt,
+	buildPromptForField,
 	FIELD_GENERATION_GUIDANCE,
 	initializeEmptyDraft
 } from './characterDraftGenerator'
@@ -132,7 +132,9 @@ export async function generateCharacterDraft({
 		
 		try {
 			// Generate prompt for this field
-			const prompt = generateFieldPrompt(field, userRequest, draft)
+			const prompt = buildPromptForField(field, userRequest, draft)
+			
+			console.log(`[DraftOrchestrator] Generating field "${field}" with prompt:`, prompt)
 			
 			// Progress callback for this field
 			const onProgress: FieldGenerationProgressCallback = (update) => {
@@ -146,68 +148,207 @@ export async function generateCharacterDraft({
 				})
 			}
 			
-			// Generate the field value
-			const rawValue = await generateFieldWithProgress({
-				userId,
-				field,
-				prompt,
-				maxTokens: guidance.maxLength ? Math.min(guidance.maxLength * 2, 1000) : 500,
-				onProgress
-			})
+		// Generate the field value
+		const rawValue = await generateFieldWithProgress({
+			userId,
+			field,
+			prompt,
+			maxTokens: guidance.maxLength ? Math.min(guidance.maxLength * 2, 1000) : 500,
+			onProgress
+		})
+		
+		console.log(`[DraftOrchestrator] Raw LLM response for "${field}":`, rawValue)
+		
+		// Parse the value based on field type
+		let fieldValue: any = rawValue.trim()
+		
+		// Handle array fields
+		if (guidance?.isArray) {
+			// Try to fix common JSON issues before parsing
+			let cleanedValue = rawValue.trim()
 			
-			// Parse the value based on field type
-			let fieldValue: any = rawValue.trim()
-			
-			// Handle array fields
-			if (guidance?.isArray) {
+			// Fix unescaped quotes within array strings
+			// This handles cases like ["text with "quotes" inside"]
+			// We need to escape quotes that are inside array elements but not the array delimiters
+			const arrayMatch = cleanedValue.match(/^\[[\s\S]*\]$/)
+			if (arrayMatch) {
 				try {
-					const parsed = JSON.parse(rawValue.trim())
+					// First attempt: try parsing as-is
+					const parsed = JSON.parse(cleanedValue)
 					if (Array.isArray(parsed)) {
 						fieldValue = parsed
+						console.log(`[DraftOrchestrator] Successfully parsed array for "${field}":`, fieldValue)
+					}
+				} catch (parseError) {
+					console.log(`[DraftOrchestrator] Initial parse failed, attempting to fix quotes...`)
+					
+					// Attempt to fix unescaped quotes
+					// Match pattern: ["...", "...", ...] and fix quotes inside each element
+					try {
+						// Replace straight quotes in dialogue with escaped quotes
+						// This regex finds patterns like: "text "dialogue" more text"
+						// and replaces middle quotes: "text \"dialogue\" more text"
+						let fixed = cleanedValue
+						
+						// Find all array elements and fix quotes within them
+						const elements: string[] = []
+						let depth = 0
+						let currentElement = ''
+						let inString = false
+						let escapeNext = false
+						
+						for (let i = 0; i < fixed.length; i++) {
+							const char = fixed[i]
+							
+							if (escapeNext) {
+								currentElement += char
+								escapeNext = false
+								continue
+							}
+							
+							if (char === '\\') {
+								currentElement += char
+								escapeNext = true
+								continue
+							}
+							
+							if (char === '"') {
+								if (depth === 1 && !inString) {
+									// Start of string element
+									inString = true
+									currentElement += char
+								} else if (depth === 1 && inString) {
+									// Could be end of string or quote inside string
+									// Check if next char is comma, ] or whitespace followed by comma/]
+									const nextChars = fixed.slice(i + 1).match(/^\s*[,\]]/)
+									if (nextChars) {
+										// End of string element
+										currentElement += char
+										inString = false
+									} else {
+										// Quote inside string - escape it
+										currentElement += '\\"'
+									}
+								} else {
+									currentElement += char
+								}
+							} else if (char === '[') {
+								depth++
+								if (depth > 1) currentElement += char
+							} else if (char === ']') {
+								if (depth === 1 && currentElement.trim()) {
+									elements.push(currentElement.trim())
+									currentElement = ''
+								}
+								depth--
+								if (depth > 0) currentElement += char
+							} else if (char === ',' && depth === 1 && !inString) {
+								if (currentElement.trim()) {
+									elements.push(currentElement.trim())
+									currentElement = ''
+								}
+							} else if (depth >= 1) {
+								currentElement += char
+							}
+						}
+						
+						if (elements.length > 0) {
+							fixed = '[' + elements.join(', ') + ']'
+							console.log(`[DraftOrchestrator] Fixed JSON for "${field}":`, fixed.substring(0, 200))
+							fieldValue = JSON.parse(fixed)
+							console.log(`[DraftOrchestrator] Successfully parsed fixed array for "${field}":`, fieldValue)
+						} else {
+							throw new Error('Could not extract array elements')
+						}
+					} catch (fixError) {
+						console.warn(`[DraftOrchestrator] Could not fix quotes in array for "${field}":`, fixError)
+						// Fall through to other parsing attempts
+					}
+				}
+			}
+			
+			// If we still don't have a valid array, try original fallback logic
+			if (!Array.isArray(fieldValue)) {
+				try {
+					const parsed = JSON.parse(cleanedValue)
+					if (Array.isArray(parsed)) {
+						fieldValue = parsed
+						console.log(`[DraftOrchestrator] Successfully parsed array for "${field}":`, fieldValue)
 					} else {
+						console.log(`[DraftOrchestrator] Parsed JSON but not an array for "${field}":`, parsed)
 						// Try to extract array from response
 						const match = rawValue.match(/\[[\s\S]*\]/)
 						if (match) {
 							try {
 								fieldValue = JSON.parse(match[0])
+								console.log(`[DraftOrchestrator] Extracted array from text for "${field}":`, fieldValue)
 							} catch {
+								console.warn(`[DraftOrchestrator] Failed to extract array from match for "${field}"`)
 								fieldValue = []
 							}
 						} else {
+							console.warn(`[DraftOrchestrator] No array found in response for "${field}"`)
 							fieldValue = []
 						}
 					}
 				} catch (error) {
-					// If parsing fails, try to extract array from response
-					const match = rawValue.match(/\[[\s\S]*\]/)
+				console.warn(`[DraftOrchestrator] JSON parse failed for "${field}":`, error)
+				
+				// Check if we have multiple separate arrays (common LLM mistake)
+				const arrayMatches = rawValue.match(/\[[^\[\]]*\]/g)
+				if (arrayMatches && arrayMatches.length > 1) {
+					console.log(`[DraftOrchestrator] Found ${arrayMatches.length} separate arrays, combining them`)
+					try {
+						// Parse each array and combine them
+						const combinedArray: any[] = []
+						for (const arrayStr of arrayMatches) {
+							const parsed = JSON.parse(arrayStr)
+							if (Array.isArray(parsed)) {
+								combinedArray.push(...parsed)
+							}
+						}
+						fieldValue = combinedArray
+						console.log(`[DraftOrchestrator] Combined arrays for "${field}":`, fieldValue)
+					} catch (combineError) {
+						console.warn(`[DraftOrchestrator] Failed to combine arrays for "${field}":`, combineError)
+						fieldValue = []
+					}
+				} else {
+					// If parsing fails, try to extract single array from response
+					const match = rawValue.match(/\[[\s\S]*?\]/)
 					if (match) {
 						try {
 							fieldValue = JSON.parse(match[0])
+							console.log(`[DraftOrchestrator] Extracted array from text (2nd attempt) for "${field}":`, fieldValue)
 						} catch {
+							console.warn(`[DraftOrchestrator] Failed to extract array from match (2nd attempt) for "${field}"`)
 							fieldValue = []
 						}
 					} else {
+						console.warn(`[DraftOrchestrator] No array pattern found in response for "${field}"`)
 						fieldValue = []
 					}
 				}
 			}
-			
-			// Update draft
-			(draft as any)[field] = fieldValue
-			generatedFields.push(field)
-			
-			console.log(`[DraftOrchestrator] Generated field "${field}":`, fieldValue)
-			
-			// Emit field completion
-			emitProgress(socket, chatId, {
-				status: 'field_complete',
-				field,
-				value: fieldValue,
-				currentField: i + 1,
-				totalFields: fieldsToPopulate.length
-			})
-			
-		} catch (error) {
+		}
+	}
+		
+		// Update draft
+		(draft as any)[field] = fieldValue
+		generatedFields.push(field)
+		
+		console.log(`[DraftOrchestrator] Generated field "${field}":`, fieldValue)
+		
+		// Emit field completion
+		emitProgress(socket, chatId, {
+			status: 'field_complete',
+			field,
+			value: fieldValue,
+			currentField: i + 1,
+			totalFields: fieldsToPopulate.length
+		})
+		
+	} catch (error) {
 			console.error(`[DraftOrchestrator] Error generating field "${field}":`, error)
 			
 			// Emit error for this field

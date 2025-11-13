@@ -752,7 +752,10 @@ export const chats = pgTable("chats", {
 		.default(sql`(CURRENT_TIMESTAMP)`)
 		.$onUpdate(() => sql`(CURRENT_TIMESTAMP)`),
 	scenario: text("scenario"),
-	metadata: text("metadata"), // JSON for extra settings
+	metadata: json("metadata")
+		.notNull()
+		.default({})
+		.$type<Record<string, any>>(), // JSON for extra settings
 	groupReplyStrategy: text("group_reply_strategy").default(
 		GroupReplyStrategies.ORDERED
 	),

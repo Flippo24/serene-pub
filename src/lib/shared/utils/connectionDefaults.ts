@@ -12,7 +12,6 @@ export const CONNECTION_DEFAULTS = {
 			stream: true,
 			think: false,
 			keepAlive: "300ms",
-			raw: true,
 			useChat: true
 		}
 	},

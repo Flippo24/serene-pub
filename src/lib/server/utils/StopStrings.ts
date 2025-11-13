@@ -17,13 +17,8 @@ export class StopStrings {
 		switch (format) {
 			case PromptFormats.CHATML:
 				stopStrings = [
-					"<|im_end|>",
-					"system:",
-					"System:",
-					"user:",
-					"User:",
-					"assistant:",
-					"Assistant:"
+					"<|im_start|>",
+					"<|im_end|>"
 				]
 				break
 			case PromptFormats.BASIC:

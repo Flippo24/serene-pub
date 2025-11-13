@@ -58,13 +58,31 @@
 		isSafeToClose: boolean
 		closeForm: () => void
 		onCancel?: () => void
+		hideAvatar?: boolean
+		initialData?: Partial<EditCharacterData>
+		customTitle?: string
+		hideActionButtons?: boolean
+		hideFavorite?: boolean
+		hideTitle?: boolean
+		hideTags?: boolean
+		onDataChange?: (data: EditCharacterData) => void
+		disableDataChangeCallback?: boolean
 	}
 
 	let {
 		characterId,
 		isSafeToClose: hasChanges = $bindable(),
 		closeForm = $bindable(),
-		onCancel = $bindable()
+		onCancel = $bindable(),
+		hideAvatar = false,
+		initialData,
+		customTitle,
+		hideActionButtons = false,
+		hideFavorite = false,
+		hideTitle = false,
+		hideTags = false,
+		onDataChange,
+		disableDataChangeCallback = false
 	}: Props = $props()
 
 	const socket = skio.get()
@@ -73,6 +91,8 @@
 	)
 	let userSettingsCtx: UserSettingsCtx = $state(getContext("userSettingsCtx"))
 
+	let isInitialized = $state(false)
+	
 	let editCharacterData: EditCharacterData = $state({
 		id: undefined,
 		name: "",
@@ -376,6 +396,22 @@
 			JSON.stringify(originalCharacterData)
 	})
 
+	// Notify parent when data changes (for auto-save in assistant)
+	let lastNotifiedData = $state('')
+	$effect(() => {
+		// Skip initial run and only trigger on actual changes after initialization
+		if (onDataChange && !disableDataChangeCallback && isInitialized) {
+			const currentData = JSON.stringify(editCharacterData)
+			
+			// Skip if data hasn't actually changed
+			if (currentData !== lastNotifiedData) {
+				lastNotifiedData = currentData
+				// Trigger callback with current data
+				onDataChange(editCharacterData)
+			}
+		}
+	})
+
 	onMount(() => {
 		onCancel = handleCancel
 
@@ -428,7 +464,14 @@
 				})
 			}
 		})
-		if (characterId) {
+		// Initialize with initialData if provided (for draft mode)
+		if (initialData) {
+			editCharacterData = {
+				...editCharacterData,
+				...initialData
+			}
+			originalCharacterData = { ...editCharacterData }
+		} else if (characterId) {
 			socket.once(
 				"characters:get",
 				(message: Sockets.Characters.Get.Response) => {
@@ -476,6 +519,15 @@
 		}
 		socket.emit("lorebooks:list", {})
 		socket.emit("tags:list", {})
+		
+		// Mark as initialized after a short delay to allow initial data to settle
+		setTimeout(() => {
+			// Set the last notified data to current state before enabling
+			if (onDataChange) {
+				lastNotifiedData = JSON.stringify(editCharacterData)
+			}
+			isInitialized = true
+		}, 100)
 	})
 
 	onDestroy(() => {
@@ -489,6 +541,32 @@
 		document.removeEventListener("keydown", handleKeydown)
 		clearTimeout(validationTimeout)
 	})
+
+	// Track the last initialData we processed to prevent infinite loops
+	let lastProcessedInitialData = $state<string>('')
+
+	// Watch for changes to initialData (for draft mode updates from server)
+	$effect(() => {
+		if (initialData && isInitialized && !disableDataChangeCallback) {
+			const newDataStr = JSON.stringify(initialData)
+			
+			// Only update if initialData itself changed (not editCharacterData)
+			if (newDataStr !== lastProcessedInitialData) {
+				console.log('[CharacterForm] initialData changed, updating form...')
+				lastProcessedInitialData = newDataStr
+				
+				editCharacterData = {
+					...editCharacterData,
+					...initialData
+				}
+				
+				// Update lastNotifiedData to prevent triggering onDataChange callback
+				if (onDataChange) {
+					lastNotifiedData = JSON.stringify(editCharacterData)
+				}
+			}
+		}
+	})
 </script>
 
 <div
@@ -498,11 +576,14 @@
 	aria-labelledby="form-title"
 	aria-modal="false"
 >
+	{#if !hideTitle}
 	<h1 class="mb-4 text-lg font-bold" id="form-title">
-		{mode === "edit"
+		{customTitle || (mode === "edit"
 			? `Edit: ${character?.nickname || character?.name || "Character"}`
-			: "Create Character"}
+			: "Create Character")}
 	</h1>
+	{/if}
+	{#if !hideActionButtons}
 	<div class="mt-4 mb-4 flex gap-2" role="group" aria-label="Form actions">
 		<button
 			type="button"
@@ -525,7 +606,9 @@
 			{mode === "edit" ? "Update" : "Create"}
 		</button>
 	</div>
+	{/if}
 	<div class="flex flex-col gap-4" role="form" aria-labelledby="form-title">
+		{#if !hideAvatar}
 		<fieldset
 			class="flex items-center gap-4"
 			aria-labelledby="avatar-section"
@@ -591,6 +674,7 @@
 				</button>
 			</div>
 		</fieldset>
+{/if}
 		<fieldset class="flex flex-col gap-1">
 			<label class="flex gap-1 font-semibold" for="charName">
 				Name* <span
@@ -1185,6 +1269,7 @@
 				{/each}
 			</select>
 		</div> -->
+		{#if !hideTags}
 		<fieldset class="mb-4 flex flex-col gap-1">
 			<label class="font-semibold" for="charTags">Tags</label>
 			<div class="relative">
@@ -1259,6 +1344,8 @@
 				</div>
 			{/if}
 		</fieldset>
+		{/if}
+		{#if !hideFavorite}
 		<fieldset class="mt-2 flex items-center gap-2">
 			<Switch
 				name="favorite"
@@ -1272,6 +1359,7 @@
 				Mark this character as a favorite for easier access
 			</span>
 		</fieldset>
+		{/if}
 		<fieldset class="mt-2 flex items-center gap-2">
 			<Switch
 				name="show-all-character-fields"

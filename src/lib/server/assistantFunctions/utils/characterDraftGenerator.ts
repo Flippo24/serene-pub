@@ -88,15 +88,15 @@ export const FIELD_GENERATION_GUIDANCE: Record<string, {
 		maxLength: 2000
 	},
 	firstMessage: {
-		prompt: 'Generate the character\'s greeting or opening message. Keep it under 2000 characters and write it in the character\'s voice. Return ONLY the greeting message, nothing else.',
+		prompt: 'Generate the character\'s opening message where they first meet {{user}}. Write a paragraph (or two) in third person showing the character\'s actions, thoughts, and dialogue as they encounter {{user}}. Return ONLY the greeting message, nothing else.',
 		maxLength: 2000
 	},
 	alternateGreetings: {
-		prompt: 'Generate 2-3 alternative greeting messages for this character. Return as a JSON array of strings. Each greeting should be in the character\'s voice.',
+		prompt: 'Generate 2-3 alternative opening messages where the character first meets {{user}}. Each should be a paragraph showing:\n1. The character\'s observations about the environment\n2. Their perception of {{user}}\n3. Their emotions and thoughts\n4. Their speech and interaction with {{user}}\n\nWrite in third person. Use double quotes for dialogue and escape them with backslash. Return as a SINGLE JSON array of strings.\n\nExample format:\n["{{char}} notices {{user}} across the crowded tavern, their eyes meeting for a brief moment. The warmth of the fireplace casts dancing shadows across the room. \\"I couldn\'t help but notice you,\\" {{char}} says with a gentle smile, extending a hand in greeting.", "The rain patters softly against the window as {{char}} looks up from their book, surprised to see {{user}} standing in the doorway. A mix of curiosity and delight crosses their face. \\"What a pleasant surprise,\\" they murmur, setting the book aside. \\"Please, come in out of the rain.\\""]',
 		isArray: true
 	},
 	exampleDialogues: {
-		prompt: 'Generate 2-3 example conversation snippets showing how this character talks. Return as a JSON array of strings. Format each as "{{user}}: message\n{{char}}: response"',
+		prompt: 'Generate 2-3 example dialogue snippets showing the character in conversation. Each should be 2-3 paragraphs showing:\n1. The character\'s observations about their environment or {{user}}\n2. Their emotions and internal thoughts\n3. Their actions and body language\n4. Their speech and interaction\n\nWrite in third person. The character can interact with others (e.g., holding hands, gestures) but should NOT control {{user}}\'s actions or dialogue. Use {{char}} for the character and {{user}} for the person they\'re interacting with. Use double quotes for dialogue and escape them with backslash. Return as a SINGLE JSON array of strings.\n\nExample format:\n["{{char}} gazes out at the sunset, the orange and pink hues reflecting in their eyes. They feel {{user}}\'s presence beside them and a warmth spreads through their chest. \\"It\'s beautiful, isn\'t it?\\" {{char}} whispers, reaching out to gently take {{user}}\'s hand. \\"I\'m glad we\'re here together.\\"", "The coffee shop bustles with activity, but {{char}} only has eyes for {{user}} sitting across from them. Nervous energy makes their fingers drum against the table. \\"I\'ve been wanting to tell you something,\\" {{char}} begins, their voice soft but earnest. They take a deep breath, gathering courage. \\"You make me feel like I can be myself.\\""]',
 		isArray: true
 	},
 	creatorNotes: {
@@ -104,7 +104,7 @@ export const FIELD_GENERATION_GUIDANCE: Record<string, {
 		maxLength: undefined
 	},
 	groupOnlyGreetings: {
-		prompt: 'Generate 1-2 greeting messages specifically for when this character joins a group chat. Return as a JSON array of strings.',
+		prompt: 'Generate 1-2 opening messages for when this character joins a group chat with multiple people. Each should show the character acknowledging the group and introducing themselves. Write in third person. Return as a JSON array of strings.',
 		isArray: true
 	},
 	postHistoryInstructions: {
@@ -124,7 +124,7 @@ export const FIELD_GENERATION_GUIDANCE: Record<string, {
 /**
  * Generate a system prompt for creating a specific field value
  */
-export function generateFieldPrompt(
+export function buildPromptForField(
 	fieldName: string,
 	userRequest: string,
 	existingDraft: Partial<AssistantCreateCharacter>
@@ -141,6 +141,10 @@ export function generateFieldPrompt(
 		''
 	]
 
+	// Check if this field already exists and we're updating it
+	const fieldExists = existingDraft[fieldName as keyof typeof existingDraft]
+	const isUpdate = fieldExists && String(fieldExists).length > 0
+
 	// Add existing field values for context
 	if (Object.keys(existingDraft).length > 0) {
 		contextParts.push('Existing character details:')
@@ -152,7 +156,18 @@ export function generateFieldPrompt(
 		contextParts.push('')
 	}
 
-	contextParts.push(`Your task: ${guidance.prompt}`)
+	// Modify the prompt based on whether we're creating or updating
+	if (isUpdate) {
+		// For updates, emphasize improvement and expansion
+		const updatePrompt = guidance.prompt.replace(
+			/^Generate/i, 
+			'IMPROVE and EXPAND upon the existing content. Generate'
+		)
+		contextParts.push(`Your task: ${updatePrompt}`)
+		contextParts.push(`IMPORTANT: The existing ${fieldName} is provided above. Your goal is to make it MORE DETAILED, MORE VIVID, and BETTER aligned with the user's request. Do NOT just rewrite it similarly - ADD significant new detail and depth.`)
+	} else {
+		contextParts.push(`Your task: ${guidance.prompt}`)
+	}
 
 	if (guidance.maxLength) {
 		contextParts.push(`Maximum length: ${guidance.maxLength} characters`)
@@ -175,7 +190,11 @@ export function determineFieldsToPopulate(
 	const fields: string[] = []
 	
 	// Detect if this is a regeneration/modification request
-	const regenerationKeywords = ['reroll', 'regenerate', 'change', 'modify', 'update', 'redo', 'remake', 'rewrite', 'remove', 'add', 'adjust', 'fix', 'correct']
+	const regenerationKeywords = [
+		'reroll', 'regenerate', 'change', 'modify', 'update', 'redo', 'remake', 'rewrite', 
+		'remove', 'add', 'adjust', 'fix', 'correct', 'improve', 'enhance', 'better', 
+		'flesh out', 'expand', 'elaborate', 'refine', 'polish', 'revise', 'edit'
+	]
 	const isRegenerationRequest = regenerationKeywords.some(keyword => 
 		userRequest.toLowerCase().includes(keyword)
 	)
@@ -189,12 +208,17 @@ export function determineFieldsToPopulate(
 	for (const field of allFields) {
 		// Match field name with word boundaries or as part of common phrases
 		if (
-			requestLower.includes(field) || 
+			requestLower.includes(field.toLowerCase()) || 
 			(field === 'name' && requestLower.match(/\bname\b/)) ||
 			(field === 'nickname' && requestLower.match(/\bnick|alias\b/)) ||
 			(field === 'personality' && requestLower.match(/\bpersonality|traits?\b/)) ||
 			(field === 'description' && requestLower.match(/\bdescription|appearance|look\b/)) ||
-			(field === 'scenario' && requestLower.match(/\bscenario|setting|background\b/))
+			(field === 'scenario' && requestLower.match(/\bscenario|setting|background\b/)) ||
+			(field === 'firstMessage' && requestLower.match(/\bgreeting|first message|opening\b/)) ||
+			(field === 'alternateGreetings' && requestLower.match(/\balternate greeting|alternative greeting|other greeting/)) ||
+			(field === 'exampleDialogues' && requestLower.match(/\bexample|dialogue|conversation|sample/)) ||
+			(field === 'groupOnlyGreetings' && requestLower.match(/\bgroup greeting|group only|group chat greeting/)) ||
+			(field === 'source' && requestLower.match(/\bsource|from|based on\b/))
 		) {
 			mentionedFields.push(field)
 		}
@@ -208,13 +232,13 @@ export function determineFieldsToPopulate(
 	}
 
 	// Add requested additional fields
+	// If additionalFields are explicitly provided (e.g., from tool call), ALWAYS include them
+	// This ensures that when the assistant calls update_character_draft with fieldsToUpdate,
+	// those fields are regenerated even if the user request doesn't contain regeneration keywords
 	for (const field of additionalFields) {
-		if (OPTIONAL_CHARACTER_FIELDS.includes(field as any)) {
-			// If this is a regeneration request, include the field even if it exists
-			// Otherwise, only include if missing
-			if (isRegenerationRequest) {
-				fields.push(field)
-			} else if (!existingDraft || !(field in existingDraft)) {
+		if (OPTIONAL_CHARACTER_FIELDS.includes(field as any) || REQUIRED_CHARACTER_FIELDS.includes(field as any)) {
+			if (!fields.includes(field)) {
+				console.log(`[determineFieldsToPopulate] Adding explicitly requested field: ${field}`)
 				fields.push(field)
 			}
 		}
@@ -226,6 +250,39 @@ export function determineFieldsToPopulate(
 			if (!fields.includes(field)) {
 				console.log(`[determineFieldsToPopulate] Adding mentioned field: ${field}`)
 				fields.push(field)
+			}
+		}
+		
+		// CROSS-REFERENCE DETECTION: If name is being changed, also update fields that likely contain the name
+		if (mentionedFields.includes('name') && existingDraft?.name) {
+			const fieldsWithPotentialNameReferences = ['description', 'personality', 'scenario', 'firstMessage', 'exampleDialogues']
+			for (const field of fieldsWithPotentialNameReferences) {
+				if (existingDraft[field as keyof typeof existingDraft] && !fields.includes(field)) {
+					console.log(`[determineFieldsToPopulate] Name change detected - adding cross-reference field: ${field}`)
+					fields.push(field)
+				}
+			}
+		}
+		
+		// If personality is being changed, update greeting and example dialogue to match
+		if (mentionedFields.includes('personality') && existingDraft?.personality) {
+			const personalityDependentFields = ['firstMessage', 'exampleDialogues']
+			for (const field of personalityDependentFields) {
+				if (existingDraft[field as keyof typeof existingDraft] && !fields.includes(field)) {
+					console.log(`[determineFieldsToPopulate] Personality change detected - adding dependent field: ${field}`)
+					fields.push(field)
+				}
+			}
+		}
+		
+		// If scenario is being changed, update description and greeting
+		if (mentionedFields.includes('scenario') && existingDraft?.scenario) {
+			const scenarioDependentFields = ['description', 'firstMessage']
+			for (const field of scenarioDependentFields) {
+				if (existingDraft[field as keyof typeof existingDraft] && !fields.includes(field)) {
+					console.log(`[determineFieldsToPopulate] Scenario change detected - adding dependent field: ${field}`)
+					fields.push(field)
+				}
 			}
 		}
 	}

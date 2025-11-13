@@ -133,21 +133,8 @@ export abstract class BaseConnectionAdapter {
 	 * Determine which assistant prompt mode to use based on chat state
 	 */
 	protected getAssistantPromptMode(): 'function-calling' | 'conversational' | 'default' {
-		let metadata: any = {}
-		
-		// Parse metadata if it's a string
-		if (this.chat.metadata) {
-			if (typeof this.chat.metadata === 'string') {
-				try {
-					metadata = JSON.parse(this.chat.metadata)
-				} catch (e) {
-					console.error('[getAssistantPromptMode] Failed to parse metadata:', e)
-					metadata = {}
-				}
-			} else {
-				metadata = this.chat.metadata
-			}
-		}
+		// Get metadata (now a JSON column)
+		const metadata = this.chat.metadata || {}
 		
 		console.log('='.repeat(80))
 		console.log('[getAssistantPromptMode] Checking mode...')
@@ -320,16 +307,8 @@ export abstract class BaseConnectionAdapter {
 	 * Load tagged entities from chat metadata and format for context
 	 */
 	private async loadTaggedEntitiesContext(): Promise<string> {
-		// Parse metadata if it's a string
-		let metadata = this.chat.metadata
-		if (typeof metadata === 'string') {
-			try {
-				metadata = JSON.parse(metadata)
-			} catch (e) {
-				console.error('[BaseConnectionAdapter] Failed to parse metadata:', e)
-				return ""
-			}
-		}
+		// Get metadata (now a JSON column)
+		const metadata = this.chat.metadata
 		
 		if (!metadata || !(metadata as any).taggedEntities) {
 			return ""
@@ -383,16 +362,8 @@ export abstract class BaseConnectionAdapter {
 	 * Load draft data from chat metadata and format for context
 	 */
 	private async loadDraftContext(): Promise<string> {
-		// Parse metadata if it's a string
-		let metadata = this.chat.metadata
-		if (typeof metadata === 'string') {
-			try {
-				metadata = JSON.parse(metadata)
-			} catch (e) {
-				console.error('[BaseConnectionAdapter] Failed to parse metadata:', e)
-				return ""
-			}
-		}
+		// Get metadata (now a JSON column)
+		const metadata = this.chat.metadata
 		
 		if (!metadata || !(metadata as any).dataEditor?.create) {
 			return ""

@@ -544,9 +544,22 @@ export const chatsDeleteHandler: Handler<
 	async handler(socket, params, emitToUser) {
 		try {
 			const userId = socket.user!.id
+			
+			console.log('[chats:delete] Received params:', params)
+			console.log('[chats:delete] Params type:', typeof params)
+			console.log('[chats:delete] Params keys:', Object.keys(params || {}))
 
 			// Check if user has access to delete this chat (only owners can delete)
 			const chatAccess = await checkChatAccess(params.id, userId)
+			
+			console.log('[chats:delete] Chat access check:', {
+				chatId: params.id,
+				userId,
+				isOwner: chatAccess.isOwner,
+				isGuest: chatAccess.isGuest,
+				hasAccess: chatAccess.hasAccess
+			})
+			
 			if (!chatAccess.hasAccess || !chatAccess.isOwner) {
 				throw new Error(
 					"Access denied. Only chat owners can delete chats."
@@ -2577,10 +2590,8 @@ export const assistantSaveDraftHandler: Handler<
 				throw new Error('Chat not found or access denied')
 			}
 
-			// Get the draft from metadata
-			const metadata = typeof chat.metadata === 'string' 
-				? JSON.parse(chat.metadata) 
-				: (chat.metadata || {})
+			// Get the draft from metadata (now a JSON column)
+			const metadata = chat.metadata || {}
 
 			const draft = metadata?.dataEditor?.create?.characters?.[0]
 

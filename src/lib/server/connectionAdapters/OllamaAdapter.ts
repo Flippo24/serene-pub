@@ -102,8 +102,12 @@ class OllamaAdapter extends BaseConnectionAdapter {
 	}
 
 	compilePrompt(args: {}) {
+		const useChatFormat = !!this.connection.extraJson?.useChat
+		console.log('[OllamaAdapter.compilePrompt] connection.extraJson:', this.connection.extraJson)
+		console.log('[OllamaAdapter.compilePrompt] useChat value:', this.connection.extraJson?.useChat)
+		console.log('[OllamaAdapter.compilePrompt] useChatFormat:', useChatFormat)
 		return super.compilePrompt({
-			useChatFormat: !!this.connection.extraJson?.useChat,
+			useChatFormat,
 			...args
 		})
 	}
@@ -121,7 +125,6 @@ class OllamaAdapter extends BaseConnectionAdapter {
 		const stream = this.connection!.extraJson?.stream || false
 		const think = this.connection!.extraJson?.think || false
 		const keep_alive = this.connection!.extraJson?.keepAlive || "300ms"
-		// const raw = this.connection!.extraJson?.raw || false
 		if (typeof model !== "string")
 			throw new Error("OllamaAdapter: model must be a string")
 
@@ -150,37 +153,61 @@ class OllamaAdapter extends BaseConnectionAdapter {
 
 		const compiledPrompt: CompiledPrompt = await this.compilePrompt({})
 
-		const useChat = this.connection.extraJson?.useChat || true
+		console.log('[OllamaAdapter] useChat:', this.connection.extraJson?.useChat)
+		console.log('[OllamaAdapter] compiledPrompt has messages:', !!compiledPrompt.messages)
+		console.log('[OllamaAdapter] compiledPrompt has prompt:', !!compiledPrompt.prompt)
+
+		const useChat = this.connection.extraJson?.useChat ?? true
+		console.log('[OllamaAdapter] useChat after coalescing:', useChat)
 		let req: GenerateRequest | ChatRequest
 
 		if (useChat) {
+			if (!compiledPrompt.messages) {
+				console.error('[OllamaAdapter] ERROR: useChat is true but compiledPrompt.messages is undefined!')
+				console.error('[OllamaAdapter] compiledPrompt:', compiledPrompt)
+			}
 			req = {
 				model,
 				messages: compiledPrompt.messages!,
+				raw: false,
 				stream,
 				think,
-				raw: false,
 				keep_alive,
 				options: {
 					...this.mapSamplingConfig(),
 					stop,
-					useChat: this.connection.extraJson?.useChat || true
+					useChat: true
 				}
 			} as ChatRequest
 		} else {
+			// For generate mode, append the prompt format stop strings
+			// Get the format-specific stop strings based on connection's promptFormat
+			const formatStopStrings = StopStrings.get({
+				format: this.connection.promptFormat || "vicuna",
+				characters: [],
+				personas: [],
+				currentCharacterId: this.currentCharacterId ?? undefined
+			})
+			
+			// Combine with the existing stop strings (which include character/persona names)
+			const allStopStrings = [...stop, ...formatStopStrings]
+			
 			req = {
 				model,
 				prompt: compiledPrompt.prompt!,
+				raw: true,
 				stream,
 				think,
-				raw: true,
 				keep_alive,
 				options: {
 					...this.mapSamplingConfig(),
-					stop
+					stop: allStopStrings,
+					useChat: false
 				}
 			} as GenerateRequest
 		}
+
+		console.log("OllamaAdapter generate mode request:", req)
 
 		if (stream) {
 			return {

@@ -1,7 +1,6 @@
 import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
 import { eq } from "drizzle-orm"
-import { generateResponse } from "../utils/generateResponse"
 import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 import type { Handler } from "$lib/shared/events"
 import { broadcastToChatUsers } from "./utils/broadcastHelpers"
@@ -46,102 +45,74 @@ export const chatsCreateAssistantHandler: Handler<
 }
 
 /**
- * Send a message in an assistant chat and get a response
+ * Update character draft in chat metadata (auto-save)
  */
-export const chatsSendAssistantMessageHandler: Handler<
-	Sockets.Chats.SendAssistantMessage.Params,
-	Sockets.Chats.SendAssistantMessage.Response
+export const assistantUpdateDraftHandler: Handler<
+	{ chatId: number; draft: any },
+	{ success: boolean; error?: string }
 > = {
-	event: "chats:sendAssistantMessage",
+	event: "assistant:updateDraft",
 	handler: async (socket, params, emitToUser) => {
 		try {
 			const userId = socket.user!.id
+			const { chatId, draft } = params
 
-			// Verify chat exists and is an assistant chat
+			// Verify chat exists and user has access
 			const chat = await db.query.chats.findFirst({
-				where: (c, { eq }) => eq(c.id, params.chatId)
+				where: (c, { eq, and }) => 
+					and(eq(c.id, chatId), eq(c.userId, userId))
 			})
 
 			if (!chat) {
-				const res: Sockets.Chats.SendAssistantMessage.Response = {
-					error: "Chat not found."
+				return {
+					success: false,
+					error: "Chat not found or access denied"
 				}
-				emitToUser("chats:sendAssistantMessage", res)
-				return res
 			}
 
-			if (chat.chatType !== ChatTypes.ASSISTANT) {
-				const res: Sockets.Chats.SendAssistantMessage.Response = {
-					error: "This is not an assistant chat."
+			// Get metadata (now a JSON column)
+			const metadata = chat.metadata || {}
+
+			// Update the draft in dataEditor.create.characters[0]
+			const updatedMetadata = {
+				...metadata,
+				dataEditor: {
+					...metadata.dataEditor,
+					create: {
+						...metadata.dataEditor?.create,
+						characters: [draft]
+					}
 				}
-				emitToUser("chats:sendAssistantMessage", res)
-				return res
 			}
 
-			if (chat.userId !== userId) {
-				const res: Sockets.Chats.SendAssistantMessage.Response = {
-					error: "Access denied."
-				}
-				emitToUser("chats:sendAssistantMessage", res)
-				return res
-			}
+			// Save to database (metadata is now a JSON column)
+			await db
+				.update(schema.chats)
+				.set({ metadata: updatedMetadata })
+				.where(eq(schema.chats.id, chatId))
 
-			// Create user message
-			const [userMessage] = await db
-				.insert(schema.chatMessages)
-				.values({
-					chatId: params.chatId,
-					userId,
-					role: "user",
-					content: params.content || "", // Ensure content is never null
-					isGenerating: false
+			console.log(`[assistantUpdateDraftHandler] Draft auto-saved for chat ${chatId}`)
+
+			// Broadcast updated chat to all users
+			if (socket.io) {
+				const updatedChat = await db.query.chats.findFirst({
+					where: eq(schema.chats.id, chatId)
 				})
-				.returning()
-
-			// Broadcast user message
-			await broadcastToChatUsers(
-				socket.io,
-				params.chatId,
-				"chatMessage",
-				{
-					chatMessage: userMessage
+				
+				if (updatedChat) {
+					await broadcastToChatUsers(socket.io, chatId, "chats:get", {
+						chat: updatedChat
+					})
 				}
-			)
-
-			// Create assistant message placeholder
-			const [assistantMessage] = await db
-				.insert(schema.chatMessages)
-				.values({
-					chatId: params.chatId,
-					userId,
-					role: "assistant",
-					content: "",
-					isGenerating: true
-				})
-				.returning()
-
-			// Trigger generation
-			await generateResponse({
-				socket,
-				emitToUser,
-				chatId: params.chatId,
-				userId,
-				generatingMessage: assistantMessage
-			})
-
-			const res: Sockets.Chats.SendAssistantMessage.Response = {
-				userMessage,
-				assistantMessage
 			}
-			emitToUser("chats:sendAssistantMessage", res)
-			return res
+
+			return { success: true }
 		} catch (error) {
-			console.error("Error in chatsSendAssistantMessageHandler:", error)
-			const res: Sockets.Chats.SendAssistantMessage.Response = {
-				error: "Failed to send message."
+			console.error("Error in assistantUpdateDraftHandler:", error)
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Failed to update draft"
 			}
-			emitToUser("chats:sendAssistantMessage", res)
-			return res
 		}
 	}
 }

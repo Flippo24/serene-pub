@@ -74,6 +74,7 @@
 		"vite-plugin-banner": "^0.8.1"
 	},
 	"dependencies": {
+		"@ai-sdk/openai": "^2.0.64",
 		"@electric-sql/pglite": "^0.2.17",
 		"@lenml/char-card-reader": "^1.0.7",
 		"@lenml/tokenizer-gemma": "^3.4.2",
@@ -83,6 +84,7 @@
 		"@tiptap/core": "^2.22.3",
 		"@tiptap/extension-placeholder": "^2.22.3",
 		"@tiptap/starter-kit": "^2.22.3",
+		"ai": "^5.0.90",
 		"dotenv": "^16.5.0",
 		"drizzle-orm": "^0.40.0",
 		"drizzle-zod": "^0.8.3",

@@ -8,7 +8,7 @@
 	import ChatMessage from "$lib/client/components/chatMessages/ChatMessage.svelte"
 	import MessageComposer from "$lib/client/components/chatMessages/MessageComposer.svelte"
 	import AssistantDataManager from "$lib/client/components/assistant/AssistantDataManager.svelte"
-	import CharacterDraftPreview from "$lib/client/components/assistant/CharacterDraftPreview.svelte"
+	import AssistantCharacterDraftWrapper from "$lib/client/components/assistant/AssistantCharacterDraftWrapper.svelte"
 	import GeneratingAnimation from "$lib/client/components/chatMessages/GeneratingAnimation.svelte"
 	import { renderMarkdownWithQuotedText } from "$lib/client/utils/markdownToHTML"
 	import { getContext, onMount, untrack } from "svelte"
@@ -28,14 +28,6 @@
 	let lastSeenMessageContent: string = $state("")
 	let isInitialLoad = $state(true)
 	
-	// Function calling state
-	let pendingFunctionCall: {
-		messageId: number
-		reasoning: string
-		functionCalls: Array<{ name: string; args: Record<string, any> }>
-		results?: any[]
-	} | undefined = $state(undefined)
-	
 	// Character draft state
 	let characterDraft: any | null = $state(null)
 	let draftValidationStatus: 'valid' | 'invalid' | 'validating' | null = $state(null)
@@ -47,6 +39,9 @@
 	let draftTotalFields = $state(0)
 	let isDraftCorrecting = $state(false)
 	let draftCorrectionAttempt = $state(0)
+	
+	// Tool usage tracking
+	let currentToolsUsed: string[] = $state([])
 
 	// Get chat id from route params if it exists
 	let chatId: number | undefined = $derived.by(() => {
@@ -69,9 +64,7 @@
 	let taggedEntities = $derived.by(() => {
 		if (!chat?.metadata) return {}
 		
-		const metadata = typeof chat.metadata === 'string' 
-			? JSON.parse(chat.metadata) 
-			: chat.metadata
+		const metadata = chat.metadata
 		
 		console.log('[Page] Chat metadata:', metadata)
 		console.log('[Page] Tagged entities:', metadata?.taggedEntities)
@@ -93,9 +86,7 @@
 			return
 		}
 		
-		const parsedMetadata = typeof metadata === 'string' 
-			? JSON.parse(metadata) 
-			: metadata
+		const parsedMetadata = metadata
 		
 		// Draft is in dataEditor.create.characters[0], NOT in taggedEntities
 		const extractedDraft = parsedMetadata?.dataEditor?.create?.characters?.[0] || null
@@ -125,18 +116,17 @@
 	onMount(() => {
 		if (!socket) return
 
-		// Set up listeners first
+		// Set up listeners first - using V2 events for new assistant system
 		socket.on("chatMessage", handleChatMessage)
 		socket.on("chats:get", handleChatGetResponse)
-		socket.on("chats:sendAssistantMessage", handleSendMessageResponse)
 		socket.on("chats:titleGenerated", handleTitleGenerated)
-		socket.on("assistant:reasoningDetected", handleReasoningDetected)
-		socket.on("assistant:functionResults", handleFunctionResults)
-		socket.on("assistant:selectionComplete", handleSelectionComplete)
+		socket.on("assistant:completeV2", handleAssistantCompleteV2)
+		socket.on("assistant:errorV2", handleAssistantErrorV2)
+		socket.on("assistant:progress", handleAssistantProgress)
 		socket.on("assistant:unlinkSuccess", handleUnlinkSuccess)
-		socket.on("assistant:draftProgress", handleDraftProgress)
 		socket.on("assistant:editDraftSuccess", handleEditDraftSuccess)
 		socket.on("assistant:editDraftError", handleEditDraftError)
+		socket.on("assistant:metadataUpdated", handleMetadataUpdated)
 
 		if (chatId) {
 			// Load specific chat
@@ -145,17 +135,16 @@
 
 		// Cleanup listeners on unmount
 		return () => {
-			socket.off("chatMessage", handleChatMessage)
-			socket.off("chats:get", handleChatGetResponse)
-			socket.off("chats:sendAssistantMessage", handleSendMessageResponse)
-			socket.off("chats:titleGenerated", handleTitleGenerated)
-			socket.off("assistant:reasoningDetected", handleReasoningDetected)
-			socket.off("assistant:functionResults", handleFunctionResults)
-			socket.off("assistant:selectionComplete", handleSelectionComplete)
-			socket.off("assistant:unlinkSuccess", handleUnlinkSuccess)
-			socket.off("assistant:draftProgress", handleDraftProgress)
-			socket.off("assistant:editDraftSuccess", handleEditDraftSuccess)
-			socket.off("assistant:editDraftError", handleEditDraftError)
+			;(socket as any).off("chatMessage", handleChatMessage)
+			;(socket as any).off("chats:get", handleChatGetResponse)
+			;(socket as any).off("chats:titleGenerated", handleTitleGenerated)
+			;(socket as any).off("assistant:completeV2", handleAssistantCompleteV2)
+			;(socket as any).off("assistant:errorV2", handleAssistantErrorV2)
+			;(socket as any).off("assistant:progress", handleAssistantProgress)
+			;(socket as any).off("assistant:unlinkSuccess", handleUnlinkSuccess)
+			;(socket as any).off("assistant:editDraftSuccess", handleEditDraftSuccess)
+			;(socket as any).off("assistant:editDraftError", handleEditDraftError)
+			;(socket as any).off("assistant:metadataUpdated", handleMetadataUpdated)
 		}
 	})
 	
@@ -223,198 +212,94 @@
 		console.log(`Chat ${data.chatId} title updated to: "${data.title}"`)
 	}
 
-	function handleReasoningDetected(data: any) {
+	// New V2 handlers for tool-based assistant
+	function handleAssistantCompleteV2(data: { chatId: number; messageId: number; toolsUsed: string[] }) {
+		console.log("=== ASSISTANT COMPLETE V2 ===", data)
+		isSending = false
+		currentToolsUsed = data.toolsUsed || []
+		
+		// Chat and messages will be updated via chatMessage events
+		// Just need to clear sending state
+	}
+
+	function handleAssistantErrorV2(data: { chatId: number; error: string }) {
+		console.log("=== ASSISTANT ERROR V2 ===", data)
+		isSending = false
+		
 		if (!chat || data.chatId !== chat.id) return
 		
-		console.log("=== REASONING DETECTED ===", data)
-		console.log("Chat ID:", chat.id)
-		console.log("Function calls:", data.functionCalls)
-		
-		// Message is already updated on the server with reasoning in metadata
-		// Just update our local state to ensure UI is in sync
-		const messageIndex = chat.chatMessages.findIndex(m => m.id === data.messageId)
-		if (messageIndex >= 0) {
-			const currentMetadata = chat.chatMessages[messageIndex].metadata || {}
-			// Create a new message object to avoid mutation issues
-			const updatedMessage = {
-				...chat.chatMessages[messageIndex],
-				isGenerating: false,
-				content: "", // Content stays empty - reasoning is in metadata
-				metadata: {
-					...currentMetadata,
-					reasoning: data.reasoning,
-					waitingForFunctionSelection: true
-				}
-			}
-			// Create new array to trigger reactivity properly
-			chat.chatMessages[messageIndex] = updatedMessage
-		}
-		
-		// Store the function call and execute it
-		pendingFunctionCall = {
-			messageId: data.messageId,
-			reasoning: data.reasoning,
-			functionCalls: data.functionCalls
-		}
-		
-		console.log("Pending function call set:", pendingFunctionCall)
-		
-		// Execute the functions
-		if (socket) {
-			console.log("Emitting assistant:executeFunctions")
-			socket.emit("assistant:executeFunctions", {
-				chatId: chat.id,
-				functionCalls: data.functionCalls
-			})
-		} else {
-			console.error("Socket not available!")
-		}
+		toaster.error({ 
+			title: "Assistant Error",
+			description: data.error 
+		})
 	}
 
-	function handleFunctionResults(data: any) {
-		console.log("=== FUNCTION RESULTS HANDLER CALLED ===")
-		console.log("Data received:", data)
-		console.log("Current chat:", chat?.id)
-		console.log("Pending function call EXISTS:", !!pendingFunctionCall)
-		console.log("Pending function call value:", pendingFunctionCall)
-		console.log("Data chat ID:", data.chatId)
+	function handleAssistantProgress(data: { 
+		chatId: number
+		type: 'tool_execution' | 'draft_generation'
+		tool?: string
+		status?: string
+		field?: string
+		currentField?: number
+		totalFields?: number
+		attempt?: number
+	}) {
+		console.log("=== ASSISTANT PROGRESS ===", data)
 		
-		if (!chat) {
-			console.error("❌ No chat available!")
-			return
-		}
+		if (!chat || data.chatId !== chat.id) return
 		
-		if (!pendingFunctionCall) {
-			console.error("❌ No pending function call! This should not happen.")
-			console.error("Data:", data)
-			// Try to recover by creating a minimal pendingFunctionCall
-			pendingFunctionCall = {
-				messageId: 0, // We don't know the message ID
-				reasoning: "",
-				functionCalls: []
+		// Handle draft generation progress
+		if (data.type === 'draft_generation') {
+			switch (data.status) {
+				case 'started':
+					isDraftGenerating = true
+					draftCurrentField = null
+					draftCurrentFieldIndex = 0
+					draftTotalFields = data.totalFields || 0
+					draftGeneratedFields = []
+					isDraftCorrecting = false
+					draftCorrectionAttempt = 0
+					break
+					
+				case 'generating_field':
+					draftCurrentField = data.field || null
+					draftCurrentFieldIndex = data.currentField || 0
+					break
+					
+				case 'field_complete':
+					if (data.field && !draftGeneratedFields.includes(data.field)) {
+						draftGeneratedFields = [...draftGeneratedFields, data.field]
+					}
+					break
+					
+				case 'validating':
+					draftValidationStatus = 'validating'
+					break
+					
+				case 'correcting':
+					isDraftCorrecting = true
+					draftCorrectionAttempt = data.attempt || 0
+					break
+					
+				case 'complete':
+					isDraftGenerating = false
+					isDraftCorrecting = false
+					draftValidationStatus = 'valid'
+					draftCurrentField = null
+					break
+					
+				case 'error':
+					isDraftGenerating = false
+					isDraftCorrecting = false
+					draftValidationStatus = 'invalid'
+					break
 			}
 		}
 		
-		if (data.chatId !== chat.id) {
-			console.error("❌ Chat ID mismatch!", data.chatId, "!==", chat.id)
-			return
+		// Tool execution progress - could show a toast or indicator
+		if (data.type === 'tool_execution' && data.tool) {
+			console.log(`Executing tool: ${data.tool}`)
 		}
-		
-		console.log("=== FUNCTION RESULTS RECEIVED ===", data)
-		console.log("Results count:", data.results?.length)
-		console.log("Results data:", data.results)
-		
-		// Store results
-		pendingFunctionCall = {
-			...pendingFunctionCall,
-			results: data.results
-		}
-		
-		console.log("✅ Updated pending function call:", pendingFunctionCall)
-		
-		// If there are no results to select (e.g., draft functions that don't return data),
-		// automatically trigger the conversational response
-		if (!data.results || data.results.length === 0) {
-			console.log("🎯 No results to select, auto-triggering conversational response")
-			// Simulate selection complete with empty selection
-			handleSelectionComplete({
-				chatId: chat.id,
-				taggedEntities: {}
-			})
-		} else {
-			console.log("📋 Has results for selection, count:", data.results.length)
-		}
-		
-		scrollToBottom()
-	}
-
-	function handleSelectionComplete(data: any) {
-		console.log("=== HANDLE SELECTION COMPLETE CALLED ===")
-		console.log("Data:", data)
-		console.log("Current chat:", chat?.id)
-		console.log("Chat ID match:", chat?.id === data.chatId)
-		
-		if (!chat || data.chatId !== chat.id) {
-			console.log("❌ Exiting early - no chat or ID mismatch")
-			return
-		}
-		
-		console.log("✅ Selection complete:", data)
-		console.log("Current chat.metadata:", chat.metadata)
-		console.log("New taggedEntities from server:", data.taggedEntities)
-		
-		// Reload the chat from server to get updated metadata (including draft)
-		console.log("📡 Requesting chat refresh from server...")
-		socket.emit("chats:get", { id: chat.id })
-		
-		// Parse existing metadata if it's a string
-		const existingMetadata = typeof chat.metadata === 'string' 
-			? JSON.parse(chat.metadata) 
-			: (chat.metadata || {})
-		
-		console.log("Parsed existing metadata:", existingMetadata)
-		
-		// Update chat metadata with new tagged entities (server already merged them)
-		chat.metadata = {
-			...existingMetadata,
-			taggedEntities: data.taggedEntities
-		}
-		
-		console.log("Updated chat.metadata:", chat.metadata)
-		
-		// Check if this is a draft function (no tagged entities to select)
-		const isDraftFunction = !data.taggedEntities || Object.keys(data.taggedEntities).length === 0
-		console.log("Is draft function?", isDraftFunction)
-		
-		// Clear pending function call
-		pendingFunctionCall = undefined
-		
-	// Trigger a follow-up generation to answer the original question
-	// The tagged entity data will be automatically included in the system prompt
-	if (socket && chat?.chatMessages) {
-		// Find the last assistant message to regenerate
-		const lastAssistantMessage = chat.chatMessages
-			.filter((m: any) => m.role === 'assistant')
-			.pop()
-		
-		console.log("Last assistant message:", lastAssistantMessage?.id)
-		
-		if (lastAssistantMessage) {
-			// Clear the waitingForFunctionSelection flag before regenerating
-			// This ensures we don't re-enter the reasoning loop
-			// BUT preserve the reasoning metadata so it can be displayed with the pre-content section
-			const currentMetadata = lastAssistantMessage.metadata || {}
-			const updatedMessage = {
-				...lastAssistantMessage,
-				content: "", // Clear content so regeneration starts fresh
-				metadata: {
-					...currentMetadata,
-					waitingForFunctionSelection: false
-					// Keep reasoning: it will be displayed in the pre-content section
-				}
-			}
-			
-			// Update the message in our local state
-			const messageIndex = chat.chatMessages.findIndex(m => m.id === lastAssistantMessage.id)
-			if (messageIndex >= 0) {
-				chat.chatMessages[messageIndex] = updatedMessage
-			}
-			
-			// Trigger regeneration - the adapter will see the mode and respond appropriately
-			// For draft functions (no tagged entities), it will use conversational mode
-			// For data retrieval functions (with tagged entities), it will use conversational mode with entity data
-			console.log("🚀 Triggering regeneration for conversational response")
-			socket.emit("chatMessages:regenerate", {
-				id: lastAssistantMessage.id
-			})
-		}
-	}
-	
-	toaster.success({ title: isDraftFunction ? "Draft updated!" : "Data linked!" })
-}	function handleSelectionCompleted() {
-		// Clear the pending function call UI
-		pendingFunctionCall = undefined
-		scrollToBottom()
 	}
 
 	function handleUnlinkSuccess(data: any) {
@@ -422,10 +307,8 @@
 		
 		console.log("Entity unlinked successfully:", data)
 		
-		// Parse existing metadata if it's a string
-		const existingMetadata = typeof chat.metadata === 'string' 
-			? JSON.parse(chat.metadata) 
-			: (chat.metadata || {})
+		// Get existing metadata (now a JSON object)
+		const existingMetadata = chat.metadata || {}
 		
 		// Update chat metadata with new tagged entities (server already removed the entity)
 		chat.metadata = {
@@ -433,123 +316,34 @@
 			taggedEntities: data.taggedEntities
 		}
 		
-	// Force reactivity
-	chat = chat
-	
-	toaster.success({ title: "Entity unlinked successfully" })
-}
-
-function handleSaveDraft() {
-	if (!socket || !chat || !characterDraft) return
-	
-	console.log("Saving character draft:", characterDraft)
-	socket.emit("assistant:saveDraft", { chatId: chat.id })
-}
-
-function handleDraftProgress(data: any) {
-	console.log("=== DRAFT PROGRESS ===", data)
-	
-	// Only process if it's for the current chat
-	if (!chat || data.chatId !== chat.id) return
-			// Update state based on status
-		switch (data.status) {
-			case 'started':
-				isDraftGenerating = true
-				draftCurrentField = null
-				draftCurrentFieldIndex = 0
-				draftTotalFields = data.totalFields || 0
-				draftGeneratedFields = []
-				isDraftCorrecting = false
-				draftCorrectionAttempt = 0
-				console.log("Draft generation started")
-				break
-				
-			case 'generating_field':
-				draftCurrentField = data.field || null
-				draftCurrentFieldIndex = data.currentField || 0
-				console.log(`Generating field: ${draftCurrentField} (${draftCurrentFieldIndex}/${draftTotalFields})`)
-				break
-				
-			case 'field_complete':
-				if (data.field && !draftGeneratedFields.includes(data.field)) {
-					draftGeneratedFields = [...draftGeneratedFields, data.field]
-				}
-				if (data.draft) {
-					characterDraft = data.draft
-				}
-				console.log(`Field complete: ${data.field}`)
-				break
-				
-			case 'field_error':
-				console.error(`Field error for ${data.field}:`, data.error)
-				toaster.error({ 
-					title: `Error generating ${data.field}`,
-					description: data.message || data.error 
-				})
-				break
-				
-			case 'validating':
-				draftValidationStatus = 'validating'
-				console.log("Validating draft...")
-				break
-				
-			case 'correcting':
-				isDraftCorrecting = true
-				draftCorrectionAttempt = data.attempt || 0
-				console.log(`Auto-correcting errors (attempt ${draftCorrectionAttempt}/3)...`)
-				break
-				
-			case 'complete':
-				isDraftGenerating = false
-				isDraftCorrecting = false
-				draftValidationStatus = 'valid'
-				if (data.draft) {
-					characterDraft = data.draft
-				}
-				if (data.fields) {
-					draftGeneratedFields = data.fields
-				}
-				console.log("Draft generation complete!")
-			toaster.success({ title: "Character draft created successfully!" })
-			scrollToBottom()
-			break
-			
-		case 'validation_failed':
-			isDraftGenerating = false
-			isDraftCorrecting = false
-			draftValidationStatus = 'invalid'
-			if (data.draft) {
-				characterDraft = data.draft
-			}
-			if (data.errors) {
-				draftErrors = data.errors
-			}
-			console.error("Draft validation failed:", data.errors)
-			toaster.warning({ 
-				title: "Draft needs review",
-				description: "Some fields need to be adjusted"
-			})
-			scrollToBottom()
-			break
+		// Force reactivity
+		chat = chat
+		toaster.success({ title: "Entity unlinked successfully" })
 	}
-}
 
-function handleCancelDraft() {
-	characterDraft = null
-	draftValidationStatus = null
-	draftErrors = null
-	draftGeneratedFields = []
-	isDraftGenerating = false
-	draftCurrentField = null
-	draftCurrentFieldIndex = 0
-	draftTotalFields = 0
-	isDraftCorrecting = false
-	draftCorrectionAttempt = 0
-	
-	toaster.info({ title: "Draft cancelled" })
-}
+	function handleSaveDraft() {
+		if (!socket || !chat || !characterDraft) return
+		
+		console.log("Saving character draft:", characterDraft)
+		socket.emit("assistant:saveDraft", { chatId: chat.id })
+	}
 
-function handleRegenerateField(event: CustomEvent<{ field: string }>) {
+	function handleCancelDraft() {
+		characterDraft = null
+		draftValidationStatus = null
+		draftErrors = null
+		draftGeneratedFields = []
+		isDraftGenerating = false
+		draftCurrentField = null
+		draftCurrentFieldIndex = 0
+		draftTotalFields = 0
+		isDraftCorrecting = false
+		draftCorrectionAttempt = 0
+		
+		toaster.info({ title: "Draft cancelled" })
+	}
+
+	function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 		if (!socket || !chat) return
 		
 		console.log("Regenerating field:", event.detail.field)
@@ -652,6 +446,20 @@ function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 		})
 	}
 
+	function handleMetadataUpdated(data: { chatId: number; metadata: string | object }) {
+		console.log('[handleMetadataUpdated] Received metadata update for chat', data.chatId)
+		
+		if (!chat || chat.id !== data.chatId) return
+		
+		// Update the chat's metadata, triggering the $effect that extracts the draft
+		chat = {
+			...chat,
+			metadata: data.metadata
+		}
+		
+		console.log('[handleMetadataUpdated] Chat metadata updated, $effect will extract draft')
+	}
+
 	function handleChatMessage(data: Sockets.ChatMessage.Call) {
 		if (!chat || !data.chatMessage || data.chatMessage.chatId !== chat.id) return
 		
@@ -688,7 +496,8 @@ function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 		newMessage = "" // Clear input immediately
 		isSending = true
 
-		socket.emit("chats:sendAssistantMessage", {
+		// Use new V2 event for tool-based assistant
+		socket.emit("assistant:sendMessageV2", {
 			chatId: chat.id,
 			content
 		})
@@ -906,7 +715,7 @@ function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 							<GeneratingAnimation
 								text={msg.metadata?.reasoning
 									? "Assistant is answering"
-									: "Assistant is deciding"}
+									: "Assistant is working"}
 							/>
 						{/snippet}
 					</ChatMessage>
@@ -915,43 +724,26 @@ function handleRegenerateField(event: CustomEvent<{ field: string }>) {
 				{#snippet ComposerComponent()}
 					<div class="preset-filled-surface-50-950 border-t border-surface-400-600">
 						<!-- Character Draft Preview above data manager -->
-						{#if characterDraft && chat}
-							{@const _ = console.log('[Render] Showing draft preview')}
-							<div class="pt-4">
-								<CharacterDraftPreview 
-									bind:this={draftPreviewComponent}
-									draft={characterDraft}
-									validationStatus={draftValidationStatus}
-									errors={draftErrors}
-									generatedFields={draftGeneratedFields}
-									isGenerating={isDraftGenerating}
-									currentField={draftCurrentField}
-									currentFieldIndex={draftCurrentFieldIndex}
-									totalFields={draftTotalFields}
-									isCorrecting={isDraftCorrecting}
-									correctionAttempt={draftCorrectionAttempt}
-									on:save={handleSaveDraft}
-									on:cancel={handleCancelDraft}
-									on:regenerateField={handleRegenerateField}
-									on:editField={handleEditField}
-									on:updateField={handleUpdateField}
-								/>
-							</div>
-						{/if}
-						
-						<!-- Data Manager above input -->
+{#if characterDraft && chat}
+					{@const _ = console.log('[Render] Showing draft preview')}
+					<AssistantCharacterDraftWrapper
+						bind:this={draftPreviewComponent}
+						draft={characterDraft}
+						validationStatus={draftValidationStatus}
+						isGenerating={isDraftGenerating}
+						chatId={chat.id}
+						on:save={handleSaveDraft}
+						on:cancel={handleCancelDraft}
+					/>
+				{/if}
+				
+				<!-- Data Manager above input -->
+				
 						{#if chat}
 						<div class="p-4 pb-2">
 							<AssistantDataManager 
 								chatId={chat.id}
 								taggedEntities={taggedEntities}
-								pendingSelection={pendingFunctionCall ? {
-									messageId: pendingFunctionCall.messageId,
-									reasoning: pendingFunctionCall.reasoning,
-									results: pendingFunctionCall.results || [],
-									type: 'characters'
-								} : null}
-								onSelectionComplete={handleSelectionCompleted}
 							/>
 						</div>
 						{/if}
