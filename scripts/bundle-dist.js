@@ -49,6 +49,8 @@ const ACCEPTABLE_LICENSES = [
 	"0bsd",
 	"wtfpl",
 	"apache-2.0",
+	"afl-2.1",
+	"afl-2.1 or bsd-3-clause",
 	"agpl-3.0",
 	"agpl-3.0-only",
 	"agpl-3.0-or-later",
