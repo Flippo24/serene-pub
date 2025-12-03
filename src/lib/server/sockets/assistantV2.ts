@@ -30,6 +30,33 @@ export function handleAssistantV2(io: Server, socket: Socket, userId: number) {
 
 				console.log('[AssistantV2] Received message for chat', chatId)
 
+				// Validate input parameters
+				if (!content || typeof content !== 'string') {
+					socket.emit('assistant:errorV2', {
+						chatId,
+						error: 'Message content is required'
+					})
+					return
+				}
+
+				// Trim and validate content length
+				const trimmedContent = content.trim()
+				if (trimmedContent.length === 0) {
+					socket.emit('assistant:errorV2', {
+						chatId,
+						error: 'Message cannot be empty'
+					})
+					return
+				}
+
+				if (trimmedContent.length > 50000) {
+					socket.emit('assistant:errorV2', {
+						chatId,
+						error: 'Message too long (max 50,000 characters)'
+					})
+					return
+				}
+
 				// Verify chat exists and user has access
 				const chatOwnership = await db.query.chats.findFirst({
 					where: eq(schema.chats.id, chatId),
@@ -63,41 +90,13 @@ export function handleAssistantV2(io: Server, socket: Socket, userId: number) {
 				}
 
 				// 1. Save user message to database
-				// First check if this exact message was just sent (within last 5 seconds)
-				const recentMessages = await db.query.chatMessages.findMany({
-					where: and(
-						eq(schema.chatMessages.chatId, chatId),
-						eq(schema.chatMessages.role, 'user'),
-						eq(schema.chatMessages.content, content)
-					),
-					columns: { id: true, createdAt: true },
-					orderBy: (cm, { desc }) => desc(cm.createdAt),
-					limit: 1
-				})
-
-				// If exact same message was sent in last 5 seconds, skip creating duplicate
-				if (recentMessages.length > 0) {
-					const lastMessageTime = new Date(recentMessages[0].createdAt).getTime()
-					const now = Date.now()
-					const timeDiffSeconds = (now - lastMessageTime) / 1000
-
-					if (timeDiffSeconds < 5) {
-						console.warn('[AssistantV2] Duplicate message detected within 5 seconds, ignoring')
-						socket.emit('assistant:errorV2', {
-							chatId,
-							error: 'Duplicate message - please wait before sending the same message again'
-						})
-						return
-					}
-				}
-
 				const [userMessage] = await db
 					.insert(schema.chatMessages)
 					.values({
 						chatId,
 						userId,
 						role: 'user',
-						content: content,
+						content: trimmedContent,
 						metadata: {}
 					})
 					.returning()
@@ -189,7 +188,7 @@ export function handleAssistantV2(io: Server, socket: Socket, userId: number) {
 					socket
 				)
 
-				const result = await assistantService.generateResponse(content)
+				const result = await assistantService.generateResponse(trimmedContent)
 
 				// 7. Update assistant message with result
 				if (result.success && result.message) {

@@ -27,6 +27,7 @@
 		onBranchMessage?: (event: Event, msg: SelectChatMessage) => void
 		editChatMessage: SelectChatMessage | undefined
 		canRegenerateLastMessage: boolean
+		hasGeneratingMessage: boolean
 		isGuest: boolean
 		
 		// Snippet children
@@ -51,6 +52,7 @@
 			onBranchMessage?: (event: Event, msg: SelectChatMessage) => void;
 			editChatMessage: SelectChatMessage | undefined;
 			canRegenerateLastMessage: boolean;
+			hasGeneratingMessage: boolean;
 			isGuest: boolean;
 		}]>
 		ComposerComponent: Snippet<[]>
@@ -78,6 +80,7 @@
 		onBranchMessage,
 		editChatMessage,
 		canRegenerateLastMessage,
+		hasGeneratingMessage,
 		isGuest,
 		MessageComponent,
 		ComposerComponent,
@@ -144,6 +147,7 @@
 								onBranchMessage,
 								editChatMessage,
 								canRegenerateLastMessage,
+								hasGeneratingMessage,
 								isGuest
 							})}
 							<!-- Show next character block after the last message if component provided -->

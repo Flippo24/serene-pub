@@ -203,7 +203,9 @@ export const chatsListHandler: Handler<
 	event: "chats:list",
 	async handler(socket, params, emitToUser) {
 		const userId = socket.user!.id
-		const chatType = params.chatType || ChatTypes.ROLEPLAY
+		// chats:list only returns ROLEPLAY chats
+		// Use chats:listAssistant for assistant chats
+		const chatType = ChatTypes.ROLEPLAY
 		console.log("Fetching chats for user:", userId, "chatType:", chatType)
 
 		// First, find all chats where the current user is a guest
@@ -1193,9 +1195,50 @@ export const chatMessagesUpdateHandler: Handler<
 			const { id, content, isHidden } = params
 			const userId = 1
 
+			// Get the existing message to check metadata
+			const [existingMessage] = await db
+				.select()
+				.from(schema.chatMessages)
+				.where(
+					and(
+						eq(schema.chatMessages.id, id),
+						eq(schema.chatMessages.userId, userId)
+					)
+				)
+
+			if (!existingMessage) {
+				const res: Sockets.ChatMessages.Update.Response = {
+					chatMessage: undefined,
+					error: "Message not found"
+				}
+				emitToUser("chatMessages:update", res)
+				return res
+			}
+
 			// Build the update object dynamically
 			const updates: Partial<typeof schema.chatMessages.$inferInsert> = {}
-			if (content !== undefined) updates.content = content
+			if (content !== undefined) {
+				updates.content = content
+				
+				// Also update the swipe history if it exists
+				const metadata = existingMessage.metadata as any
+				if (metadata?.swipes?.history && Array.isArray(metadata.swipes.history)) {
+					const currentIdx = metadata.swipes.currentIdx ?? 0
+					// Update the content in the swipes history at the current index
+					const updatedHistory = [...metadata.swipes.history]
+					if (currentIdx >= 0 && currentIdx < updatedHistory.length) {
+						updatedHistory[currentIdx] = content
+					}
+					
+					updates.metadata = {
+						...metadata,
+						swipes: {
+							...metadata.swipes,
+							history: updatedHistory
+						}
+					}
+				}
+			}
 			if (isHidden !== undefined) updates.isHidden = isHidden
 
 			// Update the message

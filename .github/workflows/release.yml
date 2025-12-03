@@ -4,7 +4,11 @@ on:
     push:
         tags:
             - "v*.*.*"
+            - "v*.*.*-dev"
             - "v*.*.*-alpha"
+            - "v*.*.*-beta"
+            - "v*.*.*-pr-*"
+            - "v*.*.*-rc-*"
 
 jobs:
     build-and-release:
@@ -33,6 +37,60 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
+
+            - name: Generate release title
+              id: release_title
+              shell: bash
+              run: |
+                  TAG="${{ github.ref_name }}"
+                  VERSION="${TAG#v}"  # Remove 'v' prefix
+                  
+                  # Extract base version and suffix
+                  if [[ "$VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-(.+))?$ ]]; then
+                    BASE_VERSION="${BASH_REMATCH[1]}"
+                    SUFFIX="${BASH_REMATCH[3]}"
+                    
+                    if [ -z "$SUFFIX" ]; then
+                  # No suffix - formal release
+                  TITLE="$BASE_VERSION Release"
+                  IS_PRERELEASE="false"
+                elif [ "$SUFFIX" = "dev" ]; then
+                  # Development release
+                  TITLE="$BASE_VERSION Development Release"
+                  IS_PRERELEASE="true"
+                elif [ "$SUFFIX" = "alpha" ]; then
+                  # Alpha release
+                  TITLE="$BASE_VERSION Alpha Release"
+                  IS_PRERELEASE="true"
+                elif [ "$SUFFIX" = "beta" ]; then
+                  # Beta release
+                  TITLE="$BASE_VERSION Beta Release"
+                  IS_PRERELEASE="true"
+                elif [[ "$SUFFIX" =~ ^pr-([0-9]+)$ ]]; then
+                  # Pre-release
+                  PR_NUM="${BASH_REMATCH[1]}"
+                  TITLE="$BASE_VERSION Pre-Release $PR_NUM"
+                  IS_PRERELEASE="true"
+                elif [[ "$SUFFIX" =~ ^rc-([0-9]+)$ ]]; then
+                  # Release candidate
+                  RC_NUM="${BASH_REMATCH[1]}"
+                  TITLE="$BASE_VERSION Release Candidate $RC_NUM"
+                  IS_PRERELEASE="true"
+                    else
+                      # Unknown suffix
+                      TITLE="$VERSION"
+                      IS_PRERELEASE="true"
+                    fi
+                  else
+                    # Invalid version format
+                    TITLE="$VERSION"
+                    IS_PRERELEASE="true"
+                  fi
+                  
+                  echo "title=$TITLE" >> $GITHUB_OUTPUT
+                  echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+                  echo "Release Title: $TITLE"
+                  echo "Is Pre-release: $IS_PRERELEASE"
 
             - name: Set up Node.js
               uses: actions/setup-node@v4
@@ -205,7 +263,8 @@ jobs:
             - name: Upload release assets
               uses: softprops/action-gh-release@v2
               with:
+                  name: ${{ steps.release_title.outputs.title }}
                   files: serene-pub-*.zip
-                  prerelease: ${{ contains(github.ref, 'alpha') }}
+                  prerelease: ${{ steps.release_title.outputs.is_prerelease }}
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

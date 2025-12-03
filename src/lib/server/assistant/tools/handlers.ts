@@ -35,16 +35,26 @@ export async function listCharacters(
 	userId: number,
 	params: ListCharactersParams
 ): Promise<ListCharactersResult> {
+	// Validate input parameters
 	const { search, limit = 20 } = params
+
+	// Sanitize limit to prevent abuse
+	const safeLimit = Math.min(Math.max(1, limit), 100) // Clamp between 1-100
+
+	// Validate search string length
+	if (search && search.length > 200) {
+		throw new Error('Search query too long (max 200 characters)')
+	}
 
 	const conditions = [eq(schema.characters.userId, userId)]
 
-	if (search) {
+	if (search && search.trim()) {
+		const sanitizedSearch = search.trim()
 		conditions.push(
 			or(
-				like(schema.characters.name, `%${search}%`),
-				like(schema.characters.nickname, `%${search}%`),
-				like(schema.characters.description, `%${search}%`)
+				like(schema.characters.name, `%${sanitizedSearch}%`),
+				like(schema.characters.nickname, `%${sanitizedSearch}%`),
+				like(schema.characters.description, `%${sanitizedSearch}%`)
 			)!
 		)
 	}
@@ -58,7 +68,7 @@ export async function listCharacters(
 			description: true,
 			avatar: true
 		},
-		limit
+		limit: safeLimit
 	})
 
 	return {
@@ -118,10 +128,33 @@ export async function draftCharacter(
 ): Promise<DraftCharacterResult> {
 	const { userRequest, additionalFields = [] } = params
 
+	// Validate input parameters
+	if (!userRequest || userRequest.trim().length === 0) {
+		throw new Error('User request is required to draft a character')
+	}
+
+	if (userRequest.length > 10000) {
+		throw new Error('User request too long (max 10,000 characters)')
+	}
+
+	// Validate additionalFields contains only valid field names
+	const validFields = [
+		'name', 'nickname', 'description', 'personality', 'scenario',
+		'firstMessage', 'alternateGreetings', 'exampleDialogues',
+		'groupOnlyGreetings', 'source'
+	]
+
+	if (additionalFields.length > 0) {
+		const invalidFields = additionalFields.filter(field => !validFields.includes(field))
+		if (invalidFields.length > 0) {
+			throw new Error(`Invalid field names: ${invalidFields.join(', ')}. Valid fields are: ${validFields.join(', ')}`)
+		}
+	}
+
 	// Import the draft orchestrator
 	const { generateCharacterDraft } = await import('$lib/server/assistantFunctions/utils/draftOrchestrator')
 	const { parseChatMetadata, getActiveCharacterDraft } = await import('$lib/shared/types/chatMetadata')
-	
+
 	// Get existing draft from chat metadata
 	const chat = await db.query.chats.findFirst({
 		where: eq(schema.chats.id, chatId),
@@ -235,8 +268,36 @@ export async function updateCharacterDraftSimple(
 ): Promise<DraftCharacterResult> {
 	const { userRequest, fieldsToUpdate = [] } = params
 
+	// Validate input parameters
+	if (!userRequest || userRequest.trim().length === 0) {
+		throw new Error('User request is required')
+	}
+
+	if (userRequest.length > 10000) {
+		throw new Error('User request too long (max 10,000 characters)')
+	}
+
+	// Validate fieldsToUpdate contains only valid field names
+	const validFields = [
+		'name', 'nickname', 'description', 'personality', 'scenario',
+		'firstMessage', 'alternateGreetings', 'exampleDialogues',
+		'groupOnlyGreetings', 'source'
+	]
+
+	if (fieldsToUpdate.length > 0) {
+		const invalidFields = fieldsToUpdate.filter(field => !validFields.includes(field))
+		if (invalidFields.length > 0) {
+			throw new Error(`Invalid field names: ${invalidFields.join(', ')}. Valid fields are: ${validFields.join(', ')}`)
+		}
+
+		// Limit number of fields that can be updated at once
+		if (fieldsToUpdate.length > 10) {
+			throw new Error('Too many fields to update at once (max 10)')
+		}
+	}
+
 	console.log(`[updateCharacterDraftSimple] Updating draft for chat ${chatId}`)
-	console.log(`[updateCharacterDraftSimple] User request: "${userRequest}"`)
+	console.log(`[updateCharacterDraftSimple] User request: "${userRequest.substring(0, 200)}${userRequest.length > 200 ? '...' : ''}"`)
 	if (fieldsToUpdate.length > 0) {
 		console.log(`[updateCharacterDraftSimple] Suggested fields:`, fieldsToUpdate)
 	}
@@ -244,7 +305,7 @@ export async function updateCharacterDraftSimple(
 	// Import the draft orchestrator
 	const { generateCharacterDraft } = await import('$lib/server/assistantFunctions/utils/draftOrchestrator')
 	const { parseChatMetadata, getActiveCharacterDraft } = await import('$lib/shared/types/chatMetadata')
-	
+
 	// Get existing draft from chat metadata
 	const chat = await db.query.chats.findFirst({
 		where: eq(schema.chats.id, chatId),

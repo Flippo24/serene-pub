@@ -81,10 +81,13 @@
 		)
 	})
 
+	// Check if any message is currently generating
+	let hasGeneratingMessage: boolean = $derived.by(() => {
+		return chat?.chatMessages?.some((msg) => msg.isGenerating) || false
+	})
+
 	// Determine if we should show the next character block
 	let shouldShowNextCharacterBlock: boolean = $derived.by(() => {
-		const hasGeneratingMessage =
-			chat?.chatMessages?.some((msg) => msg.isGenerating) || false
 		const hasMessageDraft = newMessage.trim().length > 0
 		const isEditingMessage = !!editChatMessage
 		const hasNextCharacter = !!chatResponseOrder?.nextCharacterId
@@ -984,6 +987,7 @@
 		onAbortMessage={handleAbortMessage}
 		onBranchMessage={handleBranchMessage}
 		{editChatMessage}
+		{hasGeneratingMessage}
 		{isGuest}
 	>
 		{#snippet MessageComponent(props)}

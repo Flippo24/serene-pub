@@ -36,6 +36,7 @@
 		// Edit state
 		editChatMessage: SelectChatMessage | undefined
 		canRegenerateLastMessage: boolean
+		hasGeneratingMessage: boolean
 		isGuest: boolean
 		// Additional needed props
 		lastPersonaMessage: SelectChatMessage | undefined
@@ -71,6 +72,7 @@
 		openMobileMsgControls = $bindable(),
 		editChatMessage,
 		canRegenerateLastMessage,
+		hasGeneratingMessage,
 		isGuest,
 		lastPersonaMessage,
 		GeneratingAnimationComponent,
@@ -169,6 +171,7 @@
 							{isLastMessage}
 							{canRegenerateLastMessage}
 							{editChatMessage}
+							{hasGeneratingMessage}
 							{onEditMessage}
 							{onHideMessage}
 							{onDeleteMessage}
@@ -208,6 +211,7 @@
 										{isLastMessage}
 										{canRegenerateLastMessage}
 										{editChatMessage}
+										{hasGeneratingMessage}
 										{onEditMessage}
 										{onHideMessage}
 										{onDeleteMessage}
@@ -223,15 +227,15 @@
 				</div>
 				{#if showSwipes}
 					<div class="ml-auto flex gap-6">
-						{#if msg.metadata?.swipes?.currentIdx !== null && msg.metadata?.swipes?.currentIdx !== undefined && msg.metadata?.swipes?.history && msg.metadata?.swipes.history.length > 1}
-							<button
-								class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
-								title="Swipe Left"
-								onclick={() => onSwipeLeft(msg)}
-								disabled={!msg.metadata.swipes.currentIdx || msg.metadata.swipes.history.length <= 1 || msg.isGenerating}
-							>
-								<Icons.ChevronLeft size={24} />
-							</button>
+					{#if msg.metadata?.swipes?.currentIdx !== null && msg.metadata?.swipes?.currentIdx !== undefined && msg.metadata?.swipes?.history && msg.metadata?.swipes.history.length > 1}
+						<button
+							class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
+							title="Swipe Left"
+							onclick={() => onSwipeLeft(msg)}
+							disabled={!!editChatMessage || !msg.metadata.swipes.currentIdx || msg.metadata.swipes.history.length <= 1 || msg.isGenerating}
+						>
+							<Icons.ChevronLeft size={24} />
+						</button>
 							<span class="text-surface-700-300 mt-[0.2rem] h-fit select-none">
 								{(msg.metadata.swipes.currentIdx || 0) + 1}/{msg.metadata.swipes.history.length}
 							</span>
@@ -240,7 +244,7 @@
 							class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
 							title="Swipe Right"
 							onclick={() => onSwipeRight(msg)}
-							disabled={!canSwipeRightVal}
+						disabled={!!editChatMessage || !canSwipeRightVal}
 						>
 							<Icons.ChevronRight size={24} />
 						</button>

@@ -169,14 +169,12 @@ class OllamaAdapter extends BaseConnectionAdapter {
 			req = {
 				model,
 				messages: compiledPrompt.messages!,
-				raw: false,
 				stream,
 				think,
 				keep_alive,
 				options: {
 					...this.mapSamplingConfig(),
 					stop,
-					useChat: true
 				}
 			} as ChatRequest
 		} else {
@@ -195,14 +193,12 @@ class OllamaAdapter extends BaseConnectionAdapter {
 			req = {
 				model,
 				prompt: compiledPrompt.prompt!,
-				raw: true,
 				stream,
 				think,
 				keep_alive,
 				options: {
 					...this.mapSamplingConfig(),
 					stop: allStopStrings,
-					useChat: false
 				}
 			} as GenerateRequest
 		}

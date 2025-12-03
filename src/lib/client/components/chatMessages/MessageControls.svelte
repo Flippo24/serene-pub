@@ -6,6 +6,7 @@
 		isLastMessage?: boolean
 		canRegenerateLastMessage?: boolean
 		editChatMessage?: SelectChatMessage
+		hasGeneratingMessage?: boolean
 		// Event handlers
 		onEditMessage: (e: Event, msg: SelectChatMessage) => void
 		onHideMessage: (e: Event, msg: SelectChatMessage) => void
@@ -21,6 +22,7 @@
 		isLastMessage = false,
 		canRegenerateLastMessage = false,
 		editChatMessage,
+		hasGeneratingMessage = false,
 		onEditMessage,
 		onHideMessage,
 		onDeleteMessage,
@@ -37,7 +39,7 @@
 		class:preset-filled-secondary-500={msg.isHidden}
 		title={msg.isHidden ? "Unhide Message" : "Hide Message"}
 		aria-label={msg.isHidden ? "Unhide this message" : "Hide this message"}
-		disabled={!!editChatMessage}
+		disabled={!!editChatMessage || hasGeneratingMessage}
 		onclick={(e) => onHideMessage(e, msg)}
 	>
 		<Icons.Ghost size={16} aria-hidden="true" />
@@ -49,7 +51,7 @@
 		class="btn btn-sm msg-cntrl-icon hover:preset-filled-success-500"
 		title="Edit Message"
 		aria-label="Edit this message"
-		disabled={!!editChatMessage || msg.isGenerating || msg.isHidden}
+		disabled={!!editChatMessage || hasGeneratingMessage || msg.isHidden}
 		onclick={(e) => onEditMessage(e, msg)}
 	>
 		<Icons.Edit size={16} aria-hidden="true" />
@@ -59,7 +61,7 @@
 		class="btn btn-sm msg-cntrl-icon hover:preset-filled-error-500"
 		title="Delete Message"
 		aria-label="Delete this message"
-		disabled={!!editChatMessage}
+		disabled={!!editChatMessage || hasGeneratingMessage}
 		onclick={(e) => onDeleteMessage(e, msg)}
 	>
 		<Icons.Trash2 size={16} aria-hidden="true" />
@@ -70,7 +72,7 @@
 			class="btn btn-sm msg-cntrl-icon hover:preset-filled-primary-500"
 			title="Branch Chat"
 			aria-label="Create a new chat branch from this message"
-			disabled={!!editChatMessage}
+			disabled={!!editChatMessage || hasGeneratingMessage}
 			onclick={(e) => onBranchMessage(e, msg)}
 		>
 			<Icons.GitBranch size={16} aria-hidden="true" />

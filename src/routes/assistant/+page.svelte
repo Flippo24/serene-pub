@@ -32,17 +32,17 @@
 		if (!socket) return
 
 		// Set up listeners
-		socket.on("chats:list", handleChatsListResponse)
+		socket.on("chats:listAssistant", handleChatsListResponse)
 		socket.on("chats:createAssistant", handleCreateAssistantResponse)
 		socket.on("chats:titleGenerated", handleTitleGenerated)
 		socket.on("chats:delete", handleChatDeleted)
 
 		// Load list of assistant chats
-		socket.emit("chats:list", { chatType: ChatTypes.ASSISTANT })
+		socket.emit("chats:listAssistant", {})
 
 		// Cleanup listeners on unmount
 		return () => {
-			socket.off("chats:list", handleChatsListResponse)
+			socket.off("chats:listAssistant", handleChatsListResponse)
 			socket.off("chats:createAssistant", handleCreateAssistantResponse)
 			socket.off("chats:titleGenerated", handleTitleGenerated)
 			socket.off("chats:delete", handleChatDeleted)

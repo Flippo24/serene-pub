@@ -1,9 +1,38 @@
 import { db } from "$lib/server/db"
 import * as schema from "$lib/server/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, and, or, inArray, asc } from "drizzle-orm"
 import { ChatTypes } from "$lib/shared/constants/ChatTypes"
 import type { Handler } from "$lib/shared/events"
 import { broadcastToChatUsers } from "./utils/broadcastHelpers"
+
+/**
+ * List assistant chats for the current user
+ */
+export const chatsListAssistantHandler: Handler<
+	Sockets.Chats.List.Params,
+	Sockets.Chats.List.Response
+> = {
+	event: "chats:listAssistant",
+	async handler(socket, params, emitToUser) {
+		const userId = socket.user!.id
+		console.log("Fetching assistant chats for user:", userId)
+
+		// Get assistant chats for this user
+		const chatsList = await db.query.chats.findMany({
+			where: (c, { eq, and }) => 
+				and(eq(c.userId, userId), eq(c.chatType, ChatTypes.ASSISTANT)),
+			orderBy: (c, { desc }) => desc(c.id)
+		})
+
+		console.log(`Found ${chatsList.length} assistant chats`)
+
+		const res: Sockets.Chats.List.Response = {
+			chatList: chatsList
+		}
+		emitToUser("chats:listAssistant", res)
+		return res
+	}
+}
 
 /**
  * Create a new assistant chat

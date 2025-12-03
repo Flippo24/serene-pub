@@ -87,6 +87,10 @@ type SocketEventMap = {
 		params: Sockets.Characters.ImportCard.Params
 		response: Sockets.Characters.ImportCard.Response
 	}
+	"characters:exportCard": {
+		params: Sockets.Characters.ExportCard.Params
+		response: Sockets.Characters.ExportCard.Response
+	}
 
 	// Connection events
 	"connections:list": {

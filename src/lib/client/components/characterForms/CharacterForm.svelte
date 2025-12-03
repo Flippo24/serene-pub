@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Switch } from "@skeletonlabs/skeleton-svelte"
+	import { Switch, Modal } from "@skeletonlabs/skeleton-svelte"
 	import * as Icons from "@lucide/svelte"
 	import * as skio from "sveltekit-io"
 	import { onMount, onDestroy, getContext } from "svelte"
@@ -163,6 +163,9 @@
 	)
 	let formContainer: HTMLDivElement
 	let validationTimeout: NodeJS.Timeout
+
+	// Export state
+	let showExportFormatModal = $state(false)
 
 	// Tags state
 	let availableTags: Array<{
@@ -412,6 +415,27 @@
 		}
 	})
 
+	// Export functions
+	function handleExportClick() {
+		showExportFormatModal = true
+	}
+
+	function handleExportAsJson() {
+		if (!characterId) return
+		socket.emit("characters:exportCard", { id: characterId, format: "json" })
+		showExportFormatModal = false
+	}
+
+	function handleExportAsPng() {
+		if (!characterId) return
+		socket.emit("characters:exportCard", { id: characterId, format: "png" })
+		showExportFormatModal = false
+	}
+
+	function cancelExport() {
+		showExportFormatModal = false
+	}
+
 	onMount(() => {
 		onCancel = handleCancel
 
@@ -464,6 +488,31 @@
 				})
 			}
 		})
+
+		socket.on("characters:exportCard", (msg) => {
+			// Create a blob from the buffer
+			// Socket.io sends Buffer as an object with data array
+			const bufferData = Array.isArray(msg.blob) ? msg.blob : (msg.blob as any).data || msg.blob
+			const blob = new Blob([new Uint8Array(bufferData)], {
+				type: msg.filename.endsWith('.json') ? 'application/json' : 'image/png'
+			})
+			
+			// Create a download link and trigger it
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement('a')
+			a.href = url
+			a.download = msg.filename
+			document.body.appendChild(a)
+			a.click()
+			document.body.removeChild(a)
+			URL.revokeObjectURL(url)
+			
+			toaster.success({
+				title: `Character Exported`,
+				description: `Character card exported as ${msg.filename}`
+			})
+		})
+
 		// Initialize with initialData if provided (for draft mode)
 		if (initialData) {
 			editCharacterData = {
@@ -534,6 +583,7 @@
 		socket.off("characters:create")
 		socket.off("characters:update")
 		socket.off("characters:get")
+		socket.off("characters:exportCard")
 		socket.off("tags:list")
 		socket.off("userSettings:updateShowAllCharacterFields")
 
@@ -577,11 +627,24 @@
 	aria-modal="false"
 >
 	{#if !hideTitle}
-	<h1 class="mb-4 text-lg font-bold" id="form-title">
-		{customTitle || (mode === "edit"
-			? `Edit: ${character?.nickname || character?.name || "Character"}`
-			: "Create Character")}
-	</h1>
+	<div class="mb-4 flex items-center justify-between">
+		<h1 class="text-lg font-bold" id="form-title">
+			{customTitle || (mode === "edit"
+				? `Edit: ${character?.nickname || character?.name || "Character"}`
+				: "Create Character")}
+		</h1>
+		{#if mode === "edit" && characterId}
+			<button
+				class="btn btn-sm preset-filled-primary-500"
+				title="Export Character"
+				onclick={handleExportClick}
+				aria-label="Export character"
+				type="button"
+			>
+				<Icons.Upload size={16} aria-hidden="true" />
+			</button>
+		{/if}
+	</div>
 	{/if}
 	{#if !hideActionButtons}
 	<div class="mt-4 mb-4 flex gap-2" role="group" aria-label="Form actions">
@@ -1384,6 +1447,61 @@
 	onConfirm={handleCancelModalDiscard}
 	onCancel={handleCancelModalCancel}
 />
+
+{#if showExportFormatModal && characterId}
+	<Modal
+		open={showExportFormatModal}
+		onOpenChange={(e) => {
+			showExportFormatModal = e.open
+		}}
+		contentBase="card bg-surface-100-900 p-4 space-y-4 shadow-xl max-w-dvw-sm w-[35rem]"
+		backdropClasses="backdrop-blur-sm"
+	>
+		{#snippet content()}
+			<div class="p-6">
+				<h2 class="mb-2 text-lg font-bold">Export Character</h2>
+				<p class="mb-4">
+					Choose the export format for "{character?.nickname || character?.name || 'character'}":
+				</p>
+				<div class="flex flex-col gap-3">
+					<button
+						class="btn preset-filled-primary-500 justify-start"
+						onclick={handleExportAsJson}
+					>
+						<Icons.FileText size={20} aria-hidden="true" />
+						<span>Export as JSON</span>
+					</button>
+					{#if character?.avatar}
+						<button
+							class="btn preset-filled-primary-500 justify-start"
+							onclick={handleExportAsPng}
+						>
+							<Icons.FileImage size={20} aria-hidden="true" />
+							<span>Export as PNG Card</span>
+						</button>
+					{:else}
+						<button
+							class="btn preset-filled-surface-500 justify-start"
+							disabled
+							title="Character has no avatar image"
+						>
+							<Icons.FileImage size={20} aria-hidden="true" />
+							<span>Export as PNG Card (No Avatar)</span>
+						</button>
+					{/if}
+				</div>
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						class="btn preset-filled-surface-500"
+						onclick={cancelExport}
+					>
+						Cancel
+					</button>
+				</div>
+			</div>
+		{/snippet}
+	</Modal>
+{/if}
 
 <style>
 	.sr-only {

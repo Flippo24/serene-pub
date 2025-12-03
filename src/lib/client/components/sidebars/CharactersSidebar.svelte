@@ -188,9 +188,6 @@
 		}
 		reader.readAsDataURL(file)
 		showImportModal = false
-		// const req: Sockets.CharacterCardImport.Call = {
-		// 	file
-		// }
 	}
 
 	function handleCharacterClick(character: any) {
@@ -295,15 +292,6 @@
 				title="Import Character"
 				onclick={handleImportClick}
 				aria-label="Import character from file"
-				type="button"
-			>
-				<Icons.Upload size={16} aria-hidden="true" />
-			</button>
-			<button
-				class="btn btn-sm preset-filled-primary-500"
-				title="Export Character"
-				disabled
-				aria-label="Export character (coming soon)"
 				type="button"
 			>
 				<Icons.Download size={16} aria-hidden="true" />

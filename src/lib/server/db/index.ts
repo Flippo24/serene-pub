@@ -198,18 +198,58 @@ export { schema }
 
 // Compare two version strings in '0.0.0' format, handling pre-release identifiers
 export function compareVersions(a: string, b: string): -1 | 0 | 1 {
-	// Strip pre-release identifiers (e.g., "-alpha", "-beta") for comparison
-	const cleanVersionA = a.split("-")[0]
-	const cleanVersionB = b.split("-")[0]
-
-	const pa = cleanVersionA.split(".").map(Number)
-	const pb = cleanVersionB.split(".").map(Number)
-	for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-		const na = pa[i] || 0
-		const nb = pb[i] || 0
-		if (na < nb) return -1
-		if (na > nb) return 1
+	// Parse version string into components
+	// Format: X.Y.Z or X.Y.Z-type or X.Y.Z-type-N
+	const parseVersion = (version: string) => {
+		const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-([a-z]+)(?:-(\d+))?)?$/)
+		if (!match) {
+			return { major: 0, minor: 0, patch: 0, type: null, num: 0 }
+		}
+		
+		const [, major, minor, patch, type, num] = match
+		return {
+			major: parseInt(major, 10),
+			minor: parseInt(minor, 10),
+			patch: parseInt(patch, 10),
+			type: type || null,
+			num: num ? parseInt(num, 10) : 0
+		}
 	}
+
+	const vA = parseVersion(a)
+	const vB = parseVersion(b)
+
+	// 1. Compare base version numbers (major.minor.patch)
+	// Base version is king - e.g., 0.4.2-pr-1 > 0.4.1-alpha
+	if (vA.major !== vB.major) return vA.major < vB.major ? -1 : 1
+	if (vA.minor !== vB.minor) return vA.minor < vB.minor ? -1 : 1
+	if (vA.patch !== vB.patch) return vA.patch < vB.patch ? -1 : 1
+
+	// 2. If base versions match, compare release types
+	// Release type hierarchy: pr < rc < alpha < (no suffix/release)
+	// e.g., 0.4.1-pr-2 < 0.4.1-rc-1 < 0.4.1-alpha < 0.4.1
+	const getReleaseTypePriority = (type: string | null): number => {
+		if (!type) return 4 // Formal release (highest priority)
+		if (type === 'alpha') return 3
+		if (type === 'rc') return 2
+		if (type === 'pr') return 1
+		return 0 // Unknown types get lowest priority
+	}
+
+	const priorityA = getReleaseTypePriority(vA.type)
+	const priorityB = getReleaseTypePriority(vB.type)
+
+	if (priorityA !== priorityB) {
+		return priorityA < priorityB ? -1 : 1
+	}
+
+	// 3. If release types match, compare release numbers
+	// e.g., 0.4.1-pr-1 < 0.4.1-pr-2
+	if (vA.num !== vB.num) {
+		return vA.num < vB.num ? -1 : 1
+	}
+
+	// Versions are identical
 	return 0
 }
 

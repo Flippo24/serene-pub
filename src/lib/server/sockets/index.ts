@@ -7,6 +7,7 @@ import { registerPersonaHandlers } from "./personas"
 import { registerContextConfigHandlers } from "./contextConfigs"
 import { registerChatHandlers } from "./chats"
 import {
+	chatsListAssistantHandler,
 	chatsCreateAssistantHandler,
 	assistantUpdateDraftHandler
 } from "./assistantChats"
@@ -60,6 +61,7 @@ export function connectSockets(io: {
 		registerPromptConfigHandlers(socket, emitToUser, register)
 		registerChatHandlers(socket, emitToUser, register)
 		// Register assistant chat handlers
+		register(socket, chatsListAssistantHandler, emitToUser)
 		register(socket, chatsCreateAssistantHandler, emitToUser)
 		register(socket, assistantUpdateDraftHandler, emitToUser)
 		handleAssistantFunctions(io as any, socket, userId)

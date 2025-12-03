@@ -69,7 +69,7 @@
 	onMount(() => {
 		socket.on(
 			"ollama:version",
-			(message: Sockets.OllamaVersion.Response) => {
+			(message: Sockets.Ollama.Version.Response) => {
 				// We only want to set isConnected if it hasn't been set yet
 				// We don't want to display the initial setup screen if the user
 				// is working in the settings tab, etc.
@@ -81,7 +81,7 @@
 
 		socket.on(
 			"ollama:setBaseUrl",
-			(message: Sockets.OllamaSetBaseUrl.Response) => {
+			(message: Sockets.Ollama.SetBaseUrl.Response) => {
 				isSavingBaseUrl = false
 				if (message.success) {
 					toaster.success({
@@ -162,7 +162,7 @@
 								locally on your machine. It's easy!
 							</p>
 							<a
-								href="https://ollama.ai/download"
+								href="https://ollama.com/download"
 								target="_blank"
 								rel="noopener noreferrer"
 								class="btn btn-sm preset-filled-primary-500 inline-flex items-center gap-2"

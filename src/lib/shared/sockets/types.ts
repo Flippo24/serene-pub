@@ -5,6 +5,7 @@
 import type { Component } from "@lucide/svelte"
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions/completions"
 import type { ListResponse } from "ollama"
+import type { SpecV3 } from "@lenml/char-card-reader"
 
 declare global {
 	namespace Sockets {
@@ -108,15 +109,17 @@ declare global {
 			}
 			namespace ImportCard {
 				interface Params {
-					charactersJson: CharaImportMetadata[]
+					file: string // base64 encoded file (JSON or PNG)
 				}
 				interface Response {
-					characters: SelectCharacter[]
+					character: SelectCharacter
+					book: SpecV3.Lorebook | null
 				}
 			}
 			namespace ExportCard {
 				interface Params {
 					id: number
+					format?: "json" | "png"
 				}
 				interface Response {
 					blob: Buffer

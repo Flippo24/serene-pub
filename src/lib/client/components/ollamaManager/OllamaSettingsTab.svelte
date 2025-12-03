@@ -122,24 +122,28 @@
 
 		socket.on(
 			"ollama:version",
-			(message: Sockets.OllamaVersion.Response) => {
+			(message: Sockets.Ollama.Version.Response) => {
 				currentVersion = message.version || "Unknown"
 			}
 		)
 
 		socket.on(
 			"ollama:isUpdateAvailable",
-			(message: Sockets.OllamaIsUpdateAvailable.Response) => {
+			(message: Sockets.Ollama.IsUpdateAvailable.Response) => {
 				isCheckingUpdates = false
-				updateAvailable = message.updateAvailable
+				updateAvailable = message.isUpdateAvailable
 				latestVersion = message.latestVersion || ""
+			}
+		)
 
-				if (message.error) {
-					toaster.error({
-						title: "Failed to check for updates",
-						description: message.error
-					})
-				}
+		socket.on(
+			"ollama:isUpdateAvailable:error",
+			(message: Sockets.ErrorResponse) => {
+				isCheckingUpdates = false
+				toaster.error({
+					title: "Failed to check for updates",
+					description: message.error
+				})
 			}
 		)
 
@@ -152,6 +156,7 @@
 		socket.off("ollama:setBaseUrl")
 		socket.off("ollama:version")
 		socket.off("ollama:isUpdateAvailable")
+		socket.off("ollama:isUpdateAvailable:error")
 	})
 </script>
 
@@ -246,7 +251,7 @@
 						the latest features and bug fixes.
 					</p>
 					<a
-						href="https://github.com/ollama/ollama/releases/latest"
+						href="https://ollama.com/download"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="btn btn-sm preset-filled-warning-500"

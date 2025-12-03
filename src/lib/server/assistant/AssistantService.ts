@@ -151,42 +151,69 @@ export class AssistantService {
 							finishReason: step.finishReason,
 							fullTextLength: step.text?.length || 0
 						})
-						
+
 						// Detect when model should have called a tool but didn't
 						if ((!step.toolCalls || step.toolCalls.length === 0) && step.text) {
 							const userMessage = messages[messages.length - 1]?.content || ''
-							const triggerWords = ['update', 'change', 'modify', 'rewrite', 'reroll', 'regenerate', 
-								'save', 'add', 'create', 'make', 'give', 'set', 'to the character', 
-								'with that', 'add it', 'save it']
-							
-							const shouldHaveCalledTool = triggerWords.some(word => 
-								userMessage.toLowerCase().includes(word.toLowerCase())
+
+							// Expanded trigger word detection with better patterns
+							const actionWords = ['update', 'change', 'modify', 'rewrite', 'reroll', 'regenerate',
+								'save', 'add', 'create', 'make', 'give', 'set', 'edit', 'improve', 'enhance']
+							const targetPhrases = ['the character', 'his', 'her', 'the draft', 'with that', 'add it', 'save it']
+
+							const hasActionWord = actionWords.some(word =>
+								new RegExp(`\\b${word}\\b`, 'i').test(userMessage)
 							)
-							
-							// Also detect if model CLAIMS to have called a tool but didn't
-							const claimsToolCall = /\b(?:I have called|I'll call|calling|call|using|used)\s+(?:`|'|")?(?:update_character_draft|draft_character|list_characters|get_character_details)/i.test(step.text)
-							
+							const hasTargetPhrase = targetPhrases.some(phrase =>
+								userMessage.toLowerCase().includes(phrase.toLowerCase())
+							)
+							const shouldHaveCalledTool = hasActionWord && hasTargetPhrase
+
+							// Detect if model CLAIMS to have called a tool but didn't (hallucination)
+							const toolNames = [
+								'update_character_draft', 'draft_character', 'list_characters',
+								'get_character_details', 'list_worlds', 'get_world_details',
+								'list_personas', 'search_documentation'
+							]
+							const claimsToolCall = toolNames.some(toolName => {
+								// Look for phrases like "I have called X", "I'm calling X", "using X", etc.
+								const patterns = [
+									new RegExp(`\\b(?:I(?:'ve| have| will| am| 'm)|calling|call(?:ed|ing)?|us(?:ed|ing))\\s+(?:the\\s+)?${toolName.replace(/_/g, '[_\\s]')}`, 'i'),
+									new RegExp(`${toolName.replace(/_/g, '[_\\s]')}\\s+(?:tool|function)`, 'i'),
+									new RegExp(`\\b(?:with|via)\\s+${toolName.replace(/_/g, '[_\\s]')}`, 'i')
+								]
+								return patterns.some(pattern => pattern.test(step.text))
+							})
+
 							if (claimsToolCall) {
-								console.warn('[AssistantService] ⚠️  MODEL HALLUCINATED TOOL CALL')
-								console.warn('[AssistantService] Model claimed to call a tool but did not actually call it')
-								console.warn('[AssistantService] Response text:', step.text.substring(0, 300))
-								console.warn('[AssistantService] This indicates the model does NOT reliably support tool calling')
-								console.warn('[AssistantService] RECOMMENDATION: Switch to a model with better tool support like:')
-								console.warn('[AssistantService] - qwen2.5:14b')
-								console.warn('[AssistantService] - llama3.1')
-								console.warn('[AssistantService] - mistral-nemo')
+								console.error('[AssistantService] ⚠️  TOOL CALL HALLUCINATION DETECTED ⚠️')
+								console.error('[AssistantService] Model FALSELY CLAIMED to call a tool but DID NOT actually execute it')
+								console.error('[AssistantService] User message:', userMessage.substring(0, 200))
+								console.error('[AssistantService] Response text:', step.text.substring(0, 300))
+								console.error('[AssistantService] ')
+								console.error('[AssistantService] ❌ This model does NOT reliably support tool calling')
+								console.error('[AssistantService] ')
+								console.error('[AssistantService] RECOMMENDED MODELS with reliable tool support:')
+								console.error('[AssistantService]   • qwen2.5:14b (Excellent tool calling)')
+								console.error('[AssistantService]   • llama3.1 (Good tool calling)')
+								console.error('[AssistantService]   • mistral-nemo (Good tool calling)')
+								console.error('[AssistantService]   • gpt-4o / gpt-4-turbo (OpenAI, excellent)')
+								console.error('[AssistantService] ')
 							} else if (shouldHaveCalledTool) {
-								console.warn('[AssistantService] ⚠️  MODEL DID NOT CALL TOOL WHEN IT SHOULD HAVE')
-								console.warn('[AssistantService] User message:', userMessage)
+								console.warn('[AssistantService] ⚠️  POSSIBLE MISSED TOOL CALL')
+								console.warn('[AssistantService] User requested an action but model did not call a tool')
+								console.warn('[AssistantService] User message:', userMessage.substring(0, 200))
 								console.warn('[AssistantService] Model response:', step.text?.substring(0, 200))
-								console.warn('[AssistantService] This may indicate:')
-								console.warn('[AssistantService] 1. The model does not reliably support tool calling')
-								console.warn('[AssistantService] 2. Duplicate messages in conversation history confusing the model')
-								console.warn('[AssistantService] 3. Ambiguous user request needing clarification')
+								console.warn('[AssistantService] ')
+								console.warn('[AssistantService] Possible causes:')
+								console.warn('[AssistantService]   1. Model lacks reliable tool calling support')
+								console.warn('[AssistantService]   2. Ambiguous user request - model needs clarification')
+								console.warn('[AssistantService]   3. Model chose to ask for clarification first')
+								console.warn('[AssistantService] ')
 							}
 						}
-						
-						// Track which tools were called
+
+						// Track which tools were called and emit progress
 						if (step.toolCalls && step.toolCalls.length > 0) {
 							for (const toolCall of step.toolCalls) {
 								if ((toolCall as any).invalid) {
@@ -195,8 +222,22 @@ export class AssistantService {
 										input: toolCall.input,
 										error: (toolCall as any).error
 									})
+									this.emitProgress(`Error: Invalid ${toolCall.toolName} parameters`)
+								} else {
+									// Emit user-friendly progress messages
+									const friendlyNames: Record<string, string> = {
+										'draft_character': 'Generating character draft',
+										'update_character_draft': 'Updating character draft',
+										'list_characters': 'Searching your characters',
+										'get_character_details': 'Loading character details',
+										'list_worlds': 'Searching your worlds',
+										'get_world_details': 'Loading world details',
+										'list_personas': 'Searching your personas',
+										'search_documentation': 'Searching documentation'
+									}
+									const friendlyName = friendlyNames[toolCall.toolName] || `Using ${toolCall.toolName}`
+									this.emitProgress(friendlyName)
 								}
-								this.emitProgress(`Using ${toolCall.toolName}...`)
 							}
 						}
 					}
@@ -252,69 +293,99 @@ export class AssistantService {
 		const toolsUsed: string[] = []
 		let responseMessage = result.text || ''
 		let metadataUpdated = false
-		
-		for (const step of result.steps) {
-			if (step.toolCalls && step.toolResults) {
-				for (let i = 0; i < step.toolCalls.length; i++) {
-					const toolCall = step.toolCalls[i]
-					const toolResult = step.toolResults[i] as any
-					
-					// Check if tool call was invalid
-					if ((toolCall as any).invalid) {
-						console.error('[AssistantService] Invalid tool call detected:', {
-							toolName: toolCall.toolName,
-							input: toolCall.input,
-							error: (toolCall as any).error?.message || (toolCall as any).error
-						})
-						// Return early with error
-						return {
-							success: false,
-							error: `Invalid tool call: ${(toolCall as any).error?.message || 'Unknown validation error'}`
-						}
-					}
-					
-					if (!toolsUsed.includes(toolCall.toolName)) {
-						toolsUsed.push(toolCall.toolName)
-					}
 
-					// Handle draft_character tool results - save draft to chat metadata
-					if (toolCall.toolName === 'draft_character' && toolResult) {
-						console.log('[AssistantService] Processing draft_character result')
-						await this.saveDraftToMetadata(toolResult)
-						metadataUpdated = true
-						
-						// If no text response, generate a helpful message
-						if (!responseMessage) {
-							const draftName = (toolResult as any).output?.draft?.name || 'character'
-							responseMessage = `I've created a character draft for ${draftName}! You can see the preview below and make any adjustments you'd like.`
-						}
-					}
+		try {
+			for (const step of result.steps) {
+				if (step.toolCalls && step.toolResults) {
+					for (let i = 0; i < step.toolCalls.length; i++) {
+						const toolCall = step.toolCalls[i]
+						const toolResult = step.toolResults[i] as any
 
-					// Handle update_character_draft tool results - save updated draft to metadata
-					if (toolCall.toolName === 'update_character_draft' && toolResult) {
-						console.log('[AssistantService] Processing update_character_draft result')
-						
-						// Check if tool execution failed
-						if (toolResult.error) {
-							console.error('[AssistantService] update_character_draft tool error:', toolResult.error)
-							throw new Error(`Failed to update draft: ${toolResult.error}`)
+						// Check if tool call was invalid
+						if ((toolCall as any).invalid) {
+							const errorMsg = (toolCall as any).error?.message || (toolCall as any).error || 'Unknown validation error'
+							console.error('[AssistantService] Invalid tool call detected:', {
+								toolName: toolCall.toolName,
+								input: toolCall.input,
+								error: errorMsg
+							})
+
+							// Return user-friendly error instead of throwing
+							return {
+								success: false,
+								error: `I tried to use the ${toolCall.toolName} tool, but the parameters were invalid. ${errorMsg}. Please try rephrasing your request.`
+							}
 						}
-						
-						await this.saveDraftToMetadata(toolResult, true)
-						metadataUpdated = true
-						
-						// If no text response, generate a helpful message
-						if (!responseMessage) {
-							const updatedFields = (toolResult as any).output?.updatedFields || []
-							if (updatedFields.length > 0) {
-								const fieldsList = updatedFields.join(', ')
-								responseMessage = `I've updated the ${fieldsList} ${updatedFields.length === 1 ? 'field' : 'fields'} in your character draft. Check out the preview below!`
-							} else {
-								responseMessage = `I've updated your character draft. Check out the preview below!`
+
+						if (!toolsUsed.includes(toolCall.toolName)) {
+							toolsUsed.push(toolCall.toolName)
+						}
+
+						// Handle draft_character tool results - save draft to chat metadata
+						if (toolCall.toolName === 'draft_character' && toolResult) {
+							console.log('[AssistantService] Processing draft_character result')
+
+							try {
+								await this.saveDraftToMetadata(toolResult)
+								metadataUpdated = true
+
+								// If no text response, generate a helpful message
+								if (!responseMessage) {
+									const draftName = (toolResult as any).output?.draft?.name || 'character'
+									responseMessage = `I've created a character draft for ${draftName}! You can see the preview below and make any adjustments you'd like.`
+								}
+							} catch (error) {
+								console.error('[AssistantService] Error saving draft_character:', error)
+								return {
+									success: false,
+									error: `I generated the character draft, but couldn't save it: ${error instanceof Error ? error.message : 'Unknown error'}`
+								}
+							}
+						}
+
+						// Handle update_character_draft tool results - save updated draft to metadata
+						if (toolCall.toolName === 'update_character_draft' && toolResult) {
+							console.log('[AssistantService] Processing update_character_draft result')
+
+							// Check if tool execution failed
+							if (toolResult.error) {
+								console.error('[AssistantService] update_character_draft tool error:', toolResult.error)
+								return {
+									success: false,
+									error: `I couldn't update the character draft: ${toolResult.error}`
+								}
+							}
+
+							try {
+								await this.saveDraftToMetadata(toolResult, true)
+								metadataUpdated = true
+
+								// If no text response, generate a helpful message
+								if (!responseMessage) {
+									const updatedFields = (toolResult as any).output?.updatedFields || []
+									if (updatedFields.length > 0) {
+										const fieldsList = updatedFields.join(', ')
+										responseMessage = `I've updated the ${fieldsList} ${updatedFields.length === 1 ? 'field' : 'fields'} in your character draft. Check out the preview below!`
+									} else {
+										responseMessage = `I've updated your character draft. Check out the preview below!`
+									}
+								}
+							} catch (error) {
+								console.error('[AssistantService] Error saving updated draft:', error)
+								return {
+									success: false,
+									error: `I updated the fields, but couldn't save them: ${error instanceof Error ? error.message : 'Unknown error'}`
+								}
 							}
 						}
 					}
 				}
+			}
+		} catch (error) {
+			console.error('[AssistantService] Error processing tool results:', error)
+			return {
+				success: false,
+				error: `An error occurred while processing the tool results: ${error instanceof Error ? error.message : 'Unknown error'}`
 			}
 		}
 
@@ -324,7 +395,7 @@ export class AssistantService {
 		// Fallback if response is completely empty
 		if (!responseMessage || responseMessage.trim() === '') {
 			console.warn('[AssistantService] Empty response detected! This may indicate a model issue.')
-			
+
 			if (toolsUsed.length > 0) {
 				responseMessage = "I've processed your request. Let me know if you need anything else!"
 			} else {
