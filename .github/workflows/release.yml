@@ -51,31 +51,31 @@ jobs:
                     SUFFIX="${BASH_REMATCH[3]}"
                     
                     if [ -z "$SUFFIX" ]; then
-                  # No suffix - formal release
-                  TITLE="$BASE_VERSION Release"
-                  IS_PRERELEASE="false"
-                elif [ "$SUFFIX" = "dev" ]; then
-                  # Development release
-                  TITLE="$BASE_VERSION Development Release"
-                  IS_PRERELEASE="true"
-                elif [ "$SUFFIX" = "alpha" ]; then
-                  # Alpha release
-                  TITLE="$BASE_VERSION Alpha Release"
-                  IS_PRERELEASE="true"
-                elif [ "$SUFFIX" = "beta" ]; then
-                  # Beta release
-                  TITLE="$BASE_VERSION Beta Release"
-                  IS_PRERELEASE="true"
-                elif [[ "$SUFFIX" =~ ^pr-([0-9]+)$ ]]; then
-                  # Pre-release
-                  PR_NUM="${BASH_REMATCH[1]}"
-                  TITLE="$BASE_VERSION Pre-Release $PR_NUM"
-                  IS_PRERELEASE="true"
-                elif [[ "$SUFFIX" =~ ^rc-([0-9]+)$ ]]; then
-                  # Release candidate
-                  RC_NUM="${BASH_REMATCH[1]}"
-                  TITLE="$BASE_VERSION Release Candidate $RC_NUM"
-                  IS_PRERELEASE="true"
+                      # No suffix - formal release
+                      TITLE="$BASE_VERSION Release"
+                      IS_PRERELEASE="false"
+                    elif [ "$SUFFIX" = "dev" ]; then
+                      # Development release
+                      TITLE="$BASE_VERSION Development Release"
+                      IS_PRERELEASE="true"
+                    elif [ "$SUFFIX" = "alpha" ]; then
+                      # Alpha release
+                      TITLE="$BASE_VERSION Alpha Release"
+                      IS_PRERELEASE="true"
+                    elif [ "$SUFFIX" = "beta" ]; then
+                      # Beta release
+                      TITLE="$BASE_VERSION Beta Release"
+                      IS_PRERELEASE="true"
+                    elif [[ "$SUFFIX" =~ ^pr-([0-9]+)$ ]]; then
+                      # Pre-release
+                      PR_NUM="${BASH_REMATCH[1]}"
+                      TITLE="$BASE_VERSION Pre-Release $PR_NUM"
+                      IS_PRERELEASE="true"
+                    elif [[ "$SUFFIX" =~ ^rc-([0-9]+)$ ]]; then
+                      # Release candidate
+                      RC_NUM="${BASH_REMATCH[1]}"
+                      TITLE="$BASE_VERSION Release Candidate $RC_NUM"
+                      IS_PRERELEASE="true"
                     else
                       # Unknown suffix
                       TITLE="$VERSION"
