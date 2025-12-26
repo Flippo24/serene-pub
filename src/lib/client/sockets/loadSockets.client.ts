@@ -43,8 +43,8 @@ export async function loadSocketsClient({
 			"/api/sockets-endpoint"
 		)
 		const serverUrl = new URL(res.data.endpoint)
-		const host = `${serverUrl.protocol}//${domain}:${serverUrl.port}`
-
+		const host = dev ? serverUrl.origin : window.location.origin
+		
 		if (dev) {
 			console.log("Connecting to socket server at:", host)
 		}
