@@ -5,7 +5,7 @@ import * as skio from "sveltekit-io"
 export async function loadSocketsClient({ domain }: { domain: string }) {
 	const res = await axios.get("/api/sockets-endpoint")
 	const serverUrl = new URL(res.data.endpoint)
-	const host = `${serverUrl.protocol}//${domain}:${serverUrl.port}`
+	const host = dev ? serverUrl.origin : window.location.origin
 	console.log("Connecting to socket server at:", host)
 
 	const io = await skio.setup(host, {
